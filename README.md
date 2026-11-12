@@ -4,6 +4,13 @@ A talking phone assistant for Android. You talk or type; Sprocket answers out lo
 It starts out friendly and plain, and its personality is yours to write in Settings > Personality, which comes
 with an example to start from: a loud little robot who is sure he was built for war and now sets your timers.
 
+## See it
+[![The demo: 1 minute 24 seconds, sound on](docs/demo-thumb.jpg)](docs/demo.mp4)
+
+| Setup, one feature at a time | Answers out loud | Texts wait for your yes | Lists, sorted by aisle |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/setup.png" width="200" alt="The setup walkthrough asking about texts and calls"> | <img src="docs/screenshots/answer.png" width="200" alt="Sprocket answering a weather question"> | <img src="docs/screenshots/send-card.png" width="200" alt="A Send card for a text, with Send and Cancel"> | <img src="docs/screenshots/lists.png" width="200" alt="A grocery list grouped by aisle"> |
+
 ## Why I built it
 I wanted a phone assistant that didn't send everything I say to a company's servers. Sprocket started out on Claude,
 and I moved it to a model running on my own computer at home, so my questions, texts and notes stay private. You can
