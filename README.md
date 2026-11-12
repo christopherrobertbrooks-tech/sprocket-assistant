@@ -18,7 +18,8 @@ run it the same way, or use Claude if you'd rather. On your own model, nothing l
 goes to the services you choose to connect (web search, the weather, Notion, GitHub).
 
 > **Status:** a personal project, made public as-is. Tested on one Samsung Android phone, with Claude and with
-> Qwen through the included go-between. Other models may work (see "Brains"). Not on the Play Store.
+> Qwen through the included go-between. Other models may work (see "Brains"). Not on the Play Store: download it
+> from this page instead (see "Install").
 
 ## What it does
 - **Everyday phone jobs:** timers, alarms, reminders, calendar, contacts, music, maps, the flashlight, volume,
@@ -51,15 +52,25 @@ Sprocket speaks Anthropic's Messages API.
 - **Listening:** the phone's own recognizer by default. Or any OpenAI-style `/v1/audio/transcriptions` server
   (whisper.cpp's server works).
 
-## Build and install
+## Install
+1. On your phone, open the [latest release](https://github.com/christopherrobertbrooks-tech/sprocket-assistant/releases/latest) and download
+   `sprocket-<version>.apk` (Android 8 or newer).
+2. Open the downloaded file and tap **Install**. Android asks once to let your browser install apps: allow it. Google
+   Play Protect may warn about an app from outside the Play Store; that's expected here.
+3. Open Sprocket: pick its brain on the first screen, and it walks you through the rest in the chat, asking about
+   each feature (you can ask it questions along the way). Using your own model? See "Reaching your own server" below.
+
+Updates install the same way, over the top, keeping your chat and lists. A copy you build yourself is signed with your
+own key instead, so it can't update a downloaded one (or the other way round) without uninstalling first.
+
+### Build it yourself
 You need the Android SDK (platform 35, build-tools 35.0.0) and a JDK 17 or newer. No Gradle.
 ```
 ANDROID_HOME=/path/to/sdk android/build.sh      # makes android/build/sprocket.apk (and a signing key, once)
 adb install android/build/sprocket.apk
 scripts/test.sh                                  # the plain-Java tests, on your computer
 ```
-Then open Sprocket: pick its brain on the first screen, and it walks you through the rest in the chat, asking about
-each feature (you can ask it questions along the way). Using your own model? See "Reaching your own server" below.
+Then open Sprocket as in step 3 above.
 
 **Using a coding agent?** Claude Code, Codex or Gemini CLI can do all of this for you: open this folder in it and say
 "set up Sprocket on my phone". The steps it follows are in [AGENTS.md](AGENTS.md).

@@ -27,8 +27,10 @@ javac -source 11 -target 11 -encoding UTF-8 -Xlint:-options -classpath "$PLAT" -
 cp build/base.apk build/unsigned.apk
 (cd build/dex && zip -q ../unsigned.apk classes.dex)
 "$BT/zipalign" -P 16 -f 4 build/unsigned.apk build/aligned.apk
-KS=$A/sprocket-release.jks PW=$A/sprocket-release.pw
+# SIGN_KEY/SIGN_PASS: sign with another key (the public download's own release key), made there on first use
+KS=${SIGN_KEY:-$A/sprocket-release.jks} PW=${SIGN_PASS:-$A/sprocket-release.pw}
 if [ ! -f "$KS" ]; then
+  mkdir -p "$(dirname "$KS")" "$(dirname "$PW")"
   (umask 077; head -c 24 /dev/urandom | base64 > "$PW")
   keytool -genkeypair -keystore "$KS" -storepass:file "$PW" -keypass:file "$PW" -alias sprocket -keyalg RSA -keysize 3072 \
     -validity 10000 -dname "CN=Sprocket" -noprompt 2>/dev/null

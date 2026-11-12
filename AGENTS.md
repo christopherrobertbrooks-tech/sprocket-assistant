@@ -35,6 +35,11 @@ do that part for them.
 - Point `ANDROID_HOME` at the SDK, or put it in `~/.local/android/sdk`, where the build looks by default.
 
 ## 3. Build
+
+(Or skip building: the repository's Releases page has a ready-made `sprocket-<version>.apk`, signed with the project's
+release key. Download it and use it in step 5 instead of `android/build/sprocket.apk`. Ask which they'd prefer; a
+downloaded copy and a self-built one can't update each other.)
+
 ```
 ANDROID_HOME=/path/to/sdk android/build.sh
 scripts/test.sh
