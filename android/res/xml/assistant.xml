@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sprocket as the phone's digital assistant: the held side button, also over the lock screen (the owner 2026-10-17:
+     "Everything works locked"). -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="dev.sprocket.app.SprocketSessionService"
+    android:recognitionService="dev.sprocket.app.SprocketRecognitionService"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true" />

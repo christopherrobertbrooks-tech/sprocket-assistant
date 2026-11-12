@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Sprocket or the go-between doesn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Before you paste anything: leave out your keys, access codes, phone numbers,
+        contact names, texts and addresses.** Screenshots of the chat can show those too.
+
+        Questions and feature ideas go in [Discussions](https://github.com/christopherrobertbrooks-tech/sprocket-assistant/discussions) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what Sprocket did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: "1. Asked: \"set a timer for ten minutes\"\n2. ..."
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Brain
+      options:
+        - Claude
+        - My own model, through the included go-between
+        - My own model, another way
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Your own model's name (if you use one)
+      placeholder: "e.g. Qwen3.8-27B on llama.cpp"
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: "e.g. Pixel 9, Android 16"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Sprocket version
+      description: In Android's Settings > Apps > Sprocket, at the bottom.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: |
+        From a computer with adb: `adb logcat -d -s Sprocket`. Read it first and remove anything personal.
+      render: text

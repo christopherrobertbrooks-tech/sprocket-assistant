@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain http is allowed at the network level so a server on the owner's home network can be used (2026-11-11), but
+     the app only ever sends plain http to the servers the owner types into Settings, and Config.addressProblem refuses
+     plain http to anything but a Tailscale name or address (WireGuard-encrypted underneath) or a home-network address.
+     Everything Sprocket reaches on its own (Anthropic, Open-Meteo, GitHub, Notion) is https. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

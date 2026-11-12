@@ -1,0 +1,14 @@
+# An example user service (systemctl --user): put this folder at ~/go-between, write an access code to ./token,
+# set UPSTREAM and MODEL to your model server, then: systemctl --user enable --now go-between
+[Unit]
+Description=Sprocket's go-between (your own model + Brave web search)
+After=network-online.target
+
+[Service]
+Environment=BIND=127.0.0.1 PORT=8048 MONTHLY_CAP=1000 UPSTREAM=http://127.0.0.1:8080 MODEL=local-model
+ExecStart=/usr/bin/python3 %h/go-between/proxy.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

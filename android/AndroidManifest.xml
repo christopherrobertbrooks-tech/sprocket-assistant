@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sprocket: a Claude-powered assistant with the desk robot's personality (phase 4: voice and the side button). Built without Gradle:
+     android/build.sh. What he types goes to Anthropic's API; the chat and the key stay on the phone. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.sprocket.app">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- rough area only (town level): searches and the weather where he is; asked once, can be refused -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- phase 3, the phone tools. Each dangerous one is asked the first time a tool needs it. Texts are sent and calls
+         placed only after he taps the card that shows exactly what will happen. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <!-- phase 4: Talk (asked the first time he taps it) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- research: keeps going when he leaves the app (a "Researching" notification), then says it's ready -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- the rest of the commands: missed calls, sharing his location (precise, asked at first use), brightness -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- the morning brief: at 6:00 exactly (his "Alarms & reminders" switch), set again after a restart -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <queries>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+        <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+    </queries>
+    <application android:label="Sprocket" android:icon="@mipmap/ic_launcher" android:theme="@style/SprocketTheme"
+        android:allowBackup="false" android:networkSecurityConfig="@xml/network_security_config">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|uiMode|density|fontScale|locale|layoutDirection|navigation"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- phase 3b: a picture shared to Sprocket (a screenshot's Share button) waits for his next message -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- research: an article (a link) shared to Sprocket is researched -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+        <!-- stage 1 hands (2026-11-10): reads the screen and taps for the screen tool; he turns it on in Settings > Accessibility -->
+        <service android:name=".ScreenHands" android:exported="true" android:label="Sprocket: screen control"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/hands" />
+        </service>
+        <!-- the emulator scripts' self-test door (SelfTestActivity): only adb can open it, as DUMP is held by the shell
+             and never by an ordinary app (review 005, 2026-11-05) -->
+        <activity android:name=".SelfTestActivity" android:exported="true" android:permission="android.permission.DUMP"
+            android:theme="@android:style/Theme.NoDisplay" />
+        <service android:name=".ResearchService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".FeedService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".StudioService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <receiver android:name=".FeedAlarm" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <!-- his incoming texts, from their notifications (he switches on notification access himself) -->
+        <service android:name=".MessageListener" android:exported="true" android:label="Sprocket: read texts aloud"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
+        <!-- the side button: Sprocket as the phone's digital assistant (he picks it in Settings) -->
+        <service android:name=".SprocketVoiceService" android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/assistant" />
+            <intent-filter><action android:name="android.service.voice.VoiceInteractionService" /></intent-filter>
+        </service>
+        <service android:name=".SprocketSessionService" android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service android:name=".SprocketRecognitionService" android:exported="true">
+            <meta-data android:name="android.speech" android:resource="@xml/recognition" />
+            <intent-filter><action android:name="android.speech.RecognitionService" /></intent-filter>
+        </service>
+        <!-- the one file the camera writes a new picture to (no AndroidX here, so no FileProvider) -->
+        <provider android:name=".PhotoProvider" android:authorities="dev.sprocket.app.photos" android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

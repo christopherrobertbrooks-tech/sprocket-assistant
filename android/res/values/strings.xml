@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hands_description">Lets Sprocket read the screen and tap for you when you ask it to do something in an app it has no shortcut for. It never opens banking, payment or password apps, never types into password fields, and asks you on a card before pressing pay, buy, delete, install or sign-out buttons.</string>
+</resources>

@@ -1,0 +1,13 @@
+__pycache__/
+results/studio-fixtures/
+results/standin-studio.jsonl
+# never committed: app-signing keys and their passwords (they live in ~/.local/android), secrets, his real About page
+*.jks
+*.keystore
+*.pw
+.env
+.env.*
+about.md
+# the go-between's access code and search count, if it's run from inside this folder
+go-between/token
+go-between/usage.json

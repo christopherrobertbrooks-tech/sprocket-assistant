@@ -1,0 +1,18 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a look at [ROADMAP.md](https://github.com/christopherrobertbrooks-tech/sprocket-assistant/blob/HEAD/ROADMAP.md) first: your idea may be planned already, or on the
+        "not planned" list with the reason.
+  - type: textarea
+    id: want
+    attributes:
+      label: What you'd like Sprocket to do
+      description: How you would ask for it, in your own words, helps most.
+      placeholder: "\"Read me my unread emails from today.\""
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it would help you

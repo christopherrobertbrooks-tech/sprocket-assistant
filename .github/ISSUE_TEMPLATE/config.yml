@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A question
+    url: https://github.com/christopherrobertbrooks-tech/sprocket-assistant/discussions/categories/q-a
+    about: How to set something up, or how something works.
+  - name: A feature idea
+    url: https://github.com/christopherrobertbrooks-tech/sprocket-assistant/discussions/categories/ideas
+    about: Something you'd like Sprocket to do. See ROADMAP.md first.
