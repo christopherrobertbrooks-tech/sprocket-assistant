@@ -1,5 +1,8 @@
 # Sprocket
 
+**Beta.** Sprocket is used every day on the phone it was built on, but it's one person's project and hasn't been tried
+on many other phones yet. Expect rough edges, and please report anything that breaks under Issues.
+
 A talking phone assistant for Android. You talk or type; Sprocket answers out loud and does things on your phone.
 It starts out friendly and plain, and its personality is yours to write in Settings > Personality, which comes
 with an example to start from: a loud little robot who is sure he was built for war and now sets your timers.

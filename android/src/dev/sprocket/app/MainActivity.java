@@ -1288,23 +1288,30 @@ public class MainActivity extends Activity {
         EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", "none", true);
         ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
         c.addView(ownBox);
+        TextView note = text("", 13, ERR);
+        note.setPadding(0, dp(8), 0, 0);
+        TextView anyway = text("Start anyway", 13, FAINT);   // after a failed test: their server may just be off right now
+        anyway.setPadding(0, dp(12), 0, 0);
+        anyway.setVisibility(View.GONE);
+        final int[] asked = {0};                              // which check is current: switching brains drops the last one
         Runnable show = () -> {
             pick(claude, !own[0]);
             pick(mine, own[0]);
             claudeBox.setVisibility(own[0] ? View.GONE : View.VISIBLE);
             ownBox.setVisibility(own[0] ? View.VISIBLE : View.GONE);
         };
-        claude.setOnClickListener(v -> { own[0] = false; show.run(); });
-        mine.setOnClickListener(v -> { own[0] = true; show.run(); });
+        Runnable switched = () -> {   // the other brain's message would read as this one's (the owner's phone test, 2026-11-12)
+            asked[0]++;
+            note.setText("");
+            anyway.setVisibility(View.GONE);
+            show.run();
+        };
+        claude.setOnClickListener(v -> { if (own[0]) { own[0] = false; switched.run(); } });
+        mine.setOnClickListener(v -> { if (!own[0]) { own[0] = true; switched.run(); } });
         show.run();
 
-        TextView note = text("", 13, ERR);
-        note.setPadding(0, dp(8), 0, 0);
         c.addView(note);
         Button start = button("Start", true);
-        TextView anyway = text("Start anyway", 13, FAINT);   // after a failed test: their server may just be off right now
-        anyway.setPadding(0, dp(12), 0, 0);
-        anyway.setVisibility(View.GONE);
         start.setOnClickListener(v -> {
             final boolean useOwn = own[0];
             final String k = key.getText().toString().trim(), b = base.getText().toString().trim();
@@ -1336,10 +1343,12 @@ public class MainActivity extends Activity {
             note.setText(useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
             start.setEnabled(false);
             anyway.setVisibility(View.GONE);
+            final int ticket = ++asked[0];
             new Thread(() -> {
                 String problem = Claude.check(test);
                 runOnUiThread(() -> {
                     start.setEnabled(true);
+                    if (ticket != asked[0]) return;   // he switched brains while it checked: this answer is for the other one
                     if (problem == null) { go.run(); return; }
                     note.setTextColor(ERR);
                     note.setText(problem);
