@@ -222,7 +222,7 @@ class Handler(BaseHTTPRequestHandler):
             reply, searches = messages.run(req, lambda b: call_upstream(dict(b, model=MODEL)), brave_search, MODEL)
         except (urllib.error.URLError, KeyError, ValueError, IndexError) as e:
             log(f"sprocket upstream error: {e}")
-            return self.send_json(502, {"type": "error", "error": {"type": "api_error", "message": f"Qwen didn't answer: {e}"}})
+            return self.send_json(502, {"type": "error", "error": {"type": "api_error", "message": f"Your model didn't answer: {e}"}})
         tools = [b["name"] for b in reply["content"] if b["type"] == "tool_use"]
         log(f"sprocket reply in {time.time() - started:.1f}s, {searches} searches" + (f", asks for {', '.join(tools)}" if tools else ""))
         if not req.get("stream"):

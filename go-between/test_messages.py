@@ -118,6 +118,18 @@ class Events(unittest.TestCase):
         self.assertEqual(datas[5]["delta"], {"type": "input_json_delta", "partial_json": '{"seconds": 60}'})
         self.assertEqual(datas[7]["delta"]["stop_reason"], "tool_use")
 
+    def test_text_goes_a_sentence_at_a_time(self):
+        text = "[excited] It's a 14700F! The RTX 5070 (12 GB) is fine.\n\nGo to 64 GB? Yes. Done"
+        r = m.from_openai(qwen(text), "qwen")
+        deltas = []
+        for e in m.events(r):
+            d = json.loads([x for x in e.splitlines() if x.startswith("data:")][0][5:])
+            if d["type"] == "content_block_delta":
+                deltas.append(d["delta"]["text"])
+        self.assertEqual(deltas, ["[excited] It's a 14700F! ", "The RTX 5070 (12 GB) is fine.\n\n", "Go to 64 GB? ",
+                                  "Yes. ", "Done"])
+        self.assertEqual("".join(deltas), text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -165,8 +165,24 @@ def run(req, call_upstream, search, model):
             searches += 1
 
 
+SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+")   # the phone's own sentence rule (Claude.java END), plus the spaces after
+
+
+def sentences(text):
+    """The text cut after each sentence end; joined back together they are the text."""
+    out, at = [], 0
+    for m in SENTENCE_END.finditer(text):
+        out.append(text[at:m.end()])
+        at = m.end()
+    if at < len(text):
+        out.append(text[at:])
+    return out
+
+
 def events(reply):
-    """The reply as the Messages API's server-sent events, the way Sprocket's stream reader expects them."""
+    """The reply as the Messages API's server-sent events, the way Sprocket's stream reader expects them. Text goes a
+    sentence per delta, as Claude streams it: the phone asks the gateway voice for each one as it comes, where one
+    delta of a whole long answer was one voice request that outlasted the phone's 20-second wait (2026-11-12)."""
     out = []
 
     def ev(kind, data):
@@ -177,7 +193,8 @@ def events(reply):
     for i, b in enumerate(reply["content"]):
         if b["type"] == "text":
             ev("content_block_start", {"type": "content_block_start", "index": i, "content_block": {"type": "text", "text": ""}})
-            ev("content_block_delta", {"type": "content_block_delta", "index": i, "delta": {"type": "text_delta", "text": b["text"]}})
+            for s in sentences(b["text"]) or [""]:
+                ev("content_block_delta", {"type": "content_block_delta", "index": i, "delta": {"type": "text_delta", "text": s}})
         else:
             ev("content_block_start", {"type": "content_block_start", "index": i,
                                        "content_block": {"type": "tool_use", "id": b["id"], "name": b["name"], "input": {}}})

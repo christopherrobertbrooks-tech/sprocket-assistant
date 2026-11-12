@@ -39,8 +39,10 @@ Every feature can be switched off in Settings.
 
 ## Brains
 Sprocket speaks Anthropic's Messages API.
-- **Claude:** paste your own Claude API key (make one in the Claude Console, ideally in its own workspace with a
-  monthly spend limit).
+- **Claude:** paste your own Claude API key. To get one: sign in at
+  [console.anthropic.com](https://console.anthropic.com), add a little credit under **Billing** (and a monthly limit
+  under **Limits**, if you like), then **API keys > Create key**. A Claude.ai subscription doesn't include this: the
+  API is paid separately, for what you use. Sprocket's first screen has these steps and a button to the Console.
 - **Your own model:** point Settings at any server that speaks the Messages API. The included
   [go-between](go-between/) (a small Python server) translates for any OpenAI-compatible server (llama.cpp, vLLM,
   Ollama and others) and adds web search through your own Brave Search key. Tested with Qwen.
@@ -58,7 +60,7 @@ Sprocket speaks Anthropic's Messages API.
 2. Open the downloaded file and tap **Install**. Android asks once to let your browser install apps: allow it. Google
    Play Protect may warn about an app from outside the Play Store; that's expected here.
 3. Open Sprocket: pick its brain on the first screen, and it walks you through the rest in the chat, asking about
-   each feature (you can ask it questions along the way). Using your own model? See "Reaching your own server" below.
+   each feature (you can ask it questions along the way). Using your own model? See "Running it on your own model" below.
 
 Updates install the same way, over the top, keeping your chat and lists. A copy you build yourself is signed with your
 own key instead, so it can't update a downloaded one (or the other way round) without uninstalling first.
@@ -74,6 +76,17 @@ Then open Sprocket as in step 3 above.
 
 **Using a coding agent?** Claude Code, Codex or Gemini CLI can do all of this for you: open this folder in it and say
 "set up Sprocket on my phone". The steps it follows are in [AGENTS.md](AGENTS.md).
+
+## Running it on your own model
+1. Start a model server on your computer. New to this? Install [Ollama](https://ollama.com) and `ollama pull` a
+   model that [supports tools](https://ollama.com/search?c=tools), as big as your graphics card holds.
+2. Download this repository (on GitHub: **Code > Download ZIP**, then unzip it) and run `python3 go-between/start.py` (Python 3, nothing else to install). It finds your
+   model server, makes an access code, and prints exactly what to type into Sprocket.
+3. In Sprocket, tap **Your own server**, type what it printed, and tap **Start**. Sprocket tests the connection first
+   and says plainly what's wrong if it can't get through.
+
+The phone has to reach that computer: `start.py` prints the Tailscale command if you have Tailscale; otherwise see
+below.
 
 ## Reaching your own server
 Only needed for your own model (or the optional voice servers): with Claude, the phone talks to Anthropic directly.
@@ -96,8 +109,8 @@ domain of your own (see Cloudflare's "Tunnel" guide). A tunnel puts the go-betwe
 access code is the only lock: make it long and random.
 
 **3. Your home network (simplest, but only at home)**
-Start the go-between with `BIND=0.0.0.0` so other devices can reach it, find the computer's address (for example
-`192.168.1.50`), and use `http://192.168.1.50:8048` in Sprocket. It stops working when the phone leaves your Wi-Fi,
+Start the go-between with `python3 go-between/start.py --home`, which prints the computer's home address (for example
+`http://192.168.1.50:8048`) to use in Sprocket. It stops working when the phone leaves your Wi-Fi,
 and it isn't encrypted: anyone else on that network could read what you ask, and the access code.
 
 Sprocket accepts `https://` addresses anywhere, and plain `http://` only for Tailscale and home-network addresses.

@@ -452,11 +452,89 @@ final class Claude {
         if (code == 429 || code == 529) return "Claude is busy right now; try again in a moment";
         if (body != null && body.contains("not scoped to a workspace"))
             return "this key isn't in a workspace. In the Claude Console, open Workspaces, then make the key inside one";
+        String msg = errorMessage(body);
+        return "Claude answered " + code + (msg.isEmpty() ? "" : ": " + msg);
+    }
+
+    /** The error's own message from an error reply's body, short, or "". */
+    static String errorMessage(String body) {
         String msg = "";
         try { msg = new JSONObject(body).getJSONObject("error").optString("message"); } catch (Exception ignored) { }
         msg = msg.replaceAll("\\s+", " ").trim();
-        if (msg.length() > 160) msg = msg.substring(0, 157) + "...";
-        return "Claude answered " + code + (msg.isEmpty() ? "" : ": " + msg);
+        return msg.length() > 160 ? msg.substring(0, 157) + "..." : msg;
+    }
+
+    // The first screen's connection test (Codex's review 2026-11-12: Start took a wrong key or an unreachable server,
+    // and it only showed later, in the middle of setup).
+    static final int CHECK_WAIT_OWN = 120000;   // a model may need a minute or two to load
+
+    /** One tiny request (max_tokens 1) to the brain about to be saved: null when it answers, else what's wrong, in
+     * plain words. On Claude it's a few tokens, a tiny fraction of a cent; the own server is free. */
+    static String check(Brain b) {
+        String bad = Config.destinationProblem(b.base);
+        if (bad != null) return bad;
+        try {
+            HttpURLConnection h = (HttpURLConnection) new URL(b.base + "/v1/messages").openConnection();
+            h.setInstanceFollowRedirects(false);
+            h.setConnectTimeout(10000);
+            h.setReadTimeout(b.own ? CHECK_WAIT_OWN : 30000);
+            h.setDoOutput(true);
+            h.setRequestProperty("x-api-key", b.key);
+            h.setRequestProperty("anthropic-version", "2023-06-01");
+            h.setRequestProperty("content-type", "application/json");
+            JSONObject req = new JSONObject().put("model", b.own ? b.model : SONNET).put("max_tokens", 1)
+                    .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", "Hi")));
+            try (OutputStream o = h.getOutputStream()) { o.write(req.toString().getBytes(StandardCharsets.UTF_8)); }
+            int code = h.getResponseCode();
+            InputStream in = code == 200 ? h.getInputStream() : h.getErrorStream();
+            String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            h.disconnect();
+            return checkProblem(b.own, code, body);
+        } catch (Exception e) {
+            return checkFailed(b.own, e, b.base);
+        }
+    }
+
+    /** What an answer to the test means: null when it worked. */
+    static String checkProblem(boolean own, int code, String body) {
+        if (code == 200) return null;
+        String msg = errorMessage(body);
+        if (own) {
+            if (code == 401 || code == 403)
+                return "Your server answered, but turned the access code down. Copy it again: for the go-between, it's the "
+                        + "text in the file named token in its folder.";
+            if (code == 404)
+                return "Something answered at that address, but not the go-between. Check the address and its port number.";
+            if (code == 502 || code == 503 || code == 504)
+                return "The go-between is running, but your model didn't answer" + (msg.isEmpty() ? "" : " (" + msg + ")")
+                        + ". Is the model server running, and does the go-between's UPSTREAM point at it?";
+            return "Your server answered " + code + (msg.isEmpty() ? "" : ": " + msg);
+        }
+        if (code == 401) return "Anthropic says that key isn't valid. Copy it again from the Claude Console, under API keys.";
+        if (body != null && body.contains("credit balance"))
+            return "Your Anthropic account has no credit yet. Add some in the Claude Console under Billing, then tap Start again.";
+        String w = why(code, body);
+        return Character.toUpperCase(w.charAt(0)) + w.substring(1) + ".";
+    }
+
+    /** What a failed connection means, for the test. */
+    static String checkFailed(boolean own, Exception e, String base) {
+        String where = Config.host(base);
+        String m = String.valueOf(e.getMessage()).toLowerCase(Locale.US);
+        if (e instanceof java.net.UnknownHostException)
+            return own ? "This phone can't find " + where + ". If it's a Tailscale address, is Tailscale switched on in its "
+                    + "app on this phone?" : "This phone can't reach Anthropic. Is it online?";
+        if (e instanceof java.net.ConnectException || (e instanceof java.net.SocketTimeoutException && m.contains("connect")))
+            return own ? "Nothing answered at " + where + ". Is the go-between running on that computer, and can this phone "
+                    + "reach it (the same Wi-Fi for a home address, Tailscale on for a Tailscale one)?"
+                    : "This phone couldn't reach Anthropic. Is it online?";
+        if (e instanceof java.net.SocketTimeoutException)
+            return own ? "Your server took over two minutes to answer. A model can be slow the first time, while it loads: "
+                    + "give it a minute and tap Start again." : "Anthropic didn't answer in time. Try again in a moment.";
+        if (e instanceof javax.net.ssl.SSLException)
+            return "The connection to " + where + " isn't secure: its https certificate didn't check out."
+                    + (own ? " For a Tailscale address, turn on HTTPS certificates in Tailscale's admin console." : "");
+        return (own ? "Couldn't reach your server: " : "Couldn't reach Anthropic: ") + e.getMessage();
     }
 
     /** At most this many requests for one question (tool answers and paused turns continue it). */

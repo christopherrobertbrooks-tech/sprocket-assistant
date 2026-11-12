@@ -1235,11 +1235,15 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ first open (Setup)
-    static final String ADDRESS_HOW = "Use its Tailscale address (https://my-computer.my-tailnet.ts.net:8448) or another https:// "
-            + "address. A home-network address (http://192.168.1.50:8048) works too, but only at home and unencrypted. "
-            + "The README shows how to set each one up.";
-    static final String CLAUDE_KEY_HOW = "Make one at console.anthropic.com, ideally in its own workspace with a monthly "
-            + "spend limit. Paste it here; it stays on this phone.";
+    static final String ADDRESS_HOW = "The go-between's start.py prints exactly what to type here. Its address is a Tailscale one "
+            + "(https://my-computer.my-tailnet.ts.net:8448), another https:// one, or a home-network one "
+            + "(http://192.168.1.50:8048: only at home, and unencrypted). The README shows how to set each one up.";
+    // Codex's review 2026-11-12: a newcomer needs the steps, and the surprise said up front.
+    static final String CLAUDE_KEY_HOW = "How to get one: 1. Sign in at console.anthropic.com. A Claude.ai subscription doesn't "
+            + "cover this: the API is paid separately, for what you use. 2. Under Billing, add a little credit (and set a "
+            + "monthly limit under Limits, if you like). 3. Under API keys, create a key, copy it and paste it here. It stays "
+            + "on this phone.";
+    static final String CONSOLE_KEYS = "https://console.anthropic.com/settings/keys";
 
     /** A new install's first screen, and what shows whenever there's no brain: pick one, full screen (the owner,
      * 2026-11-11). Sprocket walks them through everything else in the chat (Setup). */
@@ -1269,13 +1273,19 @@ public class MainActivity extends Activity {
         claudeBox.setOrientation(LinearLayout.VERTICAL);
         EditText key = field(claudeBox, "Your Claude key", "", "sk-ant-...", true);
         claudeBox.addView(text(CLAUDE_KEY_HOW, 12, FAINT));
+        TextView console = text("Open the Claude Console", 13, TEXT);
+        console.setPadding(0, dp(8), 0, dp(4));
+        console.setOnClickListener(v -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(CONSOLE_KEYS))); } catch (Exception ignored) { }
+        });
+        claudeBox.addView(console);
         c.addView(claudeBox);
         LinearLayout ownBox = new LinearLayout(this);
         ownBox.setOrientation(LinearLayout.VERTICAL);
         EditText name = field(ownBox, "Its name (what I call it)", Config.ownName, "Qwen", false);
         EditText base = field(ownBox, "Its address", Config.ownBase, "https://my-server:8448", false);
         EditText model = field(ownBox, "Model name (blank if the server has one)", Config.ownModel, "qwen", false);
-        EditText ownKey = field(ownBox, "Its key (blank if it needs none)", "", "none", true);
+        EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", "none", true);
         ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
         c.addView(ownBox);
         Runnable show = () -> {
@@ -1292,29 +1302,56 @@ public class MainActivity extends Activity {
         note.setPadding(0, dp(8), 0, 0);
         c.addView(note);
         Button start = button("Start", true);
+        TextView anyway = text("Start anyway", 13, FAINT);   // after a failed test: their server may just be off right now
+        anyway.setPadding(0, dp(12), 0, 0);
+        anyway.setVisibility(View.GONE);
         start.setOnClickListener(v -> {
-            if (own[0]) {
-                if (base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
-                String bad = Config.addressProblem(base.getText().toString());
+            final boolean useOwn = own[0];
+            final String k = key.getText().toString().trim(), b = base.getText().toString().trim();
+            final String n = name.getText().toString().trim(), m = model.getText().toString().trim();
+            final String typed = ownKey.getText().toString().trim();
+            note.setTextColor(ERR);
+            if (useOwn) {
+                if (b.isEmpty()) { note.setText("Your own server needs its address."); return; }
+                String bad = Config.addressProblem(b);
                 if (bad != null) { note.setText(bad); return; }
-                Config.ownName = name.getText().toString().trim();
-                Config.ownBase = base.getText().toString().trim();
-                Config.ownModel = model.getText().toString().trim();
-                if (!ownKey.getText().toString().trim().isEmpty()) prefs().ownKey(ownKey.getText().toString().trim());
-            } else {
-                String k = key.getText().toString().trim();
-                if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
-                prefs().key(k);
-            }
-            Config.own = own[0];
-            prefs().saveConfig();
-            Claude.useBrain(Config.own);
-            startSetup();
-            render();
+            } else if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
+            Runnable go = () -> {
+                if (useOwn) {
+                    Config.ownName = n;
+                    Config.ownBase = b;
+                    Config.ownModel = m;
+                    if (!typed.isEmpty()) prefs().ownKey(typed);
+                } else prefs().key(k);
+                Config.own = useOwn;
+                prefs().saveConfig();
+                Claude.useBrain(Config.own);
+                startSetup();
+                render();
+            };
+            // test it first (Codex's review 2026-11-12): a wrong key or an unreachable server is said here, not mid-setup
+            Claude.Brain test = useOwn ? new Claude.Brain(b.replaceAll("/+$", ""), typed.isEmpty() ? prefs().ownKey() : typed, true,
+                    m.isEmpty() ? "own" : m) : new Claude.Brain(Claude.ANTHROPIC, k, false, "");
+            note.setTextColor(MUTED);
+            note.setText(useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
+            start.setEnabled(false);
+            anyway.setVisibility(View.GONE);
+            new Thread(() -> {
+                String problem = Claude.check(test);
+                runOnUiThread(() -> {
+                    start.setEnabled(true);
+                    if (problem == null) { go.run(); return; }
+                    note.setTextColor(ERR);
+                    note.setText(problem);
+                    anyway.setOnClickListener(x -> go.run());
+                    anyway.setVisibility(View.VISIBLE);
+                });
+            }).start();
         });
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, dp(44));
         sp.setMargins(0, dp(12), 0, 0);
         c.addView(start, sp);
+        c.addView(anyway);
         list.addView(c, new LinearLayout.LayoutParams(-1, -2));
     }
 
@@ -1389,7 +1426,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
         bp.setMargins(0, dp(10), 0, 0);
         panel.addView(btns, bp);
-        TextView out = text("Skip the rest of setup", 13, FAINT);
+        TextView out = text("Start with basic chat (set up the rest later)", 13, FAINT);
         out.setPadding(0, dp(10), 0, 0);
         out.setOnClickListener(v -> setupSkipRest());
         panel.addView(out);
@@ -1550,7 +1587,7 @@ public class MainActivity extends Activity {
         EditText base = field(ownBox, "Its address (speaks Anthropic's Messages API, or the included go-between)", Config.ownBase,
                 "https://my-server:8448", false);
         EditText model = field(ownBox, "Model name (blank if the server has one)", Config.ownModel, "qwen", false);
-        EditText ownKey = field(ownBox, "Its key (blank if it needs none)", "", prefs().ownKey().isEmpty() ? "none" : "saved", true);
+        EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", prefs().ownKey().isEmpty() ? "none" : "saved", true);
         ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
         c.addView(ownBox);
         Button claudeKey = button(prefs().key().isEmpty() ? "Add Claude key" : "Claude key", false);
