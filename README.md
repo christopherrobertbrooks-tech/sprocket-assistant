@@ -4,6 +4,12 @@ A talking phone assistant for Android. You talk or type; Sprocket answers out lo
 It starts out friendly and plain, and its personality is yours to write in Settings > Personality, which comes
 with an example to start from: a loud little robot who is sure he was built for war and now sets your timers.
 
+## Why I built it
+I wanted a phone assistant that didn't send everything I say to a company's servers. Sprocket started out on Claude,
+and I moved it to a model running on my own computer at home, so my questions, texts and notes stay private. You can
+run it the same way, or use Claude if you'd rather. On your own model, nothing leaves your own machines except what
+goes to the services you choose to connect (web search, the weather, Notion, GitHub).
+
 > **Status:** a personal project, made public as-is. Tested on one Samsung Android phone, with Claude and with
 > Qwen through the included go-between. Other models may work (see "Brains"). Not on the Play Store.
 
