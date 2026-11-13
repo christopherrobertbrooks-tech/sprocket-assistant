@@ -165,6 +165,117 @@ def run(req, call_upstream, search, model):
             searches += 1
 
 
+def _sse(kind, data):
+    return f"event: {kind}\ndata: {json.dumps(data)}\n\n"
+
+
+class _NoThink:
+    """Text pieces with any <think>...</think> left out, even when the tags are split across pieces."""
+
+    def __init__(self):
+        self.held, self.inside = "", False
+
+    def feed(self, piece):
+        self.held += piece
+        out = ""
+        while self.held:
+            if self.inside:
+                end = self.held.find("</think>")
+                if end < 0:
+                    self.held = self.held[-7:]          # keep what could be the start of "</think>"
+                    return out
+                self.held, self.inside = self.held[end + 8:], False
+            else:
+                start = self.held.find("<think>")
+                if start >= 0:
+                    out, self.held, self.inside = out + self.held[:start], self.held[start + 7:], True
+                    continue
+                keep = next((k for k in range(min(6, len(self.held)), 0, -1) if "<think>".startswith(self.held[-k:])), 0)
+                out, self.held = out + self.held[:len(self.held) - keep], self.held[len(self.held) - keep:]
+                return out
+        return out
+
+
+def run_stream(req, call_upstream, search, model, emit):
+    """Like run(), but passes Qwen's words to the phone as Messages events while they're written (Magpie's pick 6,
+    2026-11-12: with the whole answer at once, the first word waited for the last). call_upstream(body) yields OpenAI
+    stream chunks; emit(text) sends one server-sent event. Searches are done here between rounds, as in run();
+    words said before a search (\"Let me look.\") go out too, as Claude's do. Returns the number of searches."""
+    body, searchable = to_openai(req)
+    body["stream"] = True
+    body["stream_options"] = {"include_usage": True}
+    start = _sse("message_start", {"type": "message_start", "message": {
+        "id": "msg_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant", "model": model, "content": [],
+        "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 0, "output_tokens": 0}}})
+    index, searches, out_tokens = 0, 0, 0
+    while True:
+        b = dict(body)
+        tools = list(body.get("tools", []))
+        if searchable and searches < MAX_SEARCHES_PER_REPLY:
+            tools.append(SEARCH_FUNCTION)
+        if tools:
+            b["tools"] = tools
+        text_open, said, calls, finish, clean = False, "", {}, "stop", _NoThink()
+        chunks = call_upstream(b)       # a model that can't be reached fails here, before anything is sent
+        if start:
+            emit(start)
+            start = None
+        for chunk in chunks:
+            out_tokens = (chunk.get("usage") or {}).get("completion_tokens", out_tokens)
+            for choice in chunk.get("choices") or []:
+                delta = choice.get("delta") or {}
+                piece = clean.feed(delta.get("content") or "")
+                if piece and (text_open or piece.strip()):
+                    if not text_open:
+                        emit(_sse("content_block_start", {"type": "content_block_start", "index": index,
+                                                          "content_block": {"type": "text", "text": ""}}))
+                        text_open = True
+                    said += piece
+                    emit(_sse("content_block_delta", {"type": "content_block_delta", "index": index,
+                                                      "delta": {"type": "text_delta", "text": piece}}))
+                for c in delta.get("tool_calls") or []:
+                    have = calls.setdefault(c.get("index", 0), {"id": "", "name": "", "arguments": ""})
+                    have["id"] = c.get("id") or have["id"]
+                    f = c.get("function") or {}
+                    have["name"] += f.get("name") or ""
+                    have["arguments"] += f.get("arguments") or ""
+                finish = choice.get("finish_reason") or finish
+        if text_open:
+            emit(_sse("content_block_stop", {"type": "content_block_stop", "index": index}))
+            index += 1
+        ordered = [calls[k] for k in sorted(calls)]
+        mine = [c for c in ordered if c["name"] == "web_search"]
+        if mine and len(mine) == len(ordered):        # only searches: do them here, then Qwen goes on
+            body["messages"] = body["messages"] + [{"role": "assistant", "content": said, "tool_calls": [
+                {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": c["arguments"]}} for c in mine]}]
+            for c in mine:
+                try:
+                    query = json.loads(c["arguments"] or "{}").get("query", "")
+                except ValueError:
+                    query = ""
+                body["messages"].append({"role": "tool", "tool_call_id": c["id"],
+                                         "content": search(query) if query else "No query given."})
+                searches += 1
+            continue
+        theirs = [c for c in ordered if c["name"] != "web_search"]   # the phone's tools go first; searches dropped
+        for c in theirs:
+            try:
+                args = json.loads(c["arguments"] or "{}")
+            except ValueError:
+                args = {}
+            emit(_sse("content_block_start", {"type": "content_block_start", "index": index, "content_block": {
+                "type": "tool_use", "id": c["id"] or "toolu_" + uuid.uuid4().hex[:20], "name": c["name"], "input": {}}}))
+            emit(_sse("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {
+                "type": "input_json_delta", "partial_json": json.dumps(args if isinstance(args, dict) else {})}}))
+            emit(_sse("content_block_stop", {"type": "content_block_stop", "index": index}))
+            index += 1
+        stop = "tool_use" if theirs else "max_tokens" if finish == "length" else "end_turn"
+        emit(_sse("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": None},
+                                    "usage": {"output_tokens": out_tokens}}))
+        emit(_sse("message_stop", {"type": "message_stop"}))
+        return searches
+
+
 SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+")   # the phone's own sentence rule (Claude.java END), plus the spaces after
 
 

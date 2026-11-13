@@ -286,6 +286,36 @@ public class ClaudeTest {
         Claude.useBrain(false);
         Claude.transport = keep;
 
+        // busy or overloaded (429/529): wait and try again, up to twice, before giving up (Magpie's pick 1, 2026-11-12)
+        eq("wait: what the server asks, else 2 s then 5 s, never over 20 s", Claude.retryWait("3", 1) + " " + Claude.retryWait(null, 1)
+                + " " + Claude.retryWait(null, 2) + " " + Claude.retryWait("120", 1) + " " + Claude.retryWait("soon", 2), "3000 2000 5000 20000 5000");
+        List<Long> naps = new ArrayList<>();
+        Claude.nap = naps::add;
+        int[] tries = {0};
+        Claude.transport = (key, body, l2, cancel) -> {
+            if (++tries[0] < 3) throw new Claude.Busy(Claude.why(529, ""), tries[0] == 1 ? "7" : null, false);
+            Claude.Reply x = new Claude.Reply();
+            x.model = Claude.SONNET;
+            x.stop = "end_turn";
+            x.text = "Here you go.";
+            return x;
+        };
+        Claude.Brain cb = new Claude.Brain(Claude.base, "k", false, "");
+        String got;
+        try { got = Claude.send(cb, r2, null, null, null).text; } catch (Exception e) { got = "FAILED: " + e.getMessage(); }
+        eq("busy twice, then an answer", got + " | tries " + tries[0] + " | waited " + naps, "Here you go. | tries 3 | waited [7000, 5000]");
+        tries[0] = 0;
+        naps.clear();
+        Claude.transport = (key, body, l2, cancel) -> { tries[0]++; throw new Claude.Busy(Claude.why(429, ""), null, false); };
+        try { got = Claude.send(cb, r2, null, null, null).text; } catch (Exception e) { got = e.getMessage(); }
+        eq("still busy after three tries: says so", got + " | tries " + tries[0], "Claude is busy right now; try again in a moment | tries 3");
+        tries[0] = 0;
+        Claude.transport = (key, body, l2, cancel) -> { tries[0]++; throw new Claude.Busy("Claude is busy right now", null, true); };
+        try { got = Claude.send(cb, r2, null, null, null).text; } catch (Exception e) { got = e.getMessage(); }
+        eq("busy after words were already said: no retry (they'd be said twice)", got + " | tries " + tries[0], "Claude is busy right now | tries 1");
+        Claude.nap = Claude::sleep;
+        Claude.transport = keep;
+
         // his screen (the owner 2026-10-17: screenshots): a tool answer can carry a picture, which goes to Claude as an image
         Object pic = Claude.toolContent("[[picture:screen.jpg]]His screen.", n2 -> "B64:" + n2);
         JSONArray sc = pic instanceof JSONArray ? (JSONArray) pic : new JSONArray();

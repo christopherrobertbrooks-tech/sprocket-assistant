@@ -6,6 +6,8 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 ## Planned
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
+- **A bigger memory.** Sprocket keeps up to 100 short notes and sends all of them with every message. The plan is to
+  hold far more and bring up only the notes that matter for what you're asking, still stored on your phone.
 
 ## Maybe
 - Other languages for talking and listening.

@@ -126,6 +126,27 @@ def call_upstream(body):
         return json.load(r)
 
 
+def call_upstream_stream(body):
+    """The model's streamed reply as OpenAI chunks; the connection opens now, so a failure shows before any reply."""
+    req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    r = urllib.request.urlopen(req, timeout=900)
+
+    def chunks():
+        with r:
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    return
+                try:
+                    yield json.loads(data)
+                except ValueError:
+                    continue
+    return chunks()
+
+
 def answer_with_search(body):
     """Run Qwen with the search tool until it answers without searching."""
     messages = list(body.get("messages", []))
@@ -218,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
         for b in last.get("content", []) if isinstance(last.get("content"), list) and LOG_TOOL_RESULTS else []:
             if b.get("type") == "tool_result":   # what the phone's tool answered (first words), for debugging
                 log("tool result: " + messages._text_of(b.get("content", ""))[:160].replace("\n", " | "))
+        if req.get("stream"):
+            return self.sprocket_stream(req, started)
         try:
             reply, searches = messages.run(req, lambda b: call_upstream(dict(b, model=MODEL)), brave_search, MODEL)
         except (urllib.error.URLError, KeyError, ValueError, IndexError) as e:
@@ -235,6 +258,34 @@ class Handler(BaseHTTPRequestHandler):
         for e in messages.events(reply):
             self.wfile.write(e.encode())
         self.wfile.flush()
+        self.close_connection = True
+
+    def sprocket_stream(self, req, started):
+        """Qwen's words to the phone while they're written (Magpie's pick 6, 2026-11-12)."""
+        sent = [False]
+
+        def emit(event):
+            if not sent[0]:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                sent[0] = True
+            self.wfile.write(event.encode())
+            self.wfile.flush()
+
+        try:
+            searches = messages.run_stream(req, lambda b: call_upstream_stream(dict(b, model=MODEL)), brave_search, MODEL, emit)
+            log(f"sprocket reply streamed in {time.time() - started:.1f}s, {searches} searches")
+        except (urllib.error.URLError, OSError, KeyError, ValueError, IndexError) as e:
+            log(f"sprocket upstream error: {e}")
+            if not sent[0]:
+                return self.send_json(502, {"type": "error", "error": {"type": "api_error", "message": f"Your model didn't answer: {e}"}})
+            try:
+                emit(messages._sse("error", {"type": "error", "error": {"type": "api_error", "message": f"your model stopped: {e}"}}))
+            except OSError:
+                pass
         self.close_connection = True
 
     def send_stream(self, resp):

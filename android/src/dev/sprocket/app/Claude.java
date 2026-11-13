@@ -360,8 +360,8 @@ final class Claude {
                 case "error": {
                     JSONObject er = e.optJSONObject("error");
                     String type = er == null ? "" : er.optString("type");
-                    throw new Exception(type.contains("overloaded") ? "Claude is busy right now"
-                            : "Claude stopped: " + (er == null ? "an error" : er.optString("message")));
+                    if (type.contains("overloaded")) throw new Busy("Claude is busy right now", null, run.length() > 0);
+                    throw new Exception("Claude stopped: " + (er == null ? "an error" : er.optString("message")));
                 }
                 default:
             }
@@ -555,6 +555,41 @@ final class Claude {
 
     static Transport transport = Claude::once;
 
+    /** Busy or overloaded (429/529, or an "overloaded" error mid-stream): worth another try, unless words were already
+     * said (said = true), which a second try would say again. retryAfter: the server's retry-after header, or null. */
+    static final class Busy extends Exception {
+        final String retryAfter;
+        final boolean said;
+
+        Busy(String message, String retryAfter, boolean said) { super(message); this.retryAfter = retryAfter; this.said = said; }
+    }
+
+    static final int TRIES = 3;   // the first try and two more (Magpie's pick 1, 2026-11-12: one busy moment ended the answer)
+
+    /** How long to wait before try number attempt + 1: what the server asked (at most 20 s), else 2 s, then 5 s. */
+    static long retryWait(String retryAfter, int attempt) {
+        try { return Math.min(20_000L, Math.max(0, Long.parseLong(retryAfter.trim())) * 1000L); }
+        catch (Exception e) { return attempt <= 1 ? 2_000L : 5_000L; }
+    }
+
+    static java.util.function.LongConsumer nap = Claude::sleep;   // the test makes it instant
+
+    static void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
+
+    /** One round, tried again while Claude is busy. */
+    private static Reply onceRetrying(Brain b, JSONObject req, Listener l, HttpURLConnection[] cancel, Tools tools) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try { return transport.once(b, req, l, cancel); }
+            catch (Busy e) {
+                if (e.said || attempt >= TRIES) throw e;
+                nap.accept(retryWait(e.retryAfter, attempt));
+                if (tools != null && tools.stopped()) throw new Exception("stopped");
+            }
+        }
+    }
+
     /**
      * One question, answered (network: call it off the main thread): a streamed reply, and while Claude stops to use
      * one of the app's tools (or the API pauses a long turn), the next round with the tool's answer. cancel[0] = the
@@ -576,7 +611,7 @@ final class Claude {
         Reply total = null;
         boolean acted = false, usedScreen = false;
         for (int round = 1; ; round++) {
-            Reply rep = transport.once(b, req, l, cancel);
+            Reply rep = onceRetrying(b, req, l, cancel, tools);
             if (total != null) {
                 rep.add(total);
                 if (rep.text.isEmpty()) rep.text = total.text;   // said it before acting, nothing after: that's the reply
@@ -633,6 +668,7 @@ final class Claude {
         if (code != 200) {
             InputStream in = h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            if (code == 429 || code == 529) throw new Busy(why(code, body), h.getHeaderField("retry-after"), false);
             throw new Exception(why(code, body));
         }
         Stream st = new Stream(req.optString("model"), l);

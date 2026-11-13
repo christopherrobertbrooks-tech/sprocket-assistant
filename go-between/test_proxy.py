@@ -96,5 +96,62 @@ class AccessCode(unittest.TestCase):
         self.assertFalse(self.check("code", {"x-api-key": "wrong"}))
 
 
+class StreamedOverHttp(unittest.TestCase):
+    """Sprocket's streamed request through a real local server: words arrive before the answer is finished."""
+
+    def setUp(self):
+        import threading
+        from http.server import ThreadingHTTPServer
+        self.dir = tempfile.TemporaryDirectory()
+        proxy.TOKEN_FILE = os.path.join(self.dir.name, "token")
+        open(proxy.TOKEN_FILE, "w").write("code")
+        self.saved = proxy.call_upstream_stream
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), proxy.Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        proxy.call_upstream_stream = self.saved
+        self.dir.cleanup()
+
+    def post(self):
+        import http.client
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=10)
+        body = {"model": "qwen", "max_tokens": 100, "stream": True, "messages": [{"role": "user", "content": "hi"}]}
+        c.request("POST", "/v1/messages", json.dumps(body), {"x-api-key": "code", "content-type": "application/json"})
+        return c.getresponse()
+
+    def test_words_arrive_as_events(self):
+        import threading
+        gate = threading.Event()
+
+        def upstream(body):
+            def gen():
+                yield {"choices": [{"delta": {"content": "Hi there. "}, "finish_reason": None}]}
+                gate.wait(5)        # the model is still writing: the first words must already be at the phone
+                yield {"choices": [{"delta": {"content": "How can I help?"}, "finish_reason": "stop"}]}
+            return gen()
+
+        proxy.call_upstream_stream = upstream
+        r = self.post()
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "text/event-stream"))
+        early = b""
+        while b"Hi there." not in early:
+            early += r.read1(4096)
+        gate.set()
+        rest = early + r.read()
+        self.assertIn(b"How can I help?", rest)
+        self.assertIn(b'"stop_reason": "end_turn"', rest)
+
+    def test_model_unreachable_is_a_502(self):
+        def upstream(body):
+            raise OSError("connection refused")
+        proxy.call_upstream_stream = upstream
+        r = self.post()
+        self.assertEqual(r.status, 502)
+        self.assertIn("Your model didn't answer", json.loads(r.read())["error"]["message"])
+
+
 if __name__ == "__main__":
     unittest.main()

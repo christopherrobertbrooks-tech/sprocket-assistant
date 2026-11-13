@@ -131,5 +131,83 @@ class Events(unittest.TestCase):
         self.assertEqual("".join(deltas), text)
 
 
+def chunks(texts=(), calls=None, finish="stop", reasoning=()):
+    """A streamed OpenAI reply: reasoning pieces, text pieces, then tool calls in two halves each, then the finish."""
+    out = [{"choices": [{"delta": {"reasoning_content": r}, "finish_reason": None}]} for r in reasoning]
+    out += [{"choices": [{"delta": {"content": t}, "finish_reason": None}]} for t in texts]
+    for i, (name, args) in enumerate(calls or []):
+        a = json.dumps(args)
+        out.append({"choices": [{"delta": {"tool_calls": [{"index": i, "id": f"c{i}", "type": "function",
+                                                            "function": {"name": name, "arguments": a[:len(a) // 2]}}]}, "finish_reason": None}]})
+        out.append({"choices": [{"delta": {"tool_calls": [{"index": i, "function": {"arguments": a[len(a) // 2:]}}]}, "finish_reason": None}]})
+    out.append({"choices": [{"delta": {}, "finish_reason": finish}]})
+    out.append({"choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 20}})
+    return out
+
+
+class Streamed(unittest.TestCase):
+    """Qwen's answer passed to the phone as it's written (Magpie's pick 6, 2026-11-12), not after it's finished."""
+
+    def go(self, rounds, req=SPROCKET_REQ):
+        sent, out, searched = [], [], []
+        it = iter(rounds)
+
+        def upstream(body):
+            sent.append(body)
+            return iter(next(it))
+
+        def search(q):
+            searched.append(q)
+            return "RESULTS for " + q
+
+        searches = m.run_stream(req, upstream, search, "qwen", out.append)
+        evs = [json.loads([x for x in e.splitlines() if x.startswith("data:")][0][5:]) for e in out]
+        return evs, sent, searched, searches
+
+    @staticmethod
+    def texts(evs):
+        return [e["delta"]["text"] for e in evs if e["type"] == "content_block_delta" and e["delta"]["type"] == "text_delta"]
+
+    def test_words_go_out_as_they_come(self):
+        evs, sent, _, _ = self.go([chunks(["It's ", "cold. ", "Wear a coat."], reasoning=["hmm"])])
+        self.assertTrue(sent[0]["stream"])
+        self.assertEqual(self.texts(evs), ["It's ", "cold. ", "Wear a coat."])
+        self.assertEqual([e["type"] for e in evs], ["message_start", "content_block_start", "content_block_delta",
+                                                    "content_block_delta", "content_block_delta", "content_block_stop",
+                                                    "message_delta", "message_stop"])
+        self.assertEqual(evs[-2]["delta"]["stop_reason"], "end_turn")
+        self.assertEqual(evs[-2]["usage"]["output_tokens"], 20)
+
+    def test_thinking_in_the_text_is_left_out(self):
+        evs, _, _, _ = self.go([chunks(["<thi", "nk>planning</th", "ink>Hello", " there."])])
+        self.assertEqual("".join(self.texts(evs)), "Hello there.")
+
+    def test_a_search_then_the_answer(self):
+        evs, sent, searched, n = self.go([chunks(["Let me look. "], [("web_search", {"query": "fern care"})]),
+                                          chunks(["Keep it warm."])])
+        self.assertEqual((searched, n), (["fern care"], 1))
+        self.assertEqual(sent[1]["messages"][-1], {"role": "tool", "tool_call_id": "c0", "content": "RESULTS for fern care"})
+        self.assertEqual(self.texts(evs), ["Let me look. ", "Keep it warm."])
+        self.assertEqual(evs[-2]["delta"]["stop_reason"], "end_turn")
+
+    def test_the_phones_own_tool(self):
+        evs, _, _, _ = self.go([chunks(["Setting it."], [("set_timer", {"seconds": 60})])])
+        use = [e for e in evs if e["type"] == "content_block_start" and e["content_block"]["type"] == "tool_use"]
+        self.assertEqual((use[0]["content_block"]["name"], use[0]["content_block"]["id"]), ("set_timer", "c0"))
+        args = [e["delta"]["partial_json"] for e in evs if e["type"] == "content_block_delta" and e["delta"]["type"] == "input_json_delta"]
+        self.assertEqual(json.loads("".join(args)), {"seconds": 60})
+        self.assertEqual(evs[-2]["delta"]["stop_reason"], "tool_use")
+
+    def test_search_alongside_the_phones_tool_is_dropped(self):
+        evs, _, searched, _ = self.go([chunks([], [("web_search", {"query": "x"}), ("set_timer", {"seconds": 5})])])
+        self.assertEqual(searched, [])
+        names = [e["content_block"]["name"] for e in evs if e["type"] == "content_block_start" and e["content_block"]["type"] == "tool_use"]
+        self.assertEqual(names, ["set_timer"])
+
+    def test_ran_out_of_room(self):
+        evs, _, _, _ = self.go([chunks(["Long"], finish="length")])
+        self.assertEqual(evs[-2]["delta"]["stop_reason"], "max_tokens")
+
+
 if __name__ == "__main__":
     unittest.main()
