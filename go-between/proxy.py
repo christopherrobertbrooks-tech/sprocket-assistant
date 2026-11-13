@@ -10,7 +10,8 @@ pass through untouched.
 Settings (environment): UPSTREAM (your model server, default http://127.0.0.1:8080), MODEL (its model name),
 BIND / PORT (default 127.0.0.1:8048), MONTHLY_CAP (Brave searches a month, default 1000), BRAVE_KEY_FILE (default
 ~/.config/brave-search/api-key), LOG_TOOL_RESULTS=1 to log the first words of each phone tool's answer (off by
-default: they can be private). Clients send the access code in ./token as x-api-key or a bearer token.
+default: they can be private), SLOT=1 to keep a llama.cpp server slot for Sprocket (with the server on -np 2 -kvu, so
+other apps sharing the model don't make it re-read its instructions). Clients send the access code in ./token as x-api-key or a bearer token.
 Brave results are used for the answer and never stored; only the month's search count is kept.
 Standard library only.
 """
@@ -37,6 +38,9 @@ TOKEN_FILE = os.path.join(HERE, "token")
 USAGE_FILE = os.path.join(HERE, "usage.json")
 BRAVE_KEY_FILE = os.path.expanduser(os.environ.get("BRAVE_KEY_FILE", "~/.config/brave-search/api-key"))
 LOG_TOOL_RESULTS = os.environ.get("LOG_TOOL_RESULTS") == "1"
+# SLOT: a llama.cpp server slot kept for Sprocket (run it with -np 2 -kvu), so other apps sharing the model don't wipe
+# out Sprocket's long instructions and every question re-reads them (16,000 tokens, ~16 s on a V100; 2026-11-12)
+SLOT = int(os.environ["SLOT"]) if os.environ.get("SLOT", "").strip() else None
 
 SEARCH_TOOL = {
     "type": "function",
@@ -124,6 +128,11 @@ def call_upstream(body):
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=900) as r:
         return json.load(r)
+
+
+def sprocket_body(body):
+    """Sprocket's request for the model: its model name, and its own slot when one is kept for it."""
+    return dict(body, model=MODEL, **({"id_slot": SLOT} if SLOT is not None else {}))
 
 
 def call_upstream_stream(body):
@@ -242,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
         if req.get("stream"):
             return self.sprocket_stream(req, started)
         try:
-            reply, searches = messages.run(req, lambda b: call_upstream(dict(b, model=MODEL)), brave_search, MODEL)
+            reply, searches = messages.run(req, lambda b: call_upstream(sprocket_body(b)), brave_search, MODEL)
         except (urllib.error.URLError, KeyError, ValueError, IndexError) as e:
             log(f"sprocket upstream error: {e}")
             return self.send_json(502, {"type": "error", "error": {"type": "api_error", "message": f"Your model didn't answer: {e}"}})
@@ -276,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
-            searches = messages.run_stream(req, lambda b: call_upstream_stream(dict(b, model=MODEL)), brave_search, MODEL, emit)
+            searches = messages.run_stream(req, lambda b: call_upstream_stream(sprocket_body(b)), brave_search, MODEL, emit)
             log(f"sprocket reply streamed in {time.time() - started:.1f}s, {searches} searches")
         except (urllib.error.URLError, OSError, KeyError, ValueError, IndexError) as e:
             log(f"sprocket upstream error: {e}")

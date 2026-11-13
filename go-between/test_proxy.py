@@ -144,6 +144,25 @@ class StreamedOverHttp(unittest.TestCase):
         self.assertIn(b"How can I help?", rest)
         self.assertIn(b'"stop_reason": "end_turn"', rest)
 
+    def test_sprocket_keeps_its_own_slot(self):
+        seen = []
+
+        def upstream(body):
+            seen.append(body)
+            return iter([{"choices": [{"delta": {"content": "Hi."}, "finish_reason": "stop"}]}])
+
+        proxy.call_upstream_stream = upstream
+        saved, proxy.SLOT = proxy.SLOT, 1
+        try:
+            self.post().read()
+        finally:
+            proxy.SLOT = saved
+        self.assertEqual(seen[0].get("id_slot"), 1)
+        proxy.SLOT = None
+        self.post().read()
+        proxy.SLOT = saved
+        self.assertNotIn("id_slot", seen[1])
+
     def test_model_unreachable_is_a_502(self):
         def upstream(body):
             raise OSError("connection refused")

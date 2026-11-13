@@ -8,6 +8,12 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **Setup polish,** from what new users run into.
 - **A bigger memory.** Sprocket keeps up to 100 short notes and sends all of them with every message. The plan is to
   hold far more and bring up only the notes that matter for what you're asking, still stored on your phone.
+- **Faster first words on your own model.** Before answering, your model reads Sprocket's instructions (about 16,000
+  words), which takes 15 seconds or more on a home graphics card when it hasn't just read them. Two ways to cut that:
+  start sending the instructions the moment you tap Talk, so only your words are left when you finish speaking; and
+  send shorter instructions, with only the tools a question is likely to need.
+- **A backup brain.** If your own server doesn't answer, Sprocket switches to Claude for that question (when you have
+  a Claude key), and if Claude is down, it switches to your own server. It tells you when it does.
 
 ## Maybe
 - Other languages for talking and listening.
