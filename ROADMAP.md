@@ -6,7 +6,6 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 ## Planned
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
-
 - **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
   Anthropic models (a cheaper, faster one, for instance), and DeepSeek and Google's Gemini through their own APIs,
   each with its own key, tested with Sprocket's tools before it's offered.
