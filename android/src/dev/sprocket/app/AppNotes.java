@@ -161,12 +161,12 @@ final class AppNotes {
 
     /** The question after a screen task: what he asked, the numbered steps, where it ended and the answer he got. */
     static String routePrompt(String asked, List<Step> steps, String endScreen, String reply) {
-        StringBuilder b = new StringBuilder("He asked his phone assistant: \"").append(asked == null ? "" : asked.trim())
+        StringBuilder b = new StringBuilder("They asked their phone assistant: \"").append(asked == null ? "" : asked.trim())
                 .append("\"\nThe steps it took on the phone:\n");
         for (int i = 0; i < steps.size(); i++) b.append(i + 1).append(". ").append(steps.get(i)).append('\n');
         b.append("Where it ended:\n").append(endScreen == null ? "(not read)" : endScreen.trim()).append('\n')
                 .append("Its answer: ").append(reply == null ? "" : reply.trim()).append("\n\n")
-                .append("If these steps reached what he asked for, answer on ONE line: a short name for the place, then |, then ")
+                .append("If these steps reached what they asked for, answer on ONE line: a short name for the place, then |, then ")
                 .append("the numbers of the steps that make the shortest way there, in order, leaving out wrong turns. For ")
                 .append("example: Gmail spam folder | 1, 4, 5, 6. If they didn't reach it, answer NONE. Nothing else.");
         return b.toString();
@@ -278,8 +278,8 @@ final class AppNotes {
                 if (score > top) { top = score; best = r; }
             }
         if (top < 0.5) return "";
-        return "\n\n(Sprocket: a saved way might fit this: go_to \"" + best.goal + "\". While he asks, Sprocket's own screen "
-                + "is up, so nothing else is on his screen until you go there.)";
+        return "\n\n(Sprocket: a saved way might fit this: go_to \"" + best.goal + "\". While they ask, Sprocket's own screen "
+                + "is up, so nothing else is on their screen until you go there.)";
     }
 
     /** The app a route belongs to. */

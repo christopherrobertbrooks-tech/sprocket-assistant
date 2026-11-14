@@ -32,7 +32,7 @@ final class PhoneTools {
     }
 
     /** His spelling is the one to look up: the phone finds the contact it sounds like if the spelling differs. */
-    private static final String WHO = "A contact's name exactly as he wrote or said it (\"Mom\", \"Toni\"; never "
+    private static final String WHO = "A contact's name exactly as they wrote or said it (\"Mom\", \"Toni\"; never "
             + "re-spelled), or a phone number.";
 
     static final String[] DAY_NAMES = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
@@ -53,17 +53,17 @@ final class PhoneTools {
                                         .put("description", "Days it repeats on; leave out for a one-time alarm.")), "time"))
                 .put(tool("set_reminder", "Remind the boss of something at a date and time: within 90 minutes it is a labelled "
                                 + "timer, within a day a labelled alarm, later a calendar entry with an alert.",
-                        new JSONObject().put("text", str("What to remind him of, e.g. \"Call Mom\"."))
+                        new JSONObject().put("text", str("What to remind them of, e.g. \"Call Mom\"."))
                                 .put("at", str("Local date and time, YYYY-MM-DDTHH:MM.")), "text", "at"))
-                .put(tool("send_text", "Send a text message (SMS) from the boss's number. He sees a card with the recipient "
-                                + "and the exact words and must tap Send; the result says whether it was sent or he cancelled. "
-                                + "Write the message as he would, plainly: never in Sprocket's voice unless he asks.",
+                .put(tool("send_text", "Send a text message (SMS) from the boss's number. They see a card with the recipient "
+                                + "and the exact words and must tap Send; the result says whether it was sent or they cancelled. "
+                                + "Write the message as they would, plainly: never in Sprocket's voice unless they ask.",
                         new JSONObject().put("to", str(WHO)).put("message", str("The exact text to send.")), "to", "message"))
-                .put(tool("call", "Phone someone. He sees a card and must tap Call; the result says whether the call was "
-                                + "placed or he cancelled.",
+                .put(tool("call", "Phone someone. They see a card and must tap Call; the result says whether the call was "
+                                + "placed or they cancelled.",
                         new JSONObject().put("to", str(WHO)), "to"))
                 .put(tool("find_contact", "Look up contacts by name: their names and phone numbers.",
-                        new JSONObject().put("name", str("A name or part of one, exactly as he wrote or said it.")), "name"))
+                        new JSONObject().put("name", str("A name or part of one, exactly as they wrote or said it.")), "name"))
                 .put(tool("check_calendar", "List the boss's calendar events between two dates (inclusive).",
                         new JSONObject().put("from", str("YYYY-MM-DD.")).put("to", str("YYYY-MM-DD; leave out for one day.")), "from"))
                 .put(tool("add_event", "Add an event to the boss's calendar.",
@@ -87,45 +87,45 @@ final class PhoneTools {
                 .put(tool("phone_status", "The phone's battery level and charging, its next alarm, and free storage.",
                         new JSONObject()))
                 .put(tool("media", "Control what is playing (music, podcasts, videos): play, pause, next, previous; or play "
-                                + "something by name in his music app. The result says whether anything is playing afterwards.",
+                                + "something by name in their music app. The result says whether anything is playing afterwards.",
                         new JSONObject().put("command", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("play").put("pause").put("next").put("previous")))
                                 .put("query", str("With play: a song, artist, album, playlist or podcast to play by name. Leave "
                                         + "out to resume.")), "command"))
                 .put(tool("maps", "Google Maps on the phone: directions to a place (it starts navigating), or places of a kind "
-                                + "near him.",
+                                + "near them.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum", new JSONArray().put("directions").put("nearby")))
                                 .put("place", str("Where to, or what kind of place (\"gas station\", \"coffee\")."))
                                 .put("mode", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("drive").put("walk").put("bike").put("transit")).put("description", "For directions; default drive.")),
                         "action", "place"))
-                .put(tool("open_screen", "Open a part of the phone for him: the camera, his photos, the voice recorder, the "
-                                + "Clock's timers or alarms, a settings page, or the home screen (that is how to get him out of "
+                .put(tool("open_screen", "Open a part of the phone for them: the camera, their photos, the voice recorder, the "
+                                + "Clock's timers or alarms, a settings page, or the home screen (that is how to get them out of "
                                 + "an app: Sprocket can't close apps). It only opens it; it changes nothing there. Use it before the "
                                 + "screen tool for any settings page listed here; the software version is in about_phone_settings "
                                 + "> Software information.",
                         new JSONObject().put("screen", new JSONObject().put("type", "string").put("enum", new JSONArray(SCREENS.keySet()))), "screen"))
                 .put(tool("clock_control", "Cancel alarms in the Clock app (by time, by name, the next one, or all), snooze a "
-                                + "ringing alarm, or stop a ringing timer. The Clock app may show the alarm for him to confirm.",
+                                + "ringing alarm, or stop a ringing timer. The Clock app may show the alarm for them to confirm.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("cancel_alarm").put("snooze_alarm").put("stop_timer")))
                                 .put("time", str("For cancel_alarm: the alarm's time, 24-hour HH:MM."))
                                 .put("label", str("For cancel_alarm: the alarm's name."))
                                 .put("all", new JSONObject().put("type", "boolean").put("description", "For cancel_alarm: every alarm.")),
                         "action"))
-                .put(tool("missed_calls", "His missed calls from the last week: who and when, newest first.", new JSONObject()))
-                .put(tool("email", "Write an email in his email app, filled in, for him to check and send himself (Sprocket "
-                                + "can't send email). Write it as he would.",
-                        new JSONObject().put("to", str("A contact's name exactly as he wrote or said it, or an email address."))
+                .put(tool("missed_calls", "Their missed calls from the last week: who and when, newest first.", new JSONObject()))
+                .put(tool("email", "Write an email in their email app, filled in, for them to check and send themselves (Sprocket "
+                                + "can't send email). Write it as they would.",
+                        new JSONObject().put("to", str("A contact's name exactly as they wrote or said it, or an email address."))
                                 .put("subject", str("The subject line.")).put("body", str("The email's text.")), "to"))
-                .put(tool("add_contact", "Open a new contact, filled in, for him to check and save.",
-                        new JSONObject().put("name", str("The person's name.")).put("number", str("Their phone number, if he gave one."))
-                                .put("email", str("Their email address, if he gave one.")), "name"))
-                .put(tool("share_location", "Text his current location (a Google Maps link) to someone, through the same Send card "
+                .put(tool("add_contact", "Open a new contact, filled in, for them to check and save.",
+                        new JSONObject().put("name", str("The person's name.")).put("number", str("Their phone number, if they gave one."))
+                                .put("email", str("Their email address, if they gave one.")), "name"))
+                .put(tool("share_location", "Text their current location (a Google Maps link) to someone, through the same Send card "
                                 + "as any text.",
                         new JSONObject().put("to", str(WHO)), "to"))
                 .put(tool("go_to", "Go to a place in an app the way Sprocket got there before: Sprocket does the taps itself, much "
-                                + "faster than the screen tool. Name the place he asked for (\"Gmail spam folder\"). Try it FIRST "
+                                + "faster than the screen tool. Name the place they asked for (\"Gmail spam folder\"). Try it FIRST "
                                 + "for any place inside an app; if there's no saved way yet it says so, then use the screen tool "
                                 + "(the way is saved for next time). It returns the screen it ended on; if it stops partway, carry "
                                 + "on from there with the screen tool.",
@@ -134,15 +134,15 @@ final class PhoneTools {
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read. scroll up/down, back, home. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
-                                + "(a spot the list can't read asks him first). Each action returns the screen after it. Never "
-                                + "tell him something is on his screen unless you read it, or go_to returned it, in this "
-                                + "question: while he asks, Sprocket's own screen is up. When you're done Sprocket comes back to its own screen by itself; if he asked to open or see "
-                                + "something (photos, an app, a map), call stay last so it stays on screen. note: once you've reached what he "
+                                + "(a spot the list can't read asks them first). Each action returns the screen after it. Never "
+                                + "tell them something is on their screen unless you read it, or go_to returned it, in this "
+                                + "question: while they ask, Sprocket's own screen is up. When you're done Sprocket comes back to its own screen by itself; if they asked to open or see "
+                                + "something (photos, an app, a map), call stay last so it stays on screen. note: once you've reached what they "
                                 + "asked for in an app, save ONE short fact for next time about where it was, as a route (\"Battery "
                                 + "health: Battery and device care > Battery > Battery information\"); only facts you saw work, never "
                                 + "personal details. Notes you saved come back with that app's screen: use them, and check they still "
                                 + "match. Money and password apps are off limits. Pay, buy, delete, install, sign-out, "
-                                + "send, post, call and answer buttons show him a card first, and only go ahead if he taps it.",
+                                + "send, post, call and answer buttons show them a card first, and only go ahead if they tap it.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
                                                 .put("look").put("tap_point").put("stay").put("note")))
@@ -209,7 +209,7 @@ final class PhoneTools {
                 {"camera", "android.media.action.STILL_IMAGE_CAMERA", "the camera"},
                 {"selfie_camera", "android.media.action.STILL_IMAGE_CAMERA", "the selfie camera"},
                 {"video_camera", "android.media.action.VIDEO_CAMERA", "the video camera"},
-                {"photos", "android.intent.action.MAIN", "his photos"},
+                {"photos", "android.intent.action.MAIN", "their photos"},
                 {"voice_recorder", "android.provider.MediaStore.RECORD_SOUND", "the voice recorder"},
                 {"timers", "android.intent.action.SHOW_TIMERS", "the Clock's timers"},
                 {"alarms", "android.intent.action.SHOW_ALARMS", "the Clock's alarms"},

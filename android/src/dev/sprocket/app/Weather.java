@@ -165,7 +165,7 @@ final class Weather {
             return summary(get(forecastUrl(town.getDouble("latitude"), town.getDouble("longitude"), us)), label(town), us);
         }
         if (here == null)
-            return "The boss's location is unknown (location is off for Sprocket, or the phone has no fix yet). Ask him which town.";
+            return "The boss's location is unknown (location is off for Sprocket, or the phone has no fix yet). Ask them which town.";
         return summary(get(forecastUrl(here[0], here[1], us)), near == null || near.isEmpty() ? "the boss" : near, us);
     }
 }

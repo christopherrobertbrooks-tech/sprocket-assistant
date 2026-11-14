@@ -20,8 +20,8 @@ public class GoalsTest {
         eq("nothing fits: nothing changes", g.done("buy a boat", true, 6), null);
         eq("what he sees and Claude is told", g.show(), "Open goals: Test Sprocket for a few days; Make a song from the phone. "
                 + "Done: Decide on Sprocket's on-screen look.");
-        eq("in the prompt, with his notes", g.forClaude(), "His goals (he sees them in the app; tick them off with goal_done when "
-                + "he says one is done):\n- Test Sprocket for a few days\n- Make a song from the phone\nDone lately: Decide on Sprocket's on-screen look");
+        eq("in the prompt, with his notes", g.forClaude(), "Their goals (they see them in the app; tick them off with goal_done when "
+                + "they say one is done):\n- Test Sprocket for a few days\n- Make a song from the phone\nDone lately: Decide on Sprocket's on-screen look");
         eq("back on", g.done("on-screen look", false, 7) + " " + g.open().size(), "Decide on Sprocket's on-screen look 3");
         eq("removed", g.remove("make a song") + " " + g.goals.size(), "Make a song from the phone 2");
         eq("his own delete, by id", g.delete(g.goals.get(0).id) + " " + g.goals.size(), "true 1");

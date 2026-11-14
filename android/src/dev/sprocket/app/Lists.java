@@ -330,30 +330,30 @@ final class Lists {
 
     /** Claude's tools for them. */
     static JSONArray definitions() throws Exception {
-        String list = "The list's name as he says it: \"grocery\", \"to-do\", \"packing\"...";
-        String due = "A due date as YYYY-MM-DD (work it out from today's date: \"Friday\" = the coming Friday), when he gives one; "
-                + "he hears about it in his morning brief that day.";
+        String list = "The list's name as they say it: \"grocery\", \"to-do\", \"packing\"...";
+        String due = "A due date as YYYY-MM-DD (work it out from today's date: \"Friday\" = the coming Friday), when they give one; "
+                + "they hear about it in their morning brief that day.";
         String aisle = "Grocery items only: the store aisle, one of " + String.join(", ", AISLES) + ".";
         JSONObject item = new JSONObject().put("type", "object").put("properties", new JSONObject()
                 .put("text", str("The item, short.")).put("due", str(due)).put("aisle", str(aisle)))
                 .put("required", new JSONArray().put("text"));
         return new JSONArray()
-                .put(tool("list_add", "Put items on one of his lists (made if it doesn't exist). For a picture of a recipe, a note "
+                .put(tool("list_add", "Put items on one of their lists (made if it doesn't exist). For a picture of a recipe, a note "
                                 + "or a list, add each thing in it.",
                         new JSONObject().put("list", str(list)).put("items", new JSONObject().put("type", "array").put("items", item)
                                 .put("description", "Each item; grocery items with their aisle.")), "list", "items"))
-                .put(tool("list_show", "What is on a list, or (no name) which lists he has.",
+                .put(tool("list_show", "What is on a list, or (no name) which lists they have.",
                         new JSONObject().put("list", str(list + " Leave out for all of them."))))
                 .put(tool("list_check", "Tick an item off (got it, done), or back on with done=false.",
-                        new JSONObject().put("list", str(list)).put("item", str("The item, in his words."))
+                        new JSONObject().put("list", str(list)).put("item", str("The item, in their words."))
                                 .put("done", new JSONObject().put("type", "boolean")), "list", "item"))
-                .put(tool("list_remove", "Take items off a list completely (he doesn't want them there at all).",
-                        new JSONObject().put("list", str(list)).put("items", words("The items, in his words.")), "list", "items"))
-                .put(tool("list_clear", "Empty a list: only the ticked-off items, or everything (he confirms that on a card).",
+                .put(tool("list_remove", "Take items off a list completely (they don't want them there at all).",
+                        new JSONObject().put("list", str(list)).put("items", words("The items, in their words.")), "list", "items"))
+                .put(tool("list_clear", "Empty a list: only the ticked-off items, or everything (they confirm that on a card).",
                         new JSONObject().put("list", str(list)).put("only_done", new JSONObject().put("type", "boolean")
                                 .put("description", "true: only the ticked-off items.")), "list"))
                 .put(tool("list_change", "Give an item on a list a due date (or clear it with \"\"), or move a grocery item to another aisle.",
-                        new JSONObject().put("list", str(list)).put("item", str("The item, in his words.")).put("due", str(due + " \"\" clears it."))
+                        new JSONObject().put("list", str(list)).put("item", str("The item, in their words.")).put("due", str(due + " \"\" clears it."))
                                 .put("aisle", str(aisle)), "list", "item"));
     }
 }

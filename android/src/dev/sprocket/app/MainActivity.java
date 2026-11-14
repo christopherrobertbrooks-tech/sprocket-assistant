@@ -1612,6 +1612,13 @@ public class MainActivity extends Activity {
         gap.setMargins(dp(10), 0, 0, 0);
         pick.addView(mine, gap);
         c.addView(pick);
+        TextView backupHow = text("The one you pick answers. Set up the other one too, and when the first doesn't answer, "
+                + "Sprocket asks on a card whether the other may take that question.", 12, FAINT);
+        backupHow.setPadding(0, dp(6), 0, 0);
+        c.addView(backupHow);
+        TextView ownLabel = text("", 14, MUTED);
+        ownLabel.setPadding(0, dp(10), 0, 0);
+        c.addView(ownLabel);
         LinearLayout ownBox = new LinearLayout(this);
         ownBox.setOrientation(LinearLayout.VERTICAL);
         EditText name = field(ownBox, "Its name (what Sprocket calls it)", Config.ownName, "Qwen", false);
@@ -1626,9 +1633,11 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams top = new LinearLayout.LayoutParams(-2, dp(38));
         top.setMargins(0, dp(8), 0, 0);
         c.addView(claudeKey, top);
-        Runnable showBrain = () -> {
-            ownBox.setVisibility(own[0] ? View.VISIBLE : View.GONE);
-            claudeKey.setVisibility(own[0] ? View.GONE : View.VISIBLE);
+        Runnable showBrain = () -> {                       // both stay on show: the other one is the backup (11-13)
+            ownLabel.setText(own[0] ? "Your own server" : "Your own server, as a backup (optional)");
+            boolean noKey = prefs().key().isEmpty();
+            claudeKey.setText(own[0] ? (noKey ? "Add a Claude key, as a backup (optional)" : "Claude key (backup)")
+                    : (noKey ? "Add Claude key" : "Claude key"));
             claude.setBackground(round(own[0] ? MINE : TEXT, 18));
             claude.setTextColor(own[0] ? TEXT : 0xFF111111);
             mine.setBackground(round(own[0] ? TEXT : MINE, 18));
@@ -1924,13 +1933,15 @@ public class MainActivity extends Activity {
         worker.execute(() -> {
             String error = null;
             Claude.Reply r = null;
+            JSONObject[] req = {null};                  // kept for the backup brain, if this one fails
+            Claude.Listener[] listener = {null};
             try {
                 TimeZone tz = TimeZone.getDefault();
                 String now = new SimpleDateFormat("EEEE, MMMM d, yyyy, h:mm a", Locale.US).format(new Date())
                         + " (" + tz.getID() + ")";
-                JSONObject req = Claude.request(persona, page, notes, now, Place.where(app), history, think);
-                if (setupHelp) req.remove("tools");   // a question about setup is answered, never acted on (Codex 042 #3)
-                r = Claude.send(k, req, new Claude.Listener() {
+                req[0] = Claude.request(persona, page, notes, now, Place.where(app), history, think);
+                if (setupHelp) req[0].remove("tools");   // a question about setup is answered, never acted on (Codex 042 #3)
+                listener[0] = new Claude.Listener() {
                     public void text(String soFar) {
                         reply.text = soFar;
                         onScreen(x -> x.showPending());
@@ -1941,9 +1952,14 @@ public class MainActivity extends Activity {
                         if (st != null) st.sentences.add(s);
                         if (voiceOn()) new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> VoiceOut.get(app).add(s, mood));
                     }
-                }, live, TOOLS);
+                };
+                r = Claude.send(k, req[0], listener[0], live, TOOLS);
             } catch (Exception e) {
-                error = stopped ? null : (Net.offline(e) ? "no internet: Sprocket's brain lives in the cloud" : e.getMessage());
+                Claude.Reply backup = null;
+                try { backup = stopped ? null : askBackup(k, e, req[0], listener[0]); }
+                catch (Exception e2) { e = e2; }
+                if (backup != null) r = backup;
+                else error = stopped ? null : (Net.offline(e) ? (k.own ? "your server didn't answer: check it's running and the phone can reach it" : "no internet: Sprocket's brain lives in the cloud") : e.getMessage());
             }
             Claude.Reply done = r;
             String err = error;
@@ -1952,10 +1968,30 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** The history with a saved way that might fit added to his latest message, for this request only (not the chat). */
+    /**
+     * The backup brain (the owner 2026-11-13: "ask first each time"): when the brain that took the question failed before
+     * saying or doing anything, and the other one is set up, a card asks whether the other one may answer it. Returns
+     * its reply, or null (not offered, or he said no: the first error stands). Worker thread.
+     */
+    private static Claude.Reply askBackup(Claude.Brain failed, Exception e, JSONObject req, Claude.Listener l) throws Exception {
+        if (req == null || !Claude.backupOk(e) || standIn()) return null;
+        SharedPreferencesLike p = new SharedPreferencesLike(app);
+        String otherKey = failed.own ? p.key() : p.ownKey();
+        if (failed.own ? otherKey.isEmpty() : Config.ownBase.trim().isEmpty()) return null;   // no other brain set up
+        android.util.Log.i("Sprocket", "brain down (" + (failed.own ? "own server" : "Claude") + "): asking about the backup");
+        Boolean yes = Hands.confirm(Claude.backupCard(failed.own), failed.own ? "Ask Claude" : "Ask " + Claude.ownName());
+        if (yes != Boolean.TRUE || stopped) return null;
+        Claude.Brain other = failed.own ? new Claude.Brain(Claude.ANTHROPIC, otherKey, false, Config.model())
+                : new Claude.Brain(Config.ownBase.trim().replaceAll("/+$", ""), otherKey, true, Config.model());
+        return Claude.send(other, req, l, live, TOOLS);
+    }
+
+    /** The history with what fits his question added to his latest message, for this request only (not the chat): a
+     * saved way in an app that might fit, and his notes that fit (the bigger memory, 11-13). */
     private static List<Chat.Turn> withHint(List<Chat.Turn> history, String said) {
         String hint = "";
         if (appNotes != null) synchronized (appNotes) { hint = appNotes.hint(said); }
+        if (memory != null && Config.on("memory")) synchronized (memory) { hint = memory.forQuestion(said) + hint; }
         int last = history.size() - 1;
         while (last >= 0 && !history.get(last).role.equals("user")) last--;
         if (hint.isEmpty() || last < 0) return history;
@@ -1987,7 +2023,7 @@ public class MainActivity extends Activity {
             reply.cost = r.cost();
         } else {
             if (!stopped) reply.text = "";           // a stop keeps what had arrived; a failure keeps nothing
-            if (error != null) chat.add("error", "Couldn't reach him: " + error + ".", System.currentTimeMillis());
+            if (error != null) chat.add("error", "Couldn't get an answer: " + error + ".", System.currentTimeMillis());
         }
         if (app.getPackageName().endsWith(".test"))   // Sprocket Test only: the stage 5 runner reads replies here, not off the
             android.util.Log.i("PA-REPLY", error != null ? "ERROR " + error   // screen (a screen dump suspends the hands)
@@ -2000,7 +2036,7 @@ public class MainActivity extends Activity {
         usedHands = false;
         if (st != null) st.write(app, r, error);
         Watch w = watch;
-        if (w != null) w.done(reply.text, error == null ? null : "Couldn't reach him: " + error + ".");
+        if (w != null) w.done(reply.text, error == null ? null : "Couldn't get an answer: " + error + ".");
         if (r != null && voiceOn()) {
             boolean followUp = spokenTurn;
             VoiceOut.get(app).end(() -> {
@@ -2501,7 +2537,7 @@ public class MainActivity extends Activity {
         }
         java.util.Map<String, List<Lists.Item>> all;
         synchronized (lists) { all = new java.util.LinkedHashMap<>(lists.lists); }
-        if (all.isEmpty()) c.addView(text("None yet. Tell him \u201cadd milk to the grocery list\u201d, or make one below.", 14, MUTED));
+        if (all.isEmpty()) c.addView(text("None yet. Tell them \u201cadd milk to the grocery list\u201d, or make one below.", 14, MUTED));
         for (java.util.Map.Entry<String, List<Lists.Item>> e : all.entrySet()) {
             String name = e.getKey();
             TextView title = text(Character.toUpperCase(name.charAt(0)) + name.substring(1), 16, TEXT);
@@ -2662,31 +2698,38 @@ public class MainActivity extends Activity {
         TextView h = text("What Sprocket remembers", 17, TEXT);
         h.setTypeface(Typeface.DEFAULT_BOLD);
         c.addView(h);
-        List<Memory.Note> notes;
-        synchronized (memory) { notes = new ArrayList<>(memory.notes); }
-        if (notes.isEmpty())
-            c.addView(text("Nothing yet. Tell him \u201cremember\u2026\u201d, or just mention something worth keeping.", 14, MUTED));
-        else c.addView(text("These go to Claude with each message so he can use them. Delete any.", 14, MUTED));
-        for (Memory.Note n : notes) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(10), 0, 0);
-            row.addView(text(n.text, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-            Button del = chip("Delete");
-            del.setBackground(round(MINE, 18));
-            del.setTextColor(TEXT);
-            del.setOnClickListener(v -> {
-                synchronized (memory) { memory.delete(n.id); saveMemory(); }
-                memoryCard();
+        int count, pinned = 0;
+        synchronized (memory) { count = memory.notes.size(); for (Memory.Note n : memory.notes) if (n.always) pinned++; }
+        if (count == 0)
+            c.addView(text("Nothing yet. Tell them \u201cremember\u2026\u201d, or just mention something worth keeping.", 14, MUTED));
+        else c.addView(text(count + (count == 1 ? " note" : " notes") + ", " + pinned + " always on. Always-on notes go with every "
+                + "message; the rest go along when they fit what you ask. Tap Always to change that, or Delete.", 14, MUTED));
+        LinearLayout rows = new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        if (count > 0) {
+            EditText find = new EditText(this);
+            find.setHint("Search notes");
+            find.setText(memorySearch);
+            find.setTextColor(TEXT);
+            find.setHintTextColor(FAINT);
+            find.setSingleLine(true);
+            find.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence x, int a, int b, int d) { }
+                public void onTextChanged(CharSequence x, int a, int b, int d) { }
+                public void afterTextChanged(android.text.Editable e) { memorySearch = e.toString(); noteRows(rows); }
             });
-            LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
-            delp.setMargins(dp(10), 0, 0, 0);
-            row.addView(del, delp);
-            c.addView(row);
+            c.addView(find);
         }
+        c.addView(rows);
+        noteRows(rows);
         List<AppNotes.App> apps = new ArrayList<>();       // app memory for screen control: each fact, with Delete
         if (appNotes != null) synchronized (appNotes) {
-            for (AppNotes.App a : appNotes.apps) { AppNotes.App copy = new AppNotes.App(a.pkg, a.name); copy.facts.addAll(a.facts); apps.add(copy); }
+            for (AppNotes.App a : appNotes.apps) {
+                AppNotes.App copy = new AppNotes.App(a.pkg, a.name);
+                copy.facts.addAll(a.facts);
+                copy.routes.addAll(a.routes);
+                apps.add(copy);
+            }
         }
         TextView ah = text("What Sprocket learned about apps", 17, TEXT);
         ah.setTypeface(Typeface.DEFAULT_BOLD);
@@ -2695,17 +2738,22 @@ public class MainActivity extends Activity {
         c.addView(text(apps.isEmpty() ? "Nothing yet. When Sprocket finds something in an app for you, it notes where it was, "
                 + "so next time it can go straight there." : "Where things are in your apps, read before Sprocket taps through "
                 + "them. Delete any that are wrong.", 14, MUTED));
-        for (AppNotes.App a : apps)
-            for (AppNotes.Fact f : a.facts) {
+        for (AppNotes.App a : apps) {
+            List<long[]> ids = new ArrayList<>();          // facts and saved ways (routes, 11-13: they weren't listed)
+            List<String> said = new ArrayList<>();
+            for (AppNotes.Fact f : a.facts) { ids.add(new long[]{f.id}); said.add(f.text); }
+            for (AppNotes.Route r : a.routes) { ids.add(new long[]{r.id}); said.add(r.text()); }
+            for (int i = 0; i < ids.size(); i++) {
+                long id = ids.get(i)[0];
                 LinearLayout row = new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(0, dp(10), 0, 0);
-                row.addView(text(a.name + ": " + f.text, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
+                row.addView(text(a.name + ": " + said.get(i), 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
                 Button del = chip("Delete");
                 del.setBackground(round(MINE, 18));
                 del.setTextColor(TEXT);
                 del.setOnClickListener(v -> {
-                    synchronized (appNotes) { appNotes.delete(a.pkg, f.id); saveAppNotes(); }
+                    synchronized (appNotes) { appNotes.delete(a.pkg, id); saveAppNotes(); }
                     memoryCard();
                 });
                 LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
@@ -2713,6 +2761,7 @@ public class MainActivity extends Activity {
                 row.addView(del, delp);
                 c.addView(row);
             }
+        }
         Button done = chip("Done");
         done.setBackground(round(TEXT, 18));
         done.setTextColor(0xFF111111);
@@ -2721,6 +2770,47 @@ public class MainActivity extends Activity {
         bp.setMargins(0, dp(16), 0, 0);
         c.addView(done, bp);
         list.addView(c);
+    }
+
+    private static String memorySearch = "";
+    private static final int NOTES_SHOWN = 60;   // thousands of notes: the newest 60, or the search's first 60
+
+    /** The Memory screen's notes, newest first, filtered by his search: each with Always (pin) and Delete. */
+    private void noteRows(LinearLayout rows) {
+        rows.removeAllViews();
+        List<Memory.Note> found;
+        synchronized (memory) { found = memory.search(memorySearch); }
+        for (int i = 0; i < Math.min(NOTES_SHOWN, found.size()); i++) {
+            Memory.Note n = found.get(i);
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(10), 0, 0);
+            row.addView(text(n.text, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
+            Button pin = chip("Always");
+            pin.setBackground(round(n.always ? AMBER : MINE, 18));
+            pin.setTextColor(n.always ? 0xFF111111 : TEXT);
+            pin.setOnClickListener(v -> {
+                synchronized (memory) { memory.setAlways(n.id, !n.always); saveMemory(); }
+                memoryCard();
+            });
+            LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-2, dp(36));
+            pp.setMargins(dp(10), 0, 0, 0);
+            row.addView(pin, pp);
+            Button del = chip("Delete");
+            del.setBackground(round(MINE, 18));
+            del.setTextColor(TEXT);
+            del.setOnClickListener(v -> {
+                synchronized (memory) { memory.delete(n.id); saveMemory(); }
+                memoryCard();
+            });
+            LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
+            delp.setMargins(dp(8), 0, 0, 0);
+            row.addView(del, delp);
+            rows.addView(row);
+        }
+        if (found.size() > NOTES_SHOWN)
+            rows.addView(text((found.size() - NOTES_SHOWN) + " more: search to find them.", 13, FAINT));
+        else if (found.isEmpty() && !memorySearch.trim().isEmpty()) rows.addView(text("No note has those words.", 13, FAINT));
     }
 
     /** His About-you page: read (drawn like a brief) with Edit, or a text box with Save and Cancel. */
@@ -2847,13 +2937,13 @@ public class MainActivity extends Activity {
                 String kind = input.optString("kind"), what = input.optString("prompt"), photo = null;
                 if (input.optBoolean("use_photo") && kind.equals("video")) {
                     String p = lastPhoto();
-                    if (p == null) return "Nothing was made: there's no photo from him in the last half hour to start the video from.";
+                    if (p == null) return "Nothing was made: there's no photo from them in the last half hour to start the video from.";
                     photo = Photo.base64(app, p);
                 }
                 JSONObject job = Studio.http("/jobs", Studio.body(kind, what, input.optString("quality"), input.optString("shape"),
                         photo, input.optString("lyrics"), input.optString("title")), 60_000);
                 StudioService.watch(app, job);
-                Hands.record("Studio: making a " + kind + (photo != null ? " from his photo" : "") + " (" + Studio.brief(what) + ")");
+                Hands.record("Studio: making a " + kind + (photo != null ? " from their photo" : "") + " (" + Studio.brief(what) + ")");
                 return Studio.queued(job);
             }
             if (name.equals("github_threads")) return GitHub.checkThreads(app);
@@ -2877,16 +2967,16 @@ public class MainActivity extends Activity {
                 if ((Photo.screenAt == 0 || ago > 10 * 60_000L) && ScreenHands.on())   // no side-button picture: a fresh one
                     return ScreenHands.run(new JSONObject().put("action", "look"));
                 if (Photo.screenAt == 0 || ago > 10 * 60_000L)
-                    return "No picture of his screen: Sprocket gets one only when he holds the side button over another app, "
-                            + "with \"Use screenshot\" switched on in his digital assistant settings.";
-                return Claude.PICTURE + Photo.SCREEN + "]]His screen when he held the side button, " + Math.max(1, ago / 1000) + " s ago.";
+                    return "No picture of their screen: Sprocket gets one only when they hold the side button over another app, "
+                            + "with \"Use screenshot\" switched on in their digital assistant settings.";
+                return Claude.PICTURE + Photo.SCREEN + "]]Their screen when they held the side button, " + Math.max(1, ago / 1000) + " s ago.";
             }
             if (name.equals("research")) {
                 String q = input.optString("question").trim(), u = input.optString("url").trim();
                 if (q.isEmpty()) throw new Exception("there is nothing to research");
                 ResearchService.start(app, q, u, q);
                 Hands.record("Research started: " + q);
-                return "Started. The brief will be in the chat in a minute or two, and he'll get a notification.";
+                return "Started. The brief will be in the chat in a minute or two, and they'll get a notification.";
             }
             if (!name.equals("weather")) return Phone.run(app, name, input);   // phase 3: the phone tools
             String asked = input.optString("place");
@@ -2992,7 +3082,7 @@ public class MainActivity extends Activity {
                     boolean added = goals.add(g, now);
                     saveGoals();
                     if (added) Hands.record("New goal: " + g);
-                    return added ? "Added to his goals." : "He already has that goal (or the list is full).";
+                    return added ? "Added to their goals." : "They already have that goal (or the list is full).";
                 }
                 case "goal_done": {
                     boolean done = !in.has("done") || in.optBoolean("done");
@@ -3060,9 +3150,9 @@ public class MainActivity extends Activity {
         if (name.equals("remember")) {
             String note = input.optString("note").trim();
             if (note.isEmpty()) throw new Exception("there was nothing to remember");
-            boolean added;
-            synchronized (memory) { added = memory.add(note, System.currentTimeMillis()); saveMemory(); }
-            if (added) Hands.record("Remembered: " + note);
+            boolean added, always = input.optBoolean("always");
+            synchronized (memory) { added = memory.add(note, System.currentTimeMillis(), always); saveMemory(); }
+            if (added) Hands.record((always ? "Always remembering: " : "Remembered: ") + note);
             return added ? "Saved." : "Already saved.";
         }
         List<String> gone;
@@ -3078,8 +3168,8 @@ public class MainActivity extends Activity {
     private static String texts(String name, JSONObject input) {
         if (!MessageListener.on(app)) {
             MessageListener.openSwitch(app);
-            return "Sprocket can't see his texts yet: he needs to switch on Sprocket's notification access (that switch is "
-                    + "open on his screen now). Only texts that arrive after that can be read.";
+            return "Sprocket can't see their texts yet: they need to switch on Sprocket's notification access (that switch is "
+                    + "open on their screen now). Only texts that arrive after that can be read.";
         }
         Messages m = MessageListener.texts(app);
         String out;
@@ -3096,8 +3186,8 @@ public class MainActivity extends Activity {
     private static String notices(String which) {
         if (!MessageListener.on(app)) {
             MessageListener.openSwitch(app);
-            return "Sprocket can't see his notifications yet: he needs to switch on Sprocket's notification access (that "
-                    + "switch is open on his screen now).";
+            return "Sprocket can't see their notifications yet: they need to switch on Sprocket's notification access (that "
+                    + "switch is open on their screen now).";
         }
         List<Notices.Notice> showing = MessageListener.showing(app);
         if (showing == null) return "The notification reader is still starting; ask again in a few seconds.";

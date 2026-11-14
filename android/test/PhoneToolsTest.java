@@ -67,7 +67,7 @@ public class PhoneToolsTest {
         eq("several spellings start the same: the exact one", pick(PhoneTools.resolve("mike", java.util.Arrays.asList("Mike's work", "Mike"), book)), "Mike");
         eq("several, none exact: ask", pick(PhoneTools.resolve("Jo", java.util.Arrays.asList("Jon Miller", "John Smith"), book)), "ask [Jon Miller, John Smith]");
         eq("nobody", pick(PhoneTools.resolve("the plumber", java.util.Collections.emptyList(), book)), "none");
-        eq("the tools ask for the name as he wrote it", defs.toString().contains("exactly as he wrote or said it"), true);
+        eq("the tools ask for the name as he wrote it", defs.toString().contains("exactly as they wrote or said it"), true);
 
         eq("Calendar.SUNDAY is 1", Calendar.SUNDAY, 1);
         // the rest of the commands (the owner 2026-10-17: "start the rest of the commands"): the plain decisions behind them

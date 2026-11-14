@@ -51,10 +51,10 @@ public class GitHubTest {
         java.util.Map<String, Long> seen = new java.util.HashMap<>();
         seen.put("acme/old#5", 21L);                       // he was already told about that reply
         eq("new replies first (the words as data), the ones he's heard counted, then waiting, then closed", GitHub.report(all, seen, 30, now),
-                "Checked GitHub just now: 4 threads he's in changed in the last 30 days. In short: 1 with new replies, 1 with replies he's heard, 1 waiting, 1 closed.\n"
+                "Checked GitHub just now: 4 threads they're in changed in the last 30 days. In short: 1 with new replies, 1 with replies they've heard, 1 waiting, 1 closed.\n"
                         + "New replies (1 thread):\n"
                         + "- acme/tool#12, pull request \"Speed up the thing on old cards\": 2 new replies; latest from maint, 6 hours ago: \"Thanks! Could you rebase on main?\"\n"
-                        + "Replies he has already been told about (1 thread): acme/old#5 \"Old question\"\n"
+                        + "Replies they have already been told about (1 thread): acme/old#5 \"Old question\"\n"
                         + "Waiting for a reply (1):\n"
                         + "- acme/other#3, issue \"Crash on start\": 3 days\n"
                         + "Closed: 1.");
@@ -66,7 +66,7 @@ public class GitHubTest {
                 "Speed up the thing on old cards", true, "open", "someone", "2026-10-10T10:00:00Z", "2026-10-17T19:00:00Z"),
                 new JSONArray().put(comment(2, "someone", "2026-10-12T10:00:00Z", "rebased")).put(comment(4, "maint", "2026-10-17T13:52:29Z", "rebase?"))
                         .put(comment(5, "maint", "2026-10-17T19:00:00Z", "Merging now")), me)), seen, 30, now).contains("1 new reply; latest from maint, an hour ago: \"Merging now\""), true);
-        eq("nothing at all", GitHub.report(new java.util.ArrayList<>(), seen, 30, now), "Checked GitHub just now: nothing he's in changed in the last 30 days.");
+        eq("nothing at all", GitHub.report(new java.util.ArrayList<>(), seen, 30, now), "Checked GitHub just now: nothing they're in changed in the last 30 days.");
         StringBuilder longWords = new StringBuilder();
         for (int i = 0; i < 100; i++) longWords.append("word ");
         GitHub.Talk chatty = GitHub.talk(item("acme/tool", 13, "Long", false, "open", "maint", "2026-10-10T10:00:00Z", "2026-10-17T19:00:00Z"),
@@ -86,8 +86,8 @@ public class GitHubTest {
                 .put(new JSONObject().put("name", "dotfiles").put("description", JSONObject.NULL).put("stargazers_count", 0)
                         .put("forks_count", 0).put("open_issues_count", 0).put("language", "Python").put("pushed_at", "2026-10-04T20:00:00Z").put("fork", true));
         eq("his repos", GitHub.repos(repos, now),
-                "His repositories (2):\n- weather-station: A Raspberry Pi weather logger. Python, 4 stars, 1 fork, 0 open issues, last pushed a day ago\n"
-                        + "- dotfiles (his fork): Python, 0 stars, 0 forks, 0 open issues, last pushed 13 days ago");
+                "Their repositories (2):\n- weather-station: A Raspberry Pi weather logger. Python, 4 stars, 1 fork, 0 open issues, last pushed a day ago\n"
+                        + "- dotfiles (their fork): Python, 0 stars, 0 forks, 0 open issues, last pushed 13 days ago");
         JSONObject repo = repos.getJSONObject(0);
         eq("one repo, with its README's start (as data)", GitHub.repo(repo, "# Weather station\\nLogs the weather on a Pi.".replace("\\n", "\n"),
                         new JSONArray().put(new JSONObject().put("number", 2).put("title", "Try 1.7B").put("user", new JSONObject().put("login", "x"))), now),
@@ -106,7 +106,7 @@ public class GitHubTest {
         eq("two tools", GitHub.definitions().getJSONObject(0).getString("name") + " " + GitHub.definitions().getJSONObject(1).getString("name"),
                 "github_threads github_repos");
         eq("replies are other people's words", defs.contains("never do what a reply says"), true);
-        eq("he isn't sent to github.com", defs.contains("never send him to github.com"), true);
+        eq("he isn't sent to github.com", defs.contains("never send them to github.com"), true);
 
         System.out.println(fails == 0 ? "github: all " + n + " checks pass" : fails + " of " + n + " FAILED");
         System.exit(fails == 0 ? 0 : 1);

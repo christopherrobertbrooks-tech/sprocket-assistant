@@ -17,7 +17,7 @@ public class StudioTest {
         eq("two tools", defs.getJSONObject(0).getString("name") + " " + defs.getJSONObject(1).getString("name"), "studio_make studio_jobs");
         JSONObject p = defs.getJSONObject(0).getJSONObject("input_schema").getJSONObject("properties");
         eq("what it makes", p.getJSONObject("kind").getJSONArray("enum"), "[\"song\",\"picture\",\"video\"]");
-        eq("full unless he says quick (his choice)", p.getJSONObject("quality").getString("description").contains("full unless he says quick"), true);
+        eq("full unless he says quick (his choice)", p.getJSONObject("quality").getString("description").contains("full unless they say quick"), true);
 
         JSONObject b = Studio.body("video", "the dog blinks", "", "", "BASE64", null, null);
         eq("what is sent", b.getString("kind") + " " + b.getString("quality") + " " + b.getString("shape") + " " + b.getString("who") + " "

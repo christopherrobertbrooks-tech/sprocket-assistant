@@ -108,13 +108,13 @@ final class Feed {
         return "";
     }
 
-    static final String WRITER = "You write the boss's morning brief for Sprocket, his phone assistant. He reads it when he "
+    static final String WRITER = "You write the boss's morning brief for Sprocket, their phone assistant. They read it when they "
             + "wakes up; its bottom line can be read aloud by Sprocket. Answer with ONLY one JSON object, no other text:\n"
             + "{\"bottom_line\": \"...\", \"sections\": [{\"name\": \"...\", \"items\": [{\"line\": \"...\", \"detail\": \"...\", \"link\": \"https://...\"}]}]}\n"
             + "- bottom_line: one or two short, plain spoken sentences: the one or two things that matter most today.\n"
             + "- sections, in this order, only the ones asked for and only when there is something: \"Today\" (the weather in one "
             + "line; each calendar event; each list item due today or overdue), \"Machines\" (only the problems given), "
-            + "\"AI news\" (up to 3 real stories from the last two days about his topics, found with web search, each with its "
+            + "\"AI news\" (up to 3 real stories from the last two days about their topics, found with web search, each with its "
             + "link; none worth it = no section).\n"
             + "- line: at most 60 characters. detail: one to three plain sentences. link only for AI news.\n"
             + "- Never invent a story, a number or a link: only what the facts say or a search found today. No jokes about "
@@ -136,7 +136,7 @@ final class Feed {
             want.add("Today");
             facts.append("\nToday's weather (live, Open-Meteo): ").append(weather).append("\nHis calendar today: ")
                     .append(calendar == null || calendar.isEmpty() ? "nothing" : calendar).append('\n');
-            if (due != null && !due.isEmpty()) facts.append("From his lists: ").append(due).append('\n');
+            if (due != null && !due.isEmpty()) facts.append("From their lists: ").append(due).append('\n');
         }
         if (f.on.get("machines")) {
             want.add("Machines");
@@ -146,7 +146,7 @@ final class Feed {
             want.add("AI news");
             facts.append("\nAI news to look for (search the web, last two days): ").append(String.join("; ", f.topics)).append('\n');
         }
-        facts.append("\nSections he wants: ").append(want.isEmpty() ? "none (a bottom line only)" : String.join(", ", want)).append('.');
+        facts.append("\nSections they want: ").append(want.isEmpty() ? "none (a bottom line only)" : String.join(", ", want)).append('.');
         JSONObject req = new JSONObject().put("model", Config.own ? Config.model() : Claude.SONNET).put("max_tokens", 2500).put("stream", true)
                 .put("system", WRITER)
                 .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", facts.toString())));
@@ -250,9 +250,9 @@ final class Feed {
 
     static JSONObject watchTool() throws Exception {
         return new JSONObject().put("name", "watch_ai_news")
-                .put("description", "The AI things he wants news of in his morning brief. Add one whenever he talks about an "
-                        + "AI model, tool, project or idea he'd likely want to follow (don't ask first: he sees them on the "
-                        + "Feed screen and can remove them there); remove one when he says he's done with it; show lists them.")
+                .put("description", "The AI things they want news of in their morning brief. Add one whenever they talk about an "
+                        + "AI model, tool, project or idea they'd likely want to follow (don't ask first: they see them on the "
+                        + "Feed screen and can remove them there); remove one when they say they're done with it; show lists them.")
                 .put("input_schema", new JSONObject().put("type", "object").put("properties", new JSONObject()
                         .put("action", new JSONObject().put("type", "string").put("enum", new JSONArray().put("add").put("remove").put("show")))
                         .put("topic", new JSONObject().put("type", "string").put("description", "A short name for it, e.g. a model or tool's name.")))

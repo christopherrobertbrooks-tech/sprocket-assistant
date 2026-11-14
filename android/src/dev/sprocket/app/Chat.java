@@ -46,8 +46,8 @@ final class Chat {
         for (Turn t : turns) {
             if (t.role.equals("action")) { done.add(unnumbered(t.text).replaceAll("[.\\s]+$", "")); continue; }
             if (t.role.equals("user") && !done.isEmpty()) {   // told with his next message, so it isn't done twice
-                Turn told = new Turn("user", "(From the app, not the boss: already done after his last message, so don't do it "
-                        + "again unless he asks: " + String.join("; ", done) + ".)" + (t.text.isEmpty() ? "" : "\n\n" + t.text), t.at);
+                Turn told = new Turn("user", "(From the app, not the boss: already done after their last message, so don't do it "
+                        + "again unless they ask: " + String.join("; ", done) + ".)" + (t.text.isEmpty() ? "" : "\n\n" + t.text), t.at);
                 told.photos.addAll(t.photos);
                 t = told;
             }

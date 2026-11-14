@@ -42,7 +42,10 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
 - **Lists:** groceries sorted by aisle, to-dos with due dates, lists from a photo of a recipe, and (optionally) kept
   in Notion so you can edit them on a computer.
 - **Morning brief** at 6 am: weather, calendar, what's due, and news on topics you pick.
-- **Also:** memory you can see and edit, web search, research write-ups, GitHub threads and repositories (read only).
+- **Memory:** tell it to remember something and it keeps a note on your phone (up to 2,000). Notes go along with
+  your question when its words fit; "always remember" notes go with every message. Search, pin or delete them under
+  ⋯ > Memory.
+- **Also:** web search, research write-ups, GitHub threads and repositories (read only).
 
 Every feature can be switched off in Settings.
 
@@ -55,6 +58,9 @@ Sprocket speaks Anthropic's Messages API.
 - **Your own model:** point Settings at any server that speaks the Messages API. The included
   [go-between](go-between/) (a small Python server) translates for any OpenAI-compatible server (llama.cpp, vLLM,
   Ollama and others) and adds web search through your own Brave Search key. Tested with Qwen.
+- **Both, one as backup:** set up both in Settings. If the one you picked doesn't answer (your server is off, or Claude
+  is overloaded), Sprocket asks on a card whether the other one may answer that question. Nothing switches without
+  your yes, and a question it had already started acting on is never handed over.
 
 ## Voices (optional)
 - **Speaking:** the phone's own voice by default. Or run a voice server that takes `POST /speak {"text", "mood"}` and

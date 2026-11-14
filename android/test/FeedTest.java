@@ -55,8 +55,8 @@ public class FeedTest {
         String body = req.toString();
         eq("the brief's model and search", req.getString("model") + " " + req.getJSONArray("tools").getJSONObject(0).getString("type"),
                 Claude.SONNET + " web_search_20250305");
-        eq("list items due go into Today", Feed.request(g, "now", "", "", "", "", "due today: renew tags (to-do).").toString().contains("From his lists: due today: renew tags"), true);
-        eq("nothing due, nothing said", body.contains("From his lists"), false);
+        eq("list items due go into Today", Feed.request(g, "now", "", "", "", "", "due today: renew tags (to-do).").toString().contains("From their lists: due today: renew tags"), true);
+        eq("nothing due, nothing said", body.contains("From their lists"), false);
         Config.own = true;
         Config.ownModel = "qwen";
         eq("with his own server as the brain, it writes it", Feed.request(g, "now", "", "", "", "").getString("model"), "qwen");

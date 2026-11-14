@@ -39,10 +39,12 @@ final class Claude {
 
     /** Which brain is answering, said in each message's note (the owner 2026-11-11: "sprocket thinks it's running from claude
      * still"; Qwen guessed from the older Claude replies in the chat). */
-    static String brainNow(boolean harder) {
-        return Config.own ? "Your brain right now is " + ownName() + " (" + Config.model() + "), on the boss's own server, not Claude; "
+    static String brainNow(boolean harder) { return brainNow(Config.own, harder); }
+
+    static String brainNow(boolean onOwn, boolean harder) {
+        return onOwn ? "Your brain right now is " + ownName() + " (" + Config.model() + "), on the boss's own server, not Claude; "
                 + "older replies in this chat may have come from another brain."
-                : "Your brain right now is Claude " + (harder ? "Opus" : "Sonnet") + " (Anthropic's API, from his credits).";
+                : "Your brain right now is Claude " + (harder ? "Opus" : "Sonnet") + " (Anthropic's API, from their credits).";
     }
 
     /** The own brain's name as the owner gave it ("Qwen"), or a plain one. */
@@ -232,8 +234,8 @@ final class Claude {
         for (int i = 0; i < texts.length(); i++) all.put(texts.getJSONObject(i));
         all.put(Notices.definition());
         all.put(new JSONObject().put("name", "look_at_screen")
-                .put("description", "A picture of what was on his screen when he held the side button: the app or page he "
-                        + "was looking at. Use it when he asks about what's on his screen (\"what's this?\", \"summarise this "
+                .put("description", "A picture of what was on their screen when they held the side button: the app or page they "
+                        + "was looking at. Use it when they ask about what's on their screen (\"what's this?\", \"summarise this "
                         + "page\", \"what does this say?\").")
                 .put("input_schema", new JSONObject().put("type", "object").put("properties", new JSONObject())));
         JSONArray machines = Machines.definitions();
@@ -255,12 +257,12 @@ final class Claude {
     static JSONObject weatherTool() throws Exception {
         return new JSONObject().put("name", "weather")
                 .put("description", "Live weather now, the next hours and the next three days (Open-Meteo), for where the boss "
-                        + "is (his phone's rough location) or for a town he names. Use it for every weather question "
+                        + "is (their phone's rough location) or for a town they name. Use it for every weather question "
                         + "instead of web search.")
                 .put("input_schema", new JSONObject().put("type", "object").put("properties", new JSONObject()
                         .put("place", new JSONObject().put("type", "string").put("description",
-                                "A town, with its state or country if needed (\"Paris, Texas\"), only when he asks about "
-                                        + "somewhere else. Leave it out for where he is."))));
+                                "A town, with its state or country if needed (\"Paris, Texas\"), only when they ask about "
+                                        + "somewhere else. Leave it out for where they are."))));
     }
 
     /**
@@ -537,6 +539,12 @@ final class Claude {
         return (own ? "Couldn't reach your server: " : "Couldn't reach Anthropic: ") + e.getMessage();
     }
 
+    /** His own server's error, said as his server's, not Claude's (11-13: a stopped go-between read "Claude answered 502"). */
+    static String serverDown(int code) {
+        return code == 502 || code == 503 || code == 504 ? "your server didn't answer (" + code + "): it may be off or restarting"
+                : "your server had a problem (" + code + ")";
+    }
+
     /** At most this many requests for one question (tool answers and paused turns continue it). */
     static final int MAX_ROUNDS = 6;
     // The hands (stage 1) take a step per tap or scroll, so a question that uses the screen gets more rounds: plenty on
@@ -562,6 +570,40 @@ final class Claude {
         final boolean said;
 
         Busy(String message, String retryAfter, boolean said) { super(message); this.retryAfter = retryAfter; this.said = said; }
+    }
+
+    /** The brain couldn't be reached or broke before saying anything (no connection, a server error): the backup brain
+     * may take the question (the owner 2026-11-13). Not a wrong key or a bad request: those are settings to fix. */
+    static final class Down extends Exception {
+        Down(String message) { super(message); }
+        Down(String message, Throwable cause) { super(message, cause); }   // the cause: Net.offline still sees it
+    }
+
+    /** True for an answer code that means the server itself is down (not busy: 529 is Busy, retried first). */
+    static boolean downCode(int code) { return code >= 500 && code != 529; }
+
+    /** True when the other brain may be offered this question: this one never said a word or did a thing. */
+    static boolean backupOk(Exception e) {
+        return e instanceof Down || (e instanceof Busy && !((Busy) e).said);
+    }
+
+    /** The card that asks first (the owner 2026-11-13: "ask first each time"); fromOwn: their own server failed. */
+    static String backupCard(boolean fromOwn) {
+        return fromOwn ? "Your server didn't answer. Ask Claude this one instead? It uses your Claude credit."
+                : "Claude isn't answering. Ask " + ownName() + " this one instead?";
+    }
+
+    /** The app's note in his newest message says which brain answers: put right when the backup takes it. */
+    private static void retarget(JSONObject req, boolean onOwn) throws Exception {
+        JSONArray m = req.optJSONArray("messages");
+        if (m == null || m.length() == 0) return;
+        JSONArray content = m.getJSONObject(m.length() - 1).optJSONArray("content");
+        for (int i = 0; content != null && i < content.length(); i++) {
+            JSONObject blk = content.getJSONObject(i);
+            String t = blk.optString("text");
+            for (boolean h : new boolean[]{false, true}) t = t.replace(brainNow(!onOwn, h), brainNow(onOwn, false));
+            if (blk.has("text")) blk.put("text", t);
+        }
     }
 
     static final int TRIES = 3;   // the first try and two more (Magpie's pick 1, 2026-11-12: one busy moment ended the answer)
@@ -606,12 +648,17 @@ final class Claude {
 
     static Reply send(Brain b, JSONObject req, Listener l, HttpURLConnection[] cancel, Tools tools) throws Exception {
         String model = req.optString("model");   // the model goes with the brain the question started on
-        if (b.own && !b.model.equals(model)) req.put("model", b.model);
-        else if (!b.own && !model.startsWith("claude")) req.put("model", SONNET);
+        if (b.own && !b.model.equals(model)) { req.put("model", b.model); retarget(req, true); }
+        else if (!b.own && !model.startsWith("claude")) { req.put("model", SONNET); retarget(req, false); }
         Reply total = null;
         boolean acted = false, usedScreen = false;
         for (int round = 1; ; round++) {
-            Reply rep = onceRetrying(b, req, l, cancel, tools);
+            Reply rep;
+            try { rep = onceRetrying(b, req, l, cancel, tools); }
+            catch (Down | Busy e) {   // after a round that acted, the backup must never redo it: a plain error
+                if (round > 1) throw new Exception(e.getMessage());
+                throw e;
+            }
             if (total != null) {
                 rep.add(total);
                 if (rep.text.isEmpty()) rep.text = total.text;   // said it before acting, nothing after: that's the reply
@@ -663,12 +710,18 @@ final class Claude {
         h.setRequestProperty("x-api-key", b.key);
         h.setRequestProperty("anthropic-version", "2023-06-01");
         h.setRequestProperty("content-type", "application/json");
-        try (OutputStream o = h.getOutputStream()) { o.write(req.toString().getBytes(StandardCharsets.UTF_8)); }
-        int code = h.getResponseCode();
+        int code;
+        try {
+            try (OutputStream o = h.getOutputStream()) { o.write(req.toString().getBytes(StandardCharsets.UTF_8)); }
+            code = h.getResponseCode();
+        } catch (java.io.IOException e) {         // never reached it, or it hung up before answering
+            throw new Down(b.own ? "your server didn't answer (" + e.getMessage() + ")" : "Claude couldn't be reached (" + e.getMessage() + ")", e);
+        }
         if (code != 200) {
             InputStream in = h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
             if (code == 429 || code == 529) throw new Busy(why(code, body), h.getHeaderField("retry-after"), false);
+            if (downCode(code)) throw new Down(b.own ? serverDown(code) : why(code, body));
             throw new Exception(why(code, body));
         }
         Stream st = new Stream(req.optString("model"), l);

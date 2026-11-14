@@ -423,6 +423,7 @@ public class ClaudeTest {
             eq("overloaded, plainly", e.getMessage(), "Claude is busy right now");
         }
         eq("401", Claude.why(401, ""), "the Claude key isn't valid");
+        eq("his server down, said as his server", Claude.serverDown(502), "your server didn't answer (502): it may be off or restarting");
         eq("credits", Claude.why(400, "{\"error\":{\"message\":\"Your credit balance is too low\"}}"), "the Claude credits have run out for this month");
         eq("other: Claude's own words", Claude.why(400, "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"messages: roles must alternate\"}}"),
                 "Claude answered 400: messages: roles must alternate");
@@ -452,7 +453,7 @@ public class ClaudeTest {
         eq("no name given: a plain one", Claude.brainNow(false).startsWith("Your brain right now is your own model"), true);
         Config.own = false;
         eq("on Claude it's told it's Claude", Claude.brainNow(false) + " | " + Claude.brainNow(true).contains("Opus"),
-                "Your brain right now is Claude Sonnet (Anthropic's API, from his credits). | true");
+                "Your brain right now is Claude Sonnet (Anthropic's API, from their credits). | true");
         // a tool that wasn't offered never runs, whatever the model asks for (Codex 042 #2)
         Config.reset();
         Config.off.add("screen");
@@ -497,6 +498,49 @@ public class ClaudeTest {
         setupTurn.remove("tools");
         eq("a turn with no tools runs none", Claude.offered(setupTurn).isEmpty(), true);
         Config.reset();
+        // the backup brain (the owner 2026-11-13: "ask first each time"): only a brain that never answered can be swapped
+        Claude.Transport keepB = Claude.transport;
+        eq("no connection: a backup may take it", Claude.backupOk(new Claude.Down("no connection")), true);
+        eq("busy after the retries, nothing said: yes", Claude.backupOk(new Claude.Busy("busy", null, false)), true);
+        eq("busy after words were said: no", Claude.backupOk(new Claude.Busy("busy", null, true)), false);
+        eq("a wrong key isn't a down server", Claude.backupOk(new Exception("Anthropic says that key isn't valid")), false);
+        eq("server errors are down", Claude.downCode(500) + " " + Claude.downCode(502) + " " + Claude.downCode(503) + " "
+                + Claude.downCode(401) + " " + Claude.downCode(400) + " " + Claude.downCode(529), "true true true false false false");
+        int[] rounds = {0};
+        Claude.transport = (brain, body, l2, cancel) -> {
+            if (++rounds[0] == 1) {
+                Claude.Reply x = new Claude.Reply();
+                x.stop = "tool_use";
+                JSONObject call = new JSONObject().put("type", "tool_use").put("id", "toolu_f").put("name", "flashlight").put("input", new JSONObject());
+                x.content.put(call);
+                x.calls.add(call);
+                return x;
+            }
+            throw new Claude.Down("no connection");
+        };
+        Exception after = null;
+        try { Claude.send(new Claude.Brain("https://my-server:8448", "k", true, "qwen"), r2, null, null, (name, in) -> "On."); } catch (Exception e) { after = e; }
+        eq("down after it already acted: never swapped (nothing done twice)", after != null && !Claude.backupOk(after), true);
+        eq("the card from their own server", Claude.backupCard(true), "Your server didn't answer. Ask Claude this one instead? It uses your Claude credit.");
+        Config.ownName = "Qwen";
+        eq("the card from Claude names their own brain", Claude.backupCard(false), "Claude isn't answering. Ask Qwen this one instead?");
+        List<String> toBackup = new ArrayList<>();
+        Claude.transport = (brain, body, l2, cancel) -> {
+            toBackup.add(body.getString("model") + " | " + body.toString().contains(Claude.brainNow(false, false)));
+            Claude.Reply x = new Claude.Reply();
+            x.stop = "end_turn";
+            x.text = "Sunny.";
+            return x;
+        };
+        Config.ownBase = "https://my-server:8448";
+        Claude.useBrain(true);
+        JSONObject onQwen = Claude.request("PERSONA", null, null, "Friday, November 13, 2026, 7:30 PM", HERE, c.window(24), false);
+        Claude.useBrain(false);
+        try { Claude.send(new Claude.Brain(Claude.ANTHROPIC, "k", false, "qwen"), onQwen, null, null, null); } catch (Exception e) { toBackup.add("ERROR " + e); }
+        Config.reset();
+        eq("their own server's question sent to Claude says Claude is answering", toBackup, "[" + Claude.SONNET + " | true]");
+        Claude.transport = keepB;
+
         System.out.println(fails == 0 ? "claude: all " + n + " checks pass" : fails + " of " + n + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }

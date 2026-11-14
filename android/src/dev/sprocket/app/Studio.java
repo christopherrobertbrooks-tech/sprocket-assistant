@@ -29,20 +29,20 @@ final class Studio {
     static JSONArray definitions() throws Exception {
         return new JSONArray()
                 .put(new JSONObject().put("name", "studio_make")
-                        .put("description", "Make a song (with lyrics and vocals), a picture, or a short video (5 s) in his studio "
+                        .put("description", "Make a song (with lyrics and vocals), a picture, or a short video (5 s) in their studio "
                                 + "on the gateway; it lands in the chat when done, with a notification. One job at a time: a song "
                                 + "takes minutes, a picture two or three, a full video 20-30 minutes. A video can start from "
-                                + "the photo he sent with this message (use_photo). Write the prompt as a clear description of what "
-                                + "to make, in his words plus the detail a model needs. For a song, write the lyrics and a short "
+                                + "the photo they sent with this message (use_photo). Write the prompt as a clear description of what "
+                                + "to make, in their words plus the detail a model needs. For a song, write the lyrics and a short "
                                 + "title yourself (the studio's own lyric writer repeats lines); the prompt is then the sound: "
                                 + "genre, mood, voice, instruments, tempo.")
                         .put("input_schema", new JSONObject().put("type", "object").put("properties", new JSONObject()
                                         .put("kind", new JSONObject().put("type", "string").put("enum", new JSONArray().put("song").put("picture").put("video")))
                                         .put("prompt", str("What to make: the song's idea, the picture, or what happens in the video."))
                                         .put("quality", new JSONObject().put("type", "string").put("enum", new JSONArray().put("full").put("draft"))
-                                                .put("description", "full unless he says quick or draft (a draft video is 2-3 minutes but drifts from a photo)."))
+                                                .put("description", "full unless they say quick or draft (a draft video is 2-3 minutes but drifts from a photo)."))
                                         .put("shape", new JSONObject().put("type", "string").put("enum", new JSONArray().put("landscape").put("portrait").put("square")))
-                                        .put("use_photo", new JSONObject().put("type", "boolean").put("description", "Start the video from the photo he just sent."))
+                                        .put("use_photo", new JSONObject().put("type", "boolean").put("description", "Start the video from the photo they just sent."))
                                         .put("lyrics", str("A song's lyrics, with [Verse], [Chorus] and [Bridge] lines; about two to three minutes of singing."))
                                         .put("title", str("A song's title.")))
                                 .put("required", new JSONArray().put("kind").put("prompt"))))

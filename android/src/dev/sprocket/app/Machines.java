@@ -155,14 +155,14 @@ final class Machines {
     static JSONArray definitions() throws Exception {
         return new JSONArray()
                 .put(new JSONObject().put("name", "check_machines")
-                        .put("description", "His home machines right now, as his dashboard reports them: his server (\"gateway\") "
-                                + "and his desk computer (\"dev_console\"): CPU, GPU temperatures and memory, disks, what's "
+                        .put("description", "Their home machines right now, as their dashboard reports them: their server (\"gateway\") "
+                                + "and their desk computer (\"dev_console\"): CPU, GPU temperatures and memory, disks, what's "
                                 + "loaded, and the server's Song Maker, model server (say the model name it gives) and your voice. "
-                                + "Tell him what matters, not every number.")
+                                + "Tell them what matters, not every number.")
                         .put("input_schema", new JSONObject().put("type", "object").put("properties", new JSONObject()
                                 .put("machine", new JSONObject().put("type", "string").put("enum", new JSONArray().put("both").put("gateway").put("dev_console"))))))
                 .put(new JSONObject().put("name", "machine_control")
-                        .put("description", "One of the few jobs Sprocket may do on his server, after he says yes on a card: "
+                        .put("description", "One of the few jobs Sprocket may do on their server, after they say yes on a card: "
                                 + "start or stop Song Maker, unload its model (unload_strata), restart your own voice, or "
                                 + "pause it (frees its graphics card; the phone's voice fills in) and resume it. "
                                 + "Nothing else, and nothing on the desk computer (checks only).")

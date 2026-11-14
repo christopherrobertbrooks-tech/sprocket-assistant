@@ -61,8 +61,8 @@ public class ChatTest {
         tx.add("assistant", "On it, boss.", 3);
         tx.add("user", "what's the weather", 4);
         List<Chat.Turn> tw = tx.window(24);
-        eq("done, then his words", roles(tw) + " " + tw.get(2).text, "uau (From the app, not the boss: already done after his "
-                + "last message, so don't do it again unless he asks: Texted Chelsey: \u201cI'm on my way\u201d.)\n\nwhat's the weather");
+        eq("done, then his words", roles(tw) + " " + tw.get(2).text, "uau (From the app, not the boss: already done after their "
+                + "last message, so don't do it again unless they ask: Texted Chelsey: \u201cI'm on my way\u201d.)\n\nwhat's the weather");
         eq("the message that asked is sent as it was (the cache keeps it)", tw.get(0).text, "text Chelsey I'm on my way");
         Chat nr = new Chat();
         nr.add("user", "text Chelsey hi", 1);
@@ -70,7 +70,7 @@ public class ChatTest {
         nr.add("action", "Alarm: 5:00 PM", 3);
         nr.add("user", "what's the weather", 4);                // no reply came: his two messages joined, the record between
         eq("no reply: still told it was done", roles(nr.window(24)) + " " + nr.window(24).get(0).text, "u text Chelsey hi\n\n(From "
-                + "the app, not the boss: already done after his last message, so don't do it again unless he asks: Texted Chelsey: "
+                + "the app, not the boss: already done after their last message, so don't do it again unless they ask: Texted Chelsey: "
                 + "\u201chi\u201d; Alarm: 5:00 PM.)\n\nwhat's the weather");
         Chat pn = new Chat();
         pn.add("user", "text Toni and call Mom", 1);
@@ -79,7 +79,7 @@ public class ChatTest {
         pn.add("assistant", "Done.", 4);
         pn.add("user", "thanks", 5);
         eq("their numbers never go to Claude (his words do)", pn.window(24).get(2).text.split("\n")[0], "(From the app, not the boss: "
-                + "already done after his last message, so don't do it again unless he asks: Texted Toni: \u201csee you at (5)\u201d; Called Mom.)");
+                + "already done after their last message, so don't do it again unless they ask: Texted Toni: \u201csee you at (5)\u201d; Called Mom.)");
         Chat la = new Chat();
         la.add("user", "flashlight", 1);
         la.add("action", "Flashlight on", 2);

@@ -114,7 +114,7 @@ final class Goals {
     /** For the prompt, with his notes; null when there are none. */
     String forClaude() {
         if (goals.isEmpty()) return null;
-        StringBuilder b = new StringBuilder("His goals (he sees them in the app; tick them off with goal_done when he says one is done):");
+        StringBuilder b = new StringBuilder("Their goals (they see them in the app; tick them off with goal_done when they say one is done):");
         for (String t : texts(false)) b.append("\n- ").append(t);
         List<String> done = texts(true);
         if (!done.isEmpty()) b.append("\nDone lately: ").append(String.join("; ", done.subList(Math.max(0, done.size() - 5), done.size())));
@@ -154,12 +154,12 @@ final class Goals {
 
     static JSONArray definitions() throws Exception {
         return new JSONArray()
-                .put(tool("goal_add", "Add something he's working toward to his goals (only when he asks to, or clearly sets one).",
-                        new JSONObject().put("goal", str("The goal, short, in his words.")), "goal"))
-                .put(tool("goal_done", "Tick a goal off when he says it's done (or back on with done=false).",
-                        new JSONObject().put("goal", str("The goal, in his words.")).put("done", new JSONObject().put("type", "boolean")), "goal"))
-                .put(tool("goal_remove", "Take a goal off completely (he doesn't want it at all any more).",
-                        new JSONObject().put("goal", str("The goal, in his words.")), "goal"))
-                .put(tool("goals_show", "His goals: open ones, then done ones.", new JSONObject()));
+                .put(tool("goal_add", "Add something they're working toward to their goals (only when they ask to, or clearly sets one).",
+                        new JSONObject().put("goal", str("The goal, short, in their words.")), "goal"))
+                .put(tool("goal_done", "Tick a goal off when they say it's done (or back on with done=false).",
+                        new JSONObject().put("goal", str("The goal, in their words.")).put("done", new JSONObject().put("type", "boolean")), "goal"))
+                .put(tool("goal_remove", "Take a goal off completely (they don't want it at all any more).",
+                        new JSONObject().put("goal", str("The goal, in their words.")), "goal"))
+                .put(tool("goals_show", "Their goals: open ones, then done ones.", new JSONObject()));
     }
 }

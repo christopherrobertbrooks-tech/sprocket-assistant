@@ -59,7 +59,7 @@ public class ScreenHands extends AccessibilityService {
     /** The last screenshot, for the brain to see as a picture (stage 2 attaches it). */
     static volatile byte[] lastShot;
 
-    static final String OFF = "screen control is off: he can turn it on under Settings > Accessibility > Installed apps "
+    static final String OFF = "screen control is off: they can turn it on under Settings > Accessibility > Installed apps "
             + "> Sprocket: screen control";
 
     @Override protected void onServiceConnected() { live = this; backOn(this); }

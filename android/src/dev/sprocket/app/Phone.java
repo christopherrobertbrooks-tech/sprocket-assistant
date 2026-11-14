@@ -461,7 +461,7 @@ final class Phone {
                     .putExtra(android.app.SearchManager.QUERY, query.trim()));
             Thread.sleep(2500);
             Hands.record("Asked the music app to play " + query.trim());
-            return "Asked his music app to play " + query.trim() + (am.isMusicActive() ? ". Something is playing now." : "; nothing is playing yet "
+            return "Asked their music app to play " + query.trim() + (am.isMusicActive() ? ". Something is playing now." : "; nothing is playing yet "
                     + "(the app may want a tap).");
         }
         int key = command.equals("pause") ? android.view.KeyEvent.KEYCODE_MEDIA_PAUSE : command.equals("next")
@@ -484,7 +484,7 @@ final class Phone {
         try { start(c, i); }
         catch (Exception e) { start(c, i.setPackage(null)); }
         Hands.record(action.equals("nearby") ? "Maps: " + place.trim() + " nearby" : "Directions to " + place.trim());
-        return action.equals("nearby") ? "Maps is showing " + place.trim() + " near him." : "Maps is starting directions to " + place.trim() + ".";
+        return action.equals("nearby") ? "Maps is showing " + place.trim() + " near them." : "Maps is starting directions to " + place.trim() + ".";
     }
 
     private static String openScreen(Context c, String name) throws Exception {
@@ -533,7 +533,7 @@ final class Phone {
                 } else if (mode.equals("android.all")) which = "every alarm";
                 start(c, i);
                 Hands.record("Asked the Clock to cancel " + which);
-                return "Asked the Clock app to cancel " + which + "; it may show it for him to confirm.";
+                return "Asked the Clock app to cancel " + which + "; it may show it for them to confirm.";
             }
             default: throw new Exception("unknown clock action " + in.optString("action"));
         }
@@ -591,8 +591,8 @@ final class Phone {
         Intent i = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).putExtra(Intent.EXTRA_EMAIL, new String[]{address})
                 .putExtra(Intent.EXTRA_SUBJECT, subject).putExtra(Intent.EXTRA_TEXT, body);
         start(c, i);
-        Hands.record("Email to " + name + " ready in his email app");
-        return "The email to " + name + " is open in his email app, filled in; he checks it and taps send there.";
+        Hands.record("Email to " + name + " ready in their email app");
+        return "The email to " + name + " is open in their email app, filled in; they check it and tap send there.";
     }
 
     private static String addContact(Context c, String name, String number, String email) throws Exception {
@@ -603,12 +603,12 @@ final class Phone {
         if (!email.trim().isEmpty()) i.putExtra(ContactsContract.Intents.Insert.EMAIL, email.trim());
         start(c, i);
         Hands.record("New contact " + name.trim() + " ready to save");
-        return "The new contact " + name.trim() + " is open, filled in; he checks it and taps Save.";
+        return "The new contact " + name.trim() + " is open, filled in; they check it and tap Save.";
     }
 
     /** His location now (precise: asked for at first use), texted as a Maps link through the usual Send card. */
     private static String shareLocation(Context c, String to) throws Exception {
-        if (!Hands.need(Manifest.permission.ACCESS_FINE_LOCATION)) throw new Exception("Sprocket isn't allowed to know his precise location");
+        if (!Hands.need(Manifest.permission.ACCESS_FINE_LOCATION)) throw new Exception("Sprocket isn't allowed to know their precise location");
         android.location.LocationManager lm = c.getSystemService(android.location.LocationManager.class);
         android.location.Location got = null;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -625,7 +625,7 @@ final class Phone {
             if (last != null && (got == null || last.getTime() > got.getTime())) got = last;
         }
         if (got == null) throw new Exception("the phone couldn't get a location fix (location off, or no signal)");
-        return text(c, to, "My location: " + PhoneTools.mapsLink(got.getLatitude(), got.getLongitude()), "Shared his location with");
+        return text(c, to, "My location: " + PhoneTools.mapsLink(got.getLatitude(), got.getLongitude()), "Shared their location with");
     }
 
     private static String status(Context c) {

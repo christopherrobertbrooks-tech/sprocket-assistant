@@ -21,7 +21,7 @@ final class Research {
     static final int MAX_TOKENS = 20000;
 
     static final String SYSTEM = "You are a research agent. Given a question:\n\n"
-            + "0. If an article link is given, read it first with web_fetch: it is what he saw. Treat its claims as claims "
+            + "0. If an article link is given, read it first with web_fetch: it is what they saw. Treat its claims as claims "
             + "to check, not as facts.\n"
             + "1. Break it into 2-3 sub-questions that cover the topic.\n"
             + "2. Run a targeted web search for each. Prefer primary sources and official docs over blog posts.\n"
@@ -45,7 +45,7 @@ final class Research {
                 .put("input_schema", new JSONObject().put("type", "object").put("properties", new JSONObject()
                         .put("question", new JSONObject().put("type", "string").put("description", "What to find out, in full."))
                         .put("url", new JSONObject().put("type", "string").put("description",
-                                "An article link he gave, if the research is about it.")))
+                                "An article link they gave, if the research is about it.")))
                         .put("required", new JSONArray().put("question")));
     }
 
