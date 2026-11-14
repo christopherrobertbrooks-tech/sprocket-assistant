@@ -2075,7 +2075,7 @@ public class MainActivity extends Activity {
         Claude.Brain b = brain();
         new Thread(() -> {
             try {
-                JSONObject req = new JSONObject().put("model", Claude.qwen ? Claude.QWEN : Claude.SONNET).put("max_tokens", 400)
+                JSONObject req = new JSONObject().put("model", b.own ? b.model : Claude.SONNET).put("max_tokens", 400)
                         .put("stream", true).put("messages", new JSONArray().put(new JSONObject().put("role", "user")
                                 .put("content", AppNotes.routePrompt(asked, t.steps, t.end, said))));
                 AppNotes.Choice ch = AppNotes.choice(Claude.send(b, req, null, null, null).text, t.steps.size());
