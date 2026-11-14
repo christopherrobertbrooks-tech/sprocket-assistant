@@ -491,7 +491,12 @@ final class Phone {
         String[] s = PhoneTools.screen(name);
         if (s == null) throw new Exception("there is no screen called " + name);
         Intent i = name.equals("photos") ? Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_GALLERY)
-                : name.equals("home_screen") ? new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME) : new Intent(s[0]);
+                : name.equals("home_screen") ? new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                : name.equals("screen_control_settings") ? ScreenHands.switchPage(c) : new Intent(s[0]);
+        if (name.equals("screen_control_settings") && ScreenHands.switchOn(c)) {   // 11-14: with the grant, no page at all
+            Hands.record("Switched screen control back on");
+            return "Screen control is back on (Sprocket switched it on itself).";
+        }
         if (name.equals("selfie_camera"))
             i.putExtra("android.intent.extras.CAMERA_FACING", 1).putExtra("android.intent.extras.LENS_FACING_FRONT", 1)
                     .putExtra("android.intent.extra.USE_FRONT_CAMERA", true);

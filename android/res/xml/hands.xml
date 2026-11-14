@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- stage 1 hands: read the screen, tap, type, scroll, take screenshots. It listens to screen-change events only so its picture of the screen stays current; it acts only when asked. -->
+<!-- 11-14: isAccessibilityTool, since apps mark screens like Gmail's account switcher "accessibility data sensitive": hidden from (and taps ignored for) services that aren't tools; Sprocket operates the phone by voice, like Voice Access.
+     stage 1 hands: read the screen, tap, type, scroll, take screenshots. It listens to screen-change events only so its picture of the screen stays current; it acts only when asked. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/hands_description"
     android:accessibilityEventTypes="typeAllMask"
@@ -8,4 +9,5 @@
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
     android:canTakeScreenshot="true"
+    android:isAccessibilityTool="true"
     android:notificationTimeout="100" />

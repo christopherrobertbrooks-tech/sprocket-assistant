@@ -207,6 +207,13 @@ final class AppNotes {
         return out;
     }
 
+    /** True when steps are the first part of (and shorter than) whole: the same way, stopped early. */
+    static boolean prefixOf(List<Step> steps, List<Step> whole) {
+        if (steps.size() >= whole.size()) return false;
+        for (int i = 0; i < steps.size(); i++) if (!steps.get(i).said().equals(whole.get(i).said())) return false;
+        return true;
+    }
+
     /** Saves a route for an app (a newer way to the same place replaces the old one); says what happened. */
     String learnRoute(String pkg, String appName, String goal, List<Step> steps, long at) {
         if (pkg == null || pkg.isEmpty() || goal == null || goal.trim().isEmpty() || steps.isEmpty()) return "There was nothing to note.";
@@ -218,6 +225,9 @@ final class AppNotes {
         App a = app(pkg);
         if (a == null) { a = new App(pkg, appName == null || appName.isEmpty() ? pkg : appName); apps.add(a); }
         String g = norm(r.goal);
+        for (Route old : a.routes)          // 11-14: a run that stopped at Gmail's menu replaced the full way to Spam
+            if (norm(old.goal).equals(g) && prefixOf(steps, old.steps))
+                return "Kept the saved way to " + old.goal + ": this one stopped partway along it.";
         boolean replaced = a.routes.removeIf(x -> norm(x.goal).equals(g));
         long id = Math.max(nextId, at);
         nextId = id + 1;

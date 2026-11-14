@@ -100,6 +100,21 @@ about this last; to do it yourself:
   opens Bixby until you also change Settings > Advanced features > **Side button** > Press and hold > **Digital
   assistant**.
 
+### Optional: let Sprocket switch screen control back on by itself
+Android sometimes switches an app's screen control off on its own, and turning it back on means digging through
+Settings (and can hit a "restricted setting" block). If you have a computer with
+[adb](https://developer.android.com/tools/adb) and USB or wireless debugging set up, one command lets Sprocket switch
+its own screen control back on, both when you ask and when Android turned it off (never after you switched it off
+yourself):
+
+```
+adb shell pm grant dev.sprocket.app android.permission.WRITE_SECURE_SETTINGS
+```
+
+Sprocket uses that permission for nothing else, but it is a powerful one: an app holding it can change hidden system
+settings. To take it back: `adb shell pm revoke dev.sprocket.app android.permission.WRITE_SECURE_SETTINGS`, or
+uninstall Sprocket. Without it, asking Sprocket to turn screen control on opens the Accessibility page for you.
+
 ## Updating
 - **Hearing about new versions:** Sprocket doesn't check for updates itself. To be told, sign in to GitHub and, at
   the top of this page, click **Watch > Custom**, tick **Releases**, then **Apply**. GitHub then emails you (or shows

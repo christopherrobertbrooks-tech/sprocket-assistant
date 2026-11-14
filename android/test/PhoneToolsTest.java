@@ -144,6 +144,12 @@ public class PhoneToolsTest {
         eq("can you open my photos stays", PhoneTools.wantsToSee("can you open my photos"), true);
         eq("then open Maps stays", PhoneTools.wantsToSee("find a gas station and then open Maps"), true);
         eq("a new sentence opening with open stays", PhoneTools.wantsToSee("It's late. Open the alarm app"), true);
+        // the screen tool can switch Sprocket's own screen control off when the user asks
+        eq("switch_off is a screen action", PhoneTools.definitions().toString().contains("\"switch_off\""), true);
+
+        eq("Sprocket can open its own screen-control switch (11-14)", PhoneTools.screen("screen_control_settings") != null, true);
+        eq("and the brain is told when to open it (11-14: it said it couldn't)", PhoneTools.definitions().toString().contains("When they ask to turn screen control (back) on, use screen_control_settings"), true);
+
         System.out.println(fails == 0 ? "phone tools: all " + n + " checks pass" : fails + " of " + n + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }

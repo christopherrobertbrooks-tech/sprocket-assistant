@@ -103,7 +103,9 @@ final class PhoneTools {
                                 + "Clock's timers or alarms, a settings page, or the home screen (that is how to get them out of "
                                 + "an app: Sprocket can't close apps). It only opens it; it changes nothing there. Use it before the "
                                 + "screen tool for any settings page listed here; the software version is in about_phone_settings "
-                                + "> Software information.",
+                                + "> Software information. When they ask to turn screen control (back) on, use "
+                                + "screen_control_settings: Sprocket switches it on itself when it can; otherwise it opens "
+                                + "Accessibility and you tell them: Installed apps, then Sprocket: screen control, then the switch.",
                         new JSONObject().put("screen", new JSONObject().put("type", "string").put("enum", new JSONArray(SCREENS.keySet()))), "screen"))
                 .put(tool("clock_control", "Cancel alarms in the Clock app (by time, by name, the next one, or all), snooze a "
                                 + "ringing alarm, or stop a ringing timer. The Clock app may show the alarm for them to confirm.",
@@ -134,7 +136,7 @@ final class PhoneTools {
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read. scroll up/down, back, home. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
-                                + "(a spot the list can't read asks them first). Each action returns the screen after it. Never "
+                                + "(it asks them first only when it sounds risky). Each action returns the screen after it. Never "
                                 + "tell them something is on their screen unless you read it, or go_to returned it, in this "
                                 + "question: while they ask, Sprocket's own screen is up. When you're done Sprocket comes back to its own screen by itself; if they asked to open or see "
                                 + "something (photos, an app, a map), call stay last so it stays on screen. note: once you've reached what they "
@@ -142,10 +144,12 @@ final class PhoneTools {
                                 + "health: Battery and device care > Battery > Battery information\"); only facts you saw work, never "
                                 + "personal details. Notes you saved come back with that app's screen: use them, and check they still "
                                 + "match. Money and password apps are off limits. Pay, buy, delete, install, sign-out, "
-                                + "send, post, call and answer buttons show them a card first, and only go ahead if they tap it.",
+                                + "send, post, call and answer buttons show them a card first, and only go ahead if they tap it. switch_off: when "
+                                + "they ask to turn screen control off, switches Sprocket's own screen control off (their card first); "
+                                + "only they can turn it back on, in Settings or from the notice that follows.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
-                                                .put("look").put("tap_point").put("stay").put("note")))
+                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off")))
                                 .put("item", new JSONObject().put("type", "integer").put("description", "For tap and type: the item's number."))
                                 .put("text", str("For type: what to type. For note: the fact to save."))
                                 .put("direction", new JSONObject().put("type", "string").put("enum", new JSONArray().put("up").put("down"))
@@ -229,6 +233,9 @@ final class PhoneTools {
                 {"apps_settings", "android.settings.MANAGE_APPLICATIONS_SETTINGS", "the list of apps"},
                 {"default_apps_settings", "android.settings.MANAGE_DEFAULT_APPS_SETTINGS", "the default apps settings"},
                 {"accessibility_settings", "android.settings.ACCESSIBILITY_SETTINGS", "the accessibility settings"},
+                // straight to Sprocket's own switch when it can switch itself on
+                {"screen_control_settings", "android.settings.ACCESSIBILITY_SETTINGS", "Sprocket's screen control: switched "
+                        + "back on (or its Accessibility page)"},
                 {"security_settings", "android.settings.SECURITY_SETTINGS", "the security and privacy settings"},
                 {"privacy_settings", "android.settings.PRIVACY_SETTINGS", "the privacy settings"},
                 {"date_time_settings", "android.settings.DATE_SETTINGS", "the date and time settings"},

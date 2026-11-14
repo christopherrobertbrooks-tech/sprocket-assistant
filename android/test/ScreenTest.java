@@ -107,7 +107,7 @@ public class ScreenTest {
         eq("Sprocket Test's own name", Screen.handsOn("dev.sprocket.test/dev.sprocket.app.ScreenHands", "dev.sprocket.test"), true);
         eq("only the other app's on", Screen.handsOn("dev.sprocket.test/dev.sprocket.app.ScreenHands", "dev.sprocket.app"), false);
         eq("nothing on", Screen.handsOn(null, "dev.sprocket.app"), false);
-        eq("the notice says how", Screen.handsOffNotice("3:12 am").contains("Installed apps"), true);
+        eq("the notice says the way: Installed apps > Sprocket", Screen.handsOffNotice("3:12 am").contains("Installed apps > Sprocket: screen control"), true);
         eq("and when", Screen.handsOffNotice("3:12 am").contains("3:12 am"), true);
 
         // a saved way's first button missing after opening the app (an app reopened inside a message)
@@ -120,6 +120,33 @@ public class ScreenTest {
         eq("reopened and still missing: slow way, no more backs", Screen.findStart(false, true, 1, true, false), "give_up");
         eq("reopened and still not in the app: slow way", Screen.findStart(false, false, 1, true, false), "give_up");
         eq("never presses back in a money or password app", Screen.findStart(false, true, 0, false, true), "give_up");
+
+        // switching itself off (11-14): a card first, and it says how to get it back
+        eq("the switch-off card says what stops and how to undo it", Screen.OFF_CARD.contains("can't read or tap other apps") && Screen.OFF_CARD.contains("Settings"), true);
+
+        // switching itself back on with the adb grant (11-14)
+        eq("added to an empty list", Screen.withHands(null, "dev.sprocket.app"), "dev.sprocket.app/dev.sprocket.app.ScreenHands");
+        eq("added after the others, nothing else touched", Screen.withHands("com.x/.Talk", "dev.sprocket.app"), "com.x/.Talk:dev.sprocket.app/dev.sprocket.app.ScreenHands");
+        eq("already on: nothing to write", Screen.withHands("com.x/.Talk:dev.sprocket.app/.ScreenHands", "dev.sprocket.app"), null);
+        eq("Android switched it off: back on by itself", Screen.autoOn(false, 0, 1_000_000_000L), true);
+        eq("the user switched it off: stays off", Screen.autoOn(true, 0, 1_000_000_000L), false);
+        eq("not twice in 10 minutes (no fight with Android)", Screen.autoOn(false, 1_000_000_000L - 60_000L, 1_000_000_000L), false);
+
+        // another app's keyboard is closed before Sprocket looks (11-14: Gmail's search page)
+        eq("Gmail with its keyboard up: close it first", Screen.closeKeyboardFirst(true, "com.google.android.gm", "", false), true);
+        eq("only once per app per question", Screen.closeKeyboardFirst(true, "com.google.android.gm", "com.google.android.gm", false), false);
+        eq("no keyboard: nothing to close", Screen.closeKeyboardFirst(false, "com.google.android.gm", "", false), false);
+        eq("never in Sprocket itself", Screen.closeKeyboardFirst(true, "dev.sprocket.app", "", true), false);
+
+        // a covered button in a saved way: look again a few times (11-14: Gmail's menu still sliding in)
+        eq("covered: try again", Screen.retryCovered("item 4" + Screen.COVERED, 0), true);
+        eq("but not forever", Screen.retryCovered("item 4" + Screen.COVERED, Screen.COVERED_TRIES), false);
+        eq("other refusals: no retry", Screen.retryCovered("that app is off limits to Sprocket (money or passwords)", 0), false);
+
+        // a picture tap clicks the button under it (11-14: Gmail's account switcher ignored finger taps)
+        eq("an account row under the spot: click it", Screen.clickUnderPoint(true, 984L * 168, 1080L * 2340), true);
+        eq("a whole-screen layer: use a finger", Screen.clickUnderPoint(true, 1080L * 2000, 1080L * 2340), false);
+        eq("the spot isn't on it: use a finger", Screen.clickUnderPoint(false, 984L * 168, 1080L * 2340), false);
 
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");
         if (fails > 0) System.exit(1);

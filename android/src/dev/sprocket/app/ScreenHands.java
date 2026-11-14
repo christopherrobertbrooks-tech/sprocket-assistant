@@ -43,7 +43,10 @@ public class ScreenHands extends AccessibilityService {
     private static Trail trail = new Trail();
 
     /** A new question: an empty trail. */
-    static synchronized void startTrail() { trail = new Trail(); }
+    static synchronized void startTrail() { trail = new Trail(); keyboardClosedIn = ""; }
+
+    /** The app whose keyboard Sprocket already closed in this question (11-14: once per app, never a second back). */
+    private static String keyboardClosedIn = "";
 
     /** This question's trail, handed over once; a new empty one starts. */
     static synchronized Trail takeTrail() { Trail t = trail; trail = new Trail(); return t; }
@@ -59,8 +62,8 @@ public class ScreenHands extends AccessibilityService {
     /** The last screenshot, for the brain to see as a picture (stage 2 attaches it). */
     static volatile byte[] lastShot;
 
-    static final String OFF = "screen control is off: they can turn it on under Settings > Accessibility > Installed apps "
-            + "> Sprocket: screen control";
+    static final String OFF = "screen control is off: open_screen screen_control_settings switches it back on, or opens the "
+            + "way for them to";
 
     @Override protected void onServiceConnected() { live = this; backOn(this); }
     @Override public boolean onUnbind(android.content.Intent i) { live = null; wentOff(this); return super.onUnbind(i); }
@@ -72,8 +75,8 @@ public class ScreenHands extends AccessibilityService {
 
     // ------------------------------------------------------------------ screen control switched off (11-13)
     // Android switched it off by itself once and he only found out from a failed task. Android lets no app lock it on
-    // (his choice: be told, not a way around the lock), so Sprocket notes when it went off and puts up a notice that
-    // opens the right settings page.
+    // With WRITE_SECURE_SETTINGS granted over adb (optional), Sprocket switches
+    // itself back on when Android switched it off, and when the user asks; otherwise a notice opens the Accessibility page.
 
     private static final int OFF_ID = 64;
     private static final String OFF_CHANNEL = "screen_control";
@@ -89,15 +92,50 @@ public class ScreenHands extends AccessibilityService {
     }
 
     private static void backOn(android.content.Context c) {
-        prefs(c).edit().remove("off_at").putBoolean("noticed", false).apply();
+        prefs(c).edit().remove("off_at").putBoolean("noticed", false).putBoolean("he_off", false).apply();
         c.getSystemService(android.app.NotificationManager.class).cancel(OFF_ID);
+    }
+
+    /**
+     * The closest page to Sprocket's own screen-control switch an app may open: Accessibility. (11-14: the page with
+     * the switch itself, ACCESSIBILITY_DETAILS_SETTINGS, is refused to ordinary apps -- "Permission Denial" on a Samsung phone,
+     * it fell back to the main Settings page.) From there: Installed apps > Sprocket: screen control.
+     */
+    static android.content.Intent switchPage(android.content.Context c) {
+        return new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+    }
+
+    /** True when the user granted WRITE_SECURE_SETTINGS (adb pm grant): Sprocket can switch its own screen control on. */
+    static boolean canSwitchOn(android.content.Context c) {
+        return c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** Switches Sprocket's own screen control on (only its own entry in Android's list); false without the grant. */
+    static boolean switchOn(android.content.Context c) {
+        if (!canSwitchOn(c)) return false;
+        android.content.ContentResolver r = c.getContentResolver();
+        String now = android.provider.Settings.Secure.getString(r, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        String next = Screen.withHands(now, c.getPackageName());
+        if (next != null) {
+            android.provider.Settings.Secure.putString(r, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, next);
+            android.provider.Settings.Secure.putInt(r, android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, 1);
+        }
+        prefs(c).edit().putBoolean("he_off", false).apply();
+        android.util.Log.i("Sprocket", "screen control switched on by Sprocket");
+        return true;
     }
 
     /** Puts the notice up once per time it's found off (Sprocket opening, the morning brief, an unbind). */
     static void check(android.content.Context c) {
         String enabled = android.provider.Settings.Secure.getString(c.getContentResolver(),
                 android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (Screen.handsOn(enabled, c.getPackageName()) || prefs(c).getBoolean("noticed", false)) return;
+        if (Screen.handsOn(enabled, c.getPackageName())) return;
+        long nowMs = System.currentTimeMillis();
+        if (canSwitchOn(c) && Screen.autoOn(prefs(c).getBoolean("he_off", false), prefs(c).getLong("auto_on_at", 0), nowMs)) {
+            prefs(c).edit().putLong("auto_on_at", nowMs).apply();
+            if (switchOn(c)) { android.util.Log.i("Sprocket", "screen control was off (Android): switched back on"); return; }
+        }
+        if (prefs(c).getBoolean("noticed", false)) return;
         long at = prefs(c).getLong("off_at", 0);
         String when = null;
         if (at > 0) {
@@ -109,8 +147,7 @@ public class ScreenHands extends AccessibilityService {
         if (Build.VERSION.SDK_INT >= 26)
             nm.createNotificationChannel(new android.app.NotificationChannel(OFF_CHANNEL, "Screen control off", android.app.NotificationManager.IMPORTANCE_DEFAULT));
         android.app.PendingIntent open = android.app.PendingIntent.getActivity(c, 64,
-                new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                android.app.PendingIntent.FLAG_IMMUTABLE);
+                switchPage(c).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK), android.app.PendingIntent.FLAG_IMMUTABLE);
         String text = Screen.handsOffNotice(when);
         android.app.Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new android.app.Notification.Builder(c, OFF_CHANNEL) : new android.app.Notification.Builder(c);
         nm.notify(OFF_ID, b.setSmallIcon(android.R.drawable.ic_dialog_alert).setContentTitle("Screen control is off").setContentText(text)
@@ -206,10 +243,20 @@ public class ScreenHands extends AccessibilityService {
                     }
                     if (k == 0) return handBack(r, n, st, "\"" + st.label + "\" isn't on this screen (the app may have changed)", now);
                     before = lastPackage;
-                    try {
-                        out = st.kind.equals("tap") ? h.tap(k, false) : h.type(k, st.text);
-                    } catch (Exception e) {   // covered by another layer, or refused: stop before a wrong tap
-                        return handBack(r, n, st, "\"" + st.label + "\" can't be tapped: " + e.getMessage(), h.read());
+                    for (int tries = 0; ; tries++) {
+                        try {
+                            out = st.kind.equals("tap") ? h.tap(k, false) : h.type(k, st.text);
+                            break;
+                        } catch (Exception e) {   // covered by another layer, or refused: stop before a wrong tap
+                            String why = String.valueOf(e.getMessage());
+                            if (!Screen.retryCovered(why, tries))
+                                return handBack(r, n, st, "\"" + st.label + "\" can't be tapped: " + why, h.read());
+                            Thread.sleep(Screen.COVERED_WAIT_MS);   // 11-14: Gmail's menu still sliding in, 0.7 s after its tap
+                            h.read();
+                            k = AppNotes.itemFor(st.label, h.labels());
+                            if (k == 0) return handBack(r, n, st, "\"" + st.label + "\" isn't on this screen any more", h.read());
+                            android.util.Log.i("Sprocket", "replay " + n + "/" + r.steps.size() + " waited: the button was covered");
+                        }
                     }
                     break;
                 }
@@ -281,6 +328,17 @@ public class ScreenHands extends AccessibilityService {
         ScreenHands h = live;
         if (h == null) throw new Exception(OFF);
         String action = in.optString("action", "read");
+        String pkg = h.nowPackage();
+        boolean close;
+        synchronized (ScreenHands.class) { close = Screen.closeKeyboardFirst(h.keyboardUp(), pkg, keyboardClosedIn, mine(pkg)); }
+        if (close && !action.equals("type") && !action.equals("back")) {   // 11-14: Gmail's search page + keyboard: it tapped a
+            synchronized (ScreenHands.class) { keyboardClosedIn = pkg; }      // recent search twice
+            h.performGlobalAction(GLOBAL_ACTION_BACK);
+            Thread.sleep(500);
+            android.util.Log.i("Sprocket", "closed the keyboard before looking");
+            if (!action.equals("read")) return "The keyboard was open over " + h.appName(pkg) + " (a search page may have been up), "
+                    + "so Sprocket closed it first. The screen changed: read it, then go on.\n" + h.read();
+        }
         switch (action) {
             case "read": return h.read();
             case "tap": return h.tap(in.optInt("item"));
@@ -292,6 +350,14 @@ public class ScreenHands extends AccessibilityService {
             case "stay": stay = true; return "This screen stays up when you're done; Sprocket won't come back to its own screen.";
             case "note": return MainActivity.noteApp(lastPackage, h.appName(lastPackage), in.optString("text"));
             case "tap_point": return h.tapPoint(in.optInt("x", -1), in.optInt("y", -1), in.optString("what"));
+            case "switch_off": {                       // the user asked Sprocket to turn it off
+                Boolean yes = h.askOnScreen(Screen.OFF_CARD, "Switch off");
+                if (yes == null) return "Screen control stays on: the boss didn't answer the card.";
+                if (!yes) return "Screen control stays on: the boss cancelled.";
+                prefs(h).edit().putBoolean("he_off", true).apply();   // the user switched it off: never back on by itself
+                h.disableSelf();                       // Android's own way for a service to stop itself; wentOff() follows
+                return "Screen control is now off. When they ask, open_screen screen_control_settings turns it back on.";
+            }
             default: throw new Exception("the screen tool has no action " + action);
         }
     }
@@ -716,6 +782,19 @@ public class ScreenHands extends AccessibilityService {
             while (Screen.changed(shotPackage, nowPackage(), null) != null) {
                 if (System.currentTimeMillis() >= end) throw new Exception(SHOT_OLD);
                 Thread.sleep(150);
+            }
+        }
+        AccessibilityNodeInfo now = getRootInActiveWindow();   // 11-14: an app that ignores finger taps
+        AccessibilityNodeInfo hit = now == null ? null : topAt(now, sx, sy, 0);   // on the right row; a click on the row
+        while (hit != null && !hit.isClickable()) hit = hit.getParent();          // itself goes through
+        if (hit != null) {
+            Rect b = new Rect();
+            hit.getBoundsInScreen(b);
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            if (Screen.clickUnderPoint(b.contains(sx, sy), (long) b.width() * b.height(), (long) dm.widthPixels * dm.heightPixels)
+                    && hit.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                android.util.Log.i("Sprocket", "tap_point clicked the button under the spot");
+                return settleAndRead();
             }
         }
         if (!gesture(sx, sy, sx, sy, 60)) throw new Exception("the tap didn't go through");

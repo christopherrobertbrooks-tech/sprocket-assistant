@@ -24,6 +24,9 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- Optional: granted once over adb (pm grant), so Sprocket can switch its own screen control back on.
+         Used for nothing else. Without the grant Sprocket opens the Accessibility page as before. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <!-- the morning brief: at 6:00 exactly (his "Alarms & reminders" switch), set again after a restart -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

@@ -123,10 +123,29 @@ final class Screen {
         return false;
     }
 
+    /**
+     * Android's switched-on list with this app's screen control added (11-14: with WRITE_SECURE_SETTINGS granted,
+     * Sprocket switches itself back on). Nothing else in the list changes; null when it's already there.
+     */
+    static String withHands(String enabled, String pkg) {
+        if (handsOn(enabled, pkg)) return null;
+        String mine = pkg + "/dev.sprocket.app.ScreenHands";
+        return enabled == null || enabled.trim().isEmpty() || enabled.equals("null") ? mine : enabled + ":" + mine;
+    }
+
+    /** Switch back on by itself only when Android switched it off (not the user), and not again within 10 minutes. */
+    static boolean autoOn(boolean heSwitchedOff, long lastAutoOn, long now) {
+        return !heSwitchedOff && now - lastAutoOn > 10 * 60_000L;
+    }
+
+    /** The card before Sprocket switches its own screen control off (when the user asks). */
+    static final String OFF_CARD = "Switch screen control off? Sprocket can't read or tap other apps until you turn it back on "
+            + "in Settings (the notice that follows takes you there).";
+
     /** The notice when screen control is found off; when: the time it went off, or null if not known. */
     static String handsOffNotice(String when) {
-        return "Android switched screen control off" + (when == null ? "" : " at " + when) + ". Tap here, then Installed apps "
-                + "> Sprocket: screen control, to turn it back on.";
+        return "Screen control went off" + (when == null ? "" : " at " + when) + ". Tap here, then Installed apps > Sprocket: "
+                + "screen control, and switch it on.";
     }
 
     /**
@@ -139,8 +158,25 @@ final class Screen {
         return !item.isEmpty() && top.contains(item.get(0));
     }
 
+    /**
+     * Close another app's keyboard before Sprocket looks at it, once per app per question (11-14: Gmail kept its search
+     * page up under the keyboard, and the brain tapped a recent search twice instead of the menu).
+     */
+    static boolean closeKeyboardFirst(boolean keyboardUp, String pkg, String alreadyClosedIn, boolean mine) {
+        return keyboardUp && pkg != null && !pkg.isEmpty() && !mine && !pkg.equals(alreadyClosedIn) && !blockedApp(pkg);
+    }
+
     static final String KEYBOARD = "(The keyboard is open over the bottom of the screen and hides what's under it: back "
             + "closes it.)\n";
+
+    /** A saved way's button that's covered gets looked at again this many times, this far apart (11-14: a menu still
+     * sliding in read as covered; ~1.5 s in all), before the brain takes over. */
+    static final int COVERED_TRIES = 3;
+    static final long COVERED_WAIT_MS = 500;
+
+    static boolean retryCovered(String why, int tries) {
+        return why != null && why.contains(COVERED.trim().substring(0, 20)) && tries < COVERED_TRIES;
+    }
 
     static final String COVERED = " is covered by something else on the screen (a menu, a search page or a pop-up is on top "
             + "of it); read again, or go back first";
@@ -153,6 +189,14 @@ final class Screen {
      */
     static boolean pointNeedsCard(Item it, String what) {
         return (it != null && risky(it)) || risky(new Item("button", what == null ? "" : what, true, false, false, false, false));
+    }
+
+    /**
+     * A screenshot tap clicks the button under the spot instead of a finger, when there is one and it's a button, not
+     * a whole screen (11-14: Gmail's account switcher ignored finger taps on the right row). Up to half the screen.
+     */
+    static boolean clickUnderPoint(boolean containsSpot, long buttonArea, long screenArea) {
+        return containsSpot && buttonArea > 0 && buttonArea * 2 <= screenArea;
     }
 
     /** The card for a screenshot tap that asks first. */

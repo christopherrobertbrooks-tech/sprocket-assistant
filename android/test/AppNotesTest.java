@@ -153,6 +153,16 @@ public class AppNotesTest {
         eq("routes saved and loaded", rb.find("gmail spam").steps.toString(), r.find("gmail spam").steps.toString());
         eq("deleted by id", rb.delete("com.google.android.gm", rb.apps.get(0).routes.get(0).id) + " " + rb.find("gmail spam"), "true null");
 
+        // a run that stopped partway never replaces the full way (11-14: it stopped at Gmail's menu)
+        AppNotes keep = new AppNotes();
+        java.util.List<AppNotes.Step> fullWay = java.util.Arrays.asList(AppNotes.Step.open("open_app", "Gmail"),
+                AppNotes.Step.tap("Gmail", "Open navigation drawer"), AppNotes.Step.tap("Gmail", "Spam, 247"));
+        keep.learnRoute("com.google.android.gm", "Gmail", "Gmail spam folder", fullWay, 20);
+        eq("a stopped-early way is refused", keep.learnRoute("com.google.android.gm", "Gmail", "Gmail spam folder", fullWay.subList(0, 2), 21).startsWith("Kept the saved way"), true);
+        eq("the full way is still there", keep.apps.get(0).routes.get(0).steps.size(), 3);
+        eq("a different way still replaces it", keep.learnRoute("com.google.android.gm", "Gmail", "Gmail spam folder",
+                java.util.Arrays.asList(AppNotes.Step.open("open_app", "Gmail"), AppNotes.Step.tap("Gmail", "Spam")), 22).contains("replacing the old way"), true);
+
         System.out.println(fails == 0 ? "appnotes: all " + n + " checks pass" : "appnotes: " + fails + " of " + n + " FAILED");
         if (fails > 0) System.exit(1);
     }
