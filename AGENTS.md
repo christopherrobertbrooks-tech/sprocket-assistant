@@ -96,4 +96,22 @@ page the same way it was installed.
 
 ## If they want to change the code
 Plain Java, no Gradle. The logic that can run on a computer has tests in `android/test`; run `scripts/test.sh`
-after any change. See `README.md` for what each part does.
+after any change. See `README.md` for what each part does, and `CONTRIBUTING.md` for what a contribution needs.
+
+Sprocket controls a real phone, so when you change its code:
+
+- **Keep every safety rule.** Risky taps (send, call, buy, delete, install, sign out...) wait for the owner's yes on a
+  card; banking, wallet and password apps stay off limits; nothing types into a password field; nothing switches on a
+  permission or screen control by itself. These live mostly in `Screen.java` and `ScreenHands.java`. Never remove,
+  skip or loosen one to make something work. If a task seems to need that, stop and tell your person why.
+- **Test before you call it done:** add a test in `android/test` that fails before your change and passes after, run
+  `scripts/test.sh`, and run `android/build.sh` too (the tests don't build the whole app). For the go-between:
+  `python3 test_messages.py && python3 test_proxy.py` in `go-between/`.
+- **No secrets in the repository:** no API keys, access codes (the go-between's `token` file), phone numbers or
+  screenshots of their phone, in code, tests or commits.
+- **No new network destinations, tracking or libraries** unless your person has agreed it with the project in a
+  discussion first.
+- **Show your person what changed** in plain words, including anything you couldn't test (on a real phone, for
+  instance).
+- **Don't open issues, pull requests or comments on GitHub yourself.** Your person reviews the change and writes them
+  in their own words.
