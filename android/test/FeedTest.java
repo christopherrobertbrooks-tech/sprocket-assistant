@@ -29,27 +29,27 @@ public class FeedTest {
         eq("across the clocks going back (Nov 1)", ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(Feed.nextAt(beforeFallBack, chicago, 6, 0)), chicago),
                 "2026-11-01T06:00-06:00[America/Chicago]");
 
-        // what it watches for AI news: his three to start, then what he talks about
+        // the news follows the topics the user picks: none to start (no AI bias), then what they add
         Feed f = new Feed();
-        eq("the three to start", f.topics, "[new AI models, updates to AI assistants, open-source AI projects]");
-        eq("one he talked about", f.watch("Ollama releases") + " " + f.topics.size(), "true 4");
-        eq("not twice", f.watch("  ollama RELEASES "), false);
-        eq("dropped", f.unwatch("ollama") + " " + f.topics.size(), "Ollama releases 3");
-        eq("sections on by default, Goals and GitHub not among them", f.on, "{today=true, machines=true, ai_news=true}");
-        eq("a brief saved before GitHub went: no GitHub section", Feed.fromJson("{\"topics\": [\"x\"], \"on\": {\"today\": true, "
-                + "\"github\": true, \"machines\": false, \"ai_news\": true}}").on, "{today=true, machines=false, ai_news=true}");
+        eq("no topics to start", f.topics, "[]");
+        eq("one they asked for", f.watch("Chicago Cubs") + " " + f.watch("gardening") + " " + f.topics.size(), "true true 2");
+        eq("not twice", f.watch("  chicago CUBS "), false);
+        eq("dropped", f.unwatch("cubs") + " " + f.topics.size(), "Chicago Cubs 1");
+        eq("sections on by default: Today and News, no Machines", f.on, "{today=true, news=true}");
+        eq("a brief saved by 0.1.6: AI news off stays off as News, Machines and GitHub gone", Feed.fromJson("{\"topics\": [\"x\"], "
+                + "\"on\": {\"today\": true, \"github\": true, \"machines\": true, \"ai_news\": false}}").on, "{today=true, news=false}");
         Feed back = Feed.fromJson(f.toJson());
         eq("saved and loaded", back.topics + " " + back.on + " " + back.lastAt, f.topics + " " + f.on + " " + f.lastAt);
-        eq("a damaged file: the defaults", Feed.fromJson("{nope").topics.size(), 3);
+        eq("a damaged file: the defaults", Feed.fromJson("{nope").topics.size(), 0);
 
         // machines: only what needs a look
         eq("machines all fine: nothing", Feed.alerts("the PC: CPU 3%...\nGateway: CPU 1%..."), "");
         eq("machines with trouble", Feed.alerts("the PC: ...\nGateway: ...\nNeeds a look: the gateway's Steam disk is 93% full."),
                 "Needs a look: the gateway's Steam disk is 93% full.");
 
-        // the request: Sonnet, web search, the facts and topics, only the sections he has on, no cache marks (once a day)
+        // the request: Sonnet, web search, the facts and topics, only the sections they have on, no cache marks (once a day)
         Feed g = new Feed();
-        g.on.put("machines", false);
+        g.watch("gardening");
         JSONObject req = Feed.request(g, "Saturday, October 18, 2026, 6:00 AM (America/Chicago)", "WEATHER FACTS", "CALENDAR FACTS",
                 "MACHINE FACTS", "Springfield");
         String body = req.toString();
@@ -64,8 +64,14 @@ public class FeedTest {
         Config.off.add("web");
         eq("web search off: no news section and no search", Feed.request(g, "now", "", "", "", "").toString().contains("web_search"), false);
         Config.reset();
-        eq("its facts and topics", body.contains("WEATHER FACTS") && body.contains("CALENDAR FACTS") && body.contains("open-source AI projects"), true);
-        eq("a section he turned off isn't asked for", body.contains("MACHINE FACTS"), false);
+        eq("its facts and topics", body.contains("WEATHER FACTS") && body.contains("CALENDAR FACTS") && body.contains("gardening"), true);
+        eq("no machines in the brief", body.contains("MACHINE FACTS") || body.contains("Machines"), false);
+        eq("no AI news in the brief's instructions", body.contains("AI news"), false);
+        eq("no topics: no news section and no search", Feed.request(new Feed(), "now", "", "", "", "").toString().contains("web_search"), false);
+        Feed off = new Feed();
+        off.watch("gardening");
+        off.on.put("news", false);
+        eq("News switched off: no search", Feed.request(off, "now", "", "", "", "").toString().contains("web_search"), false);
         eq("no GitHub in the brief's instructions", body.contains("GitHub"), false);
         eq("no cache marks", body.contains("cache_control"), false);
 
@@ -85,7 +91,7 @@ public class FeedTest {
         eq("what Play says", Feed.spoken(b), "Rain after 5. One new GitHub reply. Today: 62° and sunny, rain from 5 PM. AI news: A new 2-bit model.");
 
         JSONObject wt = Feed.watchTool();
-        eq("the watch tool", wt.getString("name"), "watch_ai_news");
+        eq("the watch tool", wt.getString("name"), "watch_news");
 
         System.out.println(fails == 0 ? "feed: all " + n + " checks pass" : fails + " of " + n + " FAILED");
         System.exit(fails == 0 ? 0 : 1);

@@ -9,8 +9,6 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
   Anthropic models (a cheaper, faster one, for instance), and DeepSeek and Google's Gemini through their own APIs,
   each with its own key, tested with Sprocket's tools before it's offered.
-- **Morning brief news on any topic.** Today the brief's news section is about AI. You'll pick your own topics
-  instead (a sports team, gardening, your town, a hobby), in the walkthrough and in Settings, and it searches those.
 
 ## Maybe
 - Other languages for talking and listening.

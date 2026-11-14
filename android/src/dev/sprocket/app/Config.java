@@ -144,7 +144,7 @@ final class Config {
             case "remember": case "forget": return on("memory");
             case "web_search": case "web_fetch": return on("web");
             case "research": return on("research");
-            case "watch_ai_news": return on("brief");
+            case "watch_news": return on("brief");
             case "github_threads": case "github_repos": return on("github") && !github.trim().isEmpty();
             case "check_machines": return !homeDash.trim().isEmpty() || !homeStats.trim().isEmpty();
             case "machine_control": return !homeHands.trim().isEmpty();

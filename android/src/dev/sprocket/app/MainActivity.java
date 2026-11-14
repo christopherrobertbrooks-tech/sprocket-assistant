@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
     static Lists lists;                        // his lists (files/lists.json)
     static AppNotes appNotes;                  // app memory for screen control (files/app-notes.json)
     static Goals goals;                        // what he's working toward (files/goals.json)
-    static Feed feed;                          // the morning brief: settings, AI news topics, the last week (files/feed.json)
+    static Feed feed;                          // the morning brief: settings, news topics, the last week (files/feed.json)
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
     private static String attached;            // a photo waiting to go with his next message (its file name)
     private static final ExecutorService photoWork = Executors.newSingleThreadExecutor();
@@ -2376,7 +2376,7 @@ public class MainActivity extends Activity {
         return done;
     }
 
-    /** The Feed screen (the feed icon): when it comes and what's in it, what it watches for AI news, the last week. */
+    /** The Feed screen (the feed icon): when it comes and what's in it, the news topics it follows, the last week. */
     private void feedScreen() {
         list.removeAllViews();
         LinearLayout c = panelCard("Every morning at 6:00", "About 5\u201315\u00a2 a day. A notification when it's ready; nothing is "
@@ -2413,7 +2413,8 @@ public class MainActivity extends Activity {
         c.addView(now, np);
         list.addView(c);
 
-        LinearLayout w = panelCard("Watching for AI news", "Sprocket adds the AI things you talk about. Take off any you don't want.");
+        LinearLayout w = panelCard("News topics", "What the morning news follows: a team, your town, a hobby. Add your own, "
+                + "or ask Sprocket to follow something. No topics, no news section.");
         List<String> topics;
         synchronized (feed) { topics = new ArrayList<>(feed.topics); }
         for (String t : topics) {
@@ -2928,7 +2929,7 @@ public class MainActivity extends Activity {
             if (name.equals("remember") || name.equals("forget")) return remember(name, input);
             if (name.startsWith("list_")) return listTool(name, input);
             if (name.startsWith("goal")) return goalTool(name, input);
-            if (name.equals("watch_ai_news")) return watchTool(input);
+            if (name.equals("watch_news")) return watchTool(input);
             if (name.equals("check_texts") || name.equals("read_texts")) return texts(name, input);
             if (name.equals("check_notifications")) return notices(input.optString("app"));
             if (name.equals("check_machines")) return Machines.check(input.optString("machine"));
@@ -3104,7 +3105,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** The morning brief's AI news topics: what he talks about gets added (he sees and removes them on the Feed screen). */
+    /** The morning brief's news topics: added when they ask (they see and remove them on the Feed screen). */
     private static String watchTool(JSONObject in) throws Exception {
         String action = in.optString("action"), topic = in.optString("topic").trim();
         synchronized (feed) {
@@ -3112,7 +3113,7 @@ public class MainActivity extends Activity {
                 if (topic.isEmpty()) return "No topic was given.";
                 boolean added = feed.watch(topic);
                 saveFeed();
-                if (added) Hands.record("Watching AI news for: " + topic);
+                if (added) Hands.record("Following in the morning news: " + topic);
                 return added ? "Watching for news on " + topic + "." : "Already watching that (or 30 topics already).";
             }
             if (action.equals("remove")) {
@@ -3122,7 +3123,7 @@ public class MainActivity extends Activity {
                 Hands.record("Stopped watching: " + gone);
                 return "Stopped watching " + gone + ".";
             }
-            return "Watching for AI news: " + String.join("; ", feed.topics) + ".";
+            return feed.topics.isEmpty() ? "No news topics yet." : "Following in the morning news: " + String.join("; ", feed.topics) + ".";
         }
     }
 

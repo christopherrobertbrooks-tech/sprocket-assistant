@@ -58,19 +58,14 @@ public final class FeedService extends Service {
             long now = System.currentTimeMillis();
             TimeZone tz = TimeZone.getDefault();
             String when = new SimpleDateFormat("EEEE, MMMM d, yyyy, h:mm a", Locale.US).format(new Date(now)) + " (" + tz.getID() + ")";
-            boolean today, machines;
-            synchronized (f) { today = f.on.get("today"); machines = f.on.get("machines"); }
-            machines = machines && (!Config.homeDash.trim().isEmpty() || !Config.homeStats.trim().isEmpty());   // only if set up
-            String weather = "", calendar = "", alerts = "";
+            boolean today;
+            synchronized (f) { today = f.on.get("today"); }
+            String weather = "", calendar = "";
             if (today) {
                 try { weather = Weather.lookup("", Place.coords(app), Place.where(app).town(), Place.usUnits(app)); }
                 catch (Exception e) { weather = "not available (" + e.getMessage() + ")"; }
                 try { calendar = Phone.run(app, "check_calendar", new JSONObject().put("from", LocalDate.now().toString())); }
                 catch (Exception e) { calendar = "not available"; }
-            }
-            if (machines) {
-                try { alerts = Feed.alerts(Machines.check("both")); }
-                catch (Exception e) { alerts = "Needs a look: neither home machine is answering."; }
             }
             MainActivity.syncLists();                      // lists he changed in Notion on the PC (no-op with Notion off)
             String due = "";                               // his list items due today or overdue: a notice now, and in the brief
@@ -82,7 +77,7 @@ public final class FeedService extends Service {
             }
             if (!due.isEmpty()) nm.notify(DUE_ID, ResearchService.note(app, READY, "From your lists", Character.toUpperCase(due.charAt(0)) + due.substring(1), false));
             JSONObject req;
-            synchronized (f) { req = Feed.request(f, when, weather, calendar, alerts, Place.where(app).town(), due); }
+            synchronized (f) { req = Feed.request(f, when, weather, calendar, "", Place.where(app).town(), due); }
             Claude.Reply r = Claude.send(MainActivity.brain(), req, new Claude.Listener() {
                 public void text(String soFar) { }
                 public void sentence(String s, String mood) { }
