@@ -652,9 +652,10 @@ final class Claude {
         else if (!b.own && !model.startsWith("claude")) { req.put("model", SONNET); retarget(req, false); }
         Reply total = null;
         boolean acted = false, usedScreen = false;
+        QuietSteps quiet = l == null ? null : new QuietSteps(l);
         for (int round = 1; ; round++) {
             Reply rep;
-            try { rep = onceRetrying(b, req, l, cancel, tools); }
+            try { rep = onceRetrying(b, req, round == 1 || quiet == null ? l : quiet, cancel, tools); }
             catch (Down | Busy e) {   // after a round that acted, the backup must never redo it: a plain error
                 if (round > 1) throw new Exception(e.getMessage());
                 throw e;
@@ -669,6 +670,8 @@ final class Claude {
                 if ("tool_use".equals(rep.stop) && rep.text.isEmpty()) rep.text = OUT_OF_STEPS;   // never stop silently
                 break;
             }
+            boolean more = ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) || "pause_turn".equals(rep.stop);
+            if (quiet != null) { if (more) quiet.drop(); else quiet.flush(); }   // a step's words stay on screen only
             if ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) {
                 acted = true;
                 JSONArray results = new JSONArray();
@@ -695,6 +698,30 @@ final class Claude {
         }
         if (total.text.isEmpty() && !acted) throw new Exception("Claude sent no answer");   // acted silently: not an error
         return total;
+    }
+
+    /**
+     * The voice after the first round of a question: the brain writes a line before every step, and each one was
+     * spoken, so a screen task talked through every step. The first round speaks as it comes (the user hears it's on
+     * it); later rounds hold their sentences, dropped if the round was another
+     * step, spoken if it was the answer. Everything still shows on screen.
+     */
+    static final class QuietSteps implements Listener {
+        private final Listener l;
+        private final List<String[]> held = new ArrayList<>();
+
+        QuietSteps(Listener l) { this.l = l; }
+
+        public void text(String soFar) { l.text(soFar); }
+        public void sentence(String s, String mood) { held.add(new String[]{s, mood}); }
+        public void looked(String tool, String what) { l.looked(tool, what); }
+
+        void drop() { held.clear(); }
+
+        void flush() {
+            for (String[] h : held) l.sentence(h[0], h[1]);
+            held.clear();
+        }
     }
 
     /** One streamed request. */

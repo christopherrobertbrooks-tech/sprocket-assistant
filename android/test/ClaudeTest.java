@@ -208,6 +208,37 @@ public class ClaudeTest {
                 "true That didn't work: no clock app");
         eq("the turn's reply and its cost add up", both.text + " " + both.input + " " + sent.size(), "Done, boss. 20 2");
 
+        // a screen task: the first line is spoken, each later step's line only shows, the answer is spoken
+        Claude.Transport before4 = Claude.transport;
+        int[] step = {0};
+        String[] lines = {"On it.", "Reading the screen.", "Tapping the search icon.", "There's your search page."};
+        Claude.transport = (key, body, l2, cancel) -> {
+            Claude.Reply x = new Claude.Reply();
+            x.model = "own-model";
+            String line = lines[step[0]];
+            if (l2 != null) { l2.text(line); l2.sentence(line, ""); }
+            x.text = line;
+            x.content.put(new JSONObject().put("type", "text").put("text", line));
+            if (step[0] < 3) {
+                x.stop = "tool_use";
+                JSONObject t = new JSONObject().put("type", "tool_use").put("id", "toolu_s" + step[0]).put("name", "screen").put("input", new JSONObject());
+                x.content.put(t);
+                x.calls.add(t);
+            } else x.stop = "end_turn";
+            step[0]++;
+            return x;
+        };
+        List<String> heard = new ArrayList<>(), shownSteps = new ArrayList<>();
+        Claude.Listener ears = new Claude.Listener() {
+            public void text(String soFar) { if (!soFar.isEmpty()) shownSteps.add(soFar); }
+            public void sentence(String x, String mood) { heard.add(x); }
+        };
+        try { Claude.send(new Claude.Brain(Claude.base, "k", true, "own-model"), r2, ears, null, (name, in) -> "Screen of Notes:"); }
+        catch (Exception e) { heard.add("ERROR " + e); }
+        Claude.transport = before4;
+        eq("screen task: says it's on it, then only the answer", heard, "[On it., There's your search page.]");
+        eq("every step still shows on screen", shownSteps.size(), 4);
+
         // a tool turn whose last round has no words (Claude said it before acting): the earlier words are the reply,
         // not "no answer" (the owner 2026-10-17: the lost reply joined his next message to the texting one, which re-sent)
         Claude.Transport keep = Claude.transport;
@@ -217,9 +248,9 @@ public class ClaudeTest {
             x.model = Claude.SONNET;
             if (++calls[0] == 1) {
                 x.stop = "tool_use";
-                x.text = "On it, boss.";
+                x.text = "On it.";
                 JSONObject b = new JSONObject().put("type", "tool_use").put("id", "toolu_t").put("name", "send_text").put("input", new JSONObject());
-                x.content.put(new JSONObject().put("type", "text").put("text", "On it, boss.")).put(b);
+                x.content.put(new JSONObject().put("type", "text").put("text", "On it.")).put(b);
                 x.calls.add(b);
             } else {
                 x.stop = "end_turn";
@@ -229,7 +260,7 @@ public class ClaudeTest {
         String before;
         try { before = Claude.send(new Claude.Brain(Claude.base, "k", false, ""), r2, null, null, (name, in) -> "Sent.").text; }
         catch (Exception e) { before = e.getMessage(); }
-        eq("words before the tool, none after: those words", before, "On it, boss.");
+        eq("words before the tool, none after: those words", before, "On it.");
         calls[0] = 0;
         Claude.transport = (key, body, l2, cancel) -> {
             Claude.Reply x = new Claude.Reply();

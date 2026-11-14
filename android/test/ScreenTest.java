@@ -90,7 +90,9 @@ public class ScreenTest {
 
         // a screenshot tap asks first when Sprocket can't read the spot, or the spot or the brain's words say risky
         // (11-12: Play Store's page read as nothing, so its spots skipped the card)
-        eq("an unreadable spot asks", Screen.pointNeedsCard(null, "the Manage apps row"), true);
+        eq("an unreadable plain spot doesn't ask", Screen.pointNeedsCard(null, "the search icon (magnifying glass) at the bottom left"), false);
+        eq("an unreadable spot the brain calls risky still asks", Screen.pointNeedsCard(null, "the Install button"), true);
+        eq("so does one it says sends", Screen.pointNeedsCard(null, "the Send arrow"), true);
         eq("a plain readable spot doesn't", Screen.pointNeedsCard(button("Top charts"), "Top charts"), false);
         eq("a risky readable spot asks", Screen.pointNeedsCard(button("Install"), "a game"), true);
         eq("the brain's words count too", Screen.pointNeedsCard(button("Open"), "the Install button"), true);
@@ -107,6 +109,17 @@ public class ScreenTest {
         eq("nothing on", Screen.handsOn(null, "dev.sprocket.app"), false);
         eq("the notice says how", Screen.handsOffNotice("3:12 am").contains("Installed apps"), true);
         eq("and when", Screen.handsOffNotice("3:12 am").contains("3:12 am"), true);
+
+        // a saved way's first button missing after opening the app (an app reopened inside a message)
+        eq("button there: go on", Screen.findStart(true, true, 0, false, false), "go");
+        eq("not there: press back inside the app", Screen.findStart(false, true, 0, false, false), "back");
+        eq("still not there: back once more", Screen.findStart(false, true, 1, false, false), "back");
+        eq("never more than two backs", Screen.findStart(false, true, 2, false, false), "give_up");
+        eq("back closed the app: open it again", Screen.findStart(false, false, 1, false, false), "reopen");
+        eq("found after reopening", Screen.findStart(true, true, 1, true, false), "go");
+        eq("reopened and still missing: slow way, no more backs", Screen.findStart(false, true, 1, true, false), "give_up");
+        eq("reopened and still not in the app: slow way", Screen.findStart(false, false, 1, true, false), "give_up");
+        eq("never presses back in a money or password app", Screen.findStart(false, true, 0, false, true), "give_up");
 
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");
         if (fails > 0) System.exit(1);

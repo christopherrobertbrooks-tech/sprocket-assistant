@@ -199,6 +199,11 @@ public class ScreenHands extends AccessibilityService {
                     List<String> labels = new ArrayList<>();
                     synchronized (ScreenHands.class) { for (Screen.Item it : lastItems) labels.add(it.label); }
                     int k = AppNotes.itemFor(st.label, labels);
+                    if (k == 0 && n >= 2 && r.steps.get(n - 2).kind.equals("open_app")) {   // 11-14: the app reopened deeper in
+                        k = h.backToStart(r.steps.get(n - 2), st.label);
+                        now = h.read();
+                        if (k > 0) k = AppNotes.itemFor(st.label, h.labels());   // the numbers of the screen just read
+                    }
                     if (k == 0) return handBack(r, n, st, "\"" + st.label + "\" isn't on this screen (the app may have changed)", now);
                     before = lastPackage;
                     try {
@@ -231,6 +236,37 @@ public class ScreenHands extends AccessibilityService {
         }
         synchronized (ScreenHands.class) { trail.replayed = true; }
         return "Went to " + r.goal + " by the saved way (" + r.steps.size() + " steps, no screen tool needed). The screen now:\n" + out;
+    }
+
+    /** The labels of the last screen read, in item order. */
+    private List<String> labels() {
+        List<String> labels = new ArrayList<>();
+        synchronized (ScreenHands.class) { for (Screen.Item it : lastItems) labels.add(it.label); }
+        return labels;
+    }
+
+    /**
+     * A saved way's first button is missing right after it opened the app (an email app reopened inside a message,
+     * where it had been left, so the menu button wasn't there and Sprocket took the slow way). Presses back inside that app
+     * (at most twice) and, if back left the app, opens it once more; looks for the button after each. Screen.findStart
+     * decides each move. Returns the button's number on the screen now, or 0.
+     */
+    private int backToStart(AppNotes.Step open, String label) throws Exception {
+        String app = lastPackage;
+        int backs = 0;
+        boolean reopened = false;
+        while (true) {
+            boolean inApp = app.equals(lastPackage);
+            int k = inApp ? AppNotes.itemFor(label, labels()) : 0;
+            String move = Screen.findStart(k > 0, inApp, backs, reopened, Screen.blockedApp(lastPackage));
+            android.util.Log.i("Sprocket", "replay looking for \"" + label + "\": " + move);
+            switch (move) {
+                case "go": return k;
+                case "back": performGlobalAction(GLOBAL_ACTION_BACK); backs++; settleAndRead(); break;
+                case "reopen": Phone.run(this, "open_app", new JSONObject().put("name", open.label)); reopened = true; settleAndRead(); break;
+                default: return 0;
+            }
+        }
     }
 
     /** Replay stopped before step n: the reason, and the screen as it is, for the brain to carry on from. */

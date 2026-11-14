@@ -146,12 +146,13 @@ final class Screen {
             + "of it); read again, or go back first";
 
     /**
-     * A screenshot tap asks first when Sprocket can't read the spot (11-12: Play Store's page read as nothing, so its
-     * spots skipped the card), or the spot or the brain's words for it are risky. it: what the screen list calls the
-     * spot, or null; what: the brain's words for it.
+     * A screenshot tap asks first only when the spot or the brain's words for it are risky (pay, install, delete, send,
+     * ...). it: what the screen list calls the spot, or null; what: the brain's words for it. 11-12 it also asked for
+     * every spot Sprocket can't read (Play Store's page read as nothing), which meant a card for every plain icon in apps
+     * whose buttons have no names. So an unreadable spot asks only when the brain's words for it are risky.
      */
     static boolean pointNeedsCard(Item it, String what) {
-        return it == null || risky(it) || risky(new Item("button", what == null ? "" : what, true, false, false, false, false));
+        return (it != null && risky(it)) || risky(new Item("button", what == null ? "" : what, true, false, false, false, false));
     }
 
     /** The card for a screenshot tap that asks first. */
@@ -171,6 +172,24 @@ final class Screen {
         if (!readApp.equals(nowApp)) return "the screen changed since it was read (another app is up now); read it again";
         if (stillShown != null && !stillShown) return "that item is gone from the screen now; read it again";
         return null;
+    }
+
+    /** At most this many back presses while looking for a saved way's first button. */
+    static final int START_BACKS = 2;
+
+    /**
+     * A saved way's first button wasn't on screen right after it opened the app (an email app reopened inside a
+     * message). The next move: "go" (the button is there), "back" (press back inside the app and look again), "reopen"
+     * (back left the app: open it once more, which lands on its main screen), or "give_up" (take the slow way, as
+     * before). If back on an app's main screen closes the app, it reopens it once, and it never presses back anywhere
+     * but in that app.
+     */
+    static String findStart(boolean found, boolean inApp, int backs, boolean reopened, boolean blocked) {
+        if (found) return "go";
+        if (blocked) return "give_up";
+        if (!inApp) return reopened ? "give_up" : "reopen";
+        if (reopened || backs >= START_BACKS) return "give_up";
+        return "back";
     }
 
     /** Null when the tap may go ahead (after a card if risky()), or why it never may. */
