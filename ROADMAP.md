@@ -15,6 +15,9 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **A backup brain.** If your own server doesn't answer, Sprocket switches to Claude for that question (when you have
   a Claude key), and if Claude is down, it switches to your own server. It tells you when it does.
 
+- **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
+  Anthropic models (a cheaper, faster one, for instance), and DeepSeek and Google's Gemini through their own APIs,
+  each with its own key, tested with Sprocket's tools before it's offered.
 ## Maybe
 - Other languages for talking and listening.
 - More brains tested through the go-between (it should already work with any OpenAI-style server that handles
