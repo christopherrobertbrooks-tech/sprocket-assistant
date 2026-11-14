@@ -72,6 +72,20 @@ Sprocket speaks Anthropic's Messages API.
 Updates install the same way, over the top, keeping your chat and lists. A copy you build yourself is signed with your
 own key instead, so it can't update a downloaded one (or the other way round) without uninstalling first.
 
+## Updating
+- **Hearing about new versions:** Sprocket doesn't check for updates itself. To be told, sign in to GitHub and, at
+  the top of this page, click **Watch > Custom**, tick **Releases**, then **Apply**. GitHub then emails you (or shows
+  a notification) when a new version comes out. The [changes in each version](https://github.com/christopherrobertbrooks-tech/sprocket-assistant/releases)
+  are listed on the Releases page.
+- **The app:** download the new `sprocket-<version>.apk` from the
+  [latest release](https://github.com/christopherrobertbrooks-tech/sprocket-assistant/releases/latest) and install it over the top, as
+  the first time. Your chat, lists, notes and settings stay, and so does screen control.
+- **The go-between** (only if you run your own model): download the new ZIP and copy the files from its `go-between`
+  folder **over your old `go-between` folder**, replacing them. Don't unzip into a fresh folder: the old folder holds
+  your access code (the file `token`), and a fresh one makes a new code, which your phone won't know. Then stop the
+  go-between (Ctrl+C in its window, or `systemctl --user restart go-between` if you set it up as a service) and
+  start it again.
+
 ### Build it yourself
 You need the Android SDK (platform 35, build-tools 35.0.0) and a JDK 17 or newer. No Gradle.
 ```
