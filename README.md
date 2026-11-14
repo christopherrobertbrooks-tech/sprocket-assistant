@@ -72,6 +72,18 @@ Sprocket speaks Anthropic's Messages API.
 Updates install the same way, over the top, keeping your chat and lists. A copy you build yourself is signed with your
 own key instead, so it can't update a downloaded one (or the other way round) without uninstalling first.
 
+### Build it yourself
+You need the Android SDK (platform 35, build-tools 35.0.0) and a JDK 17 or newer. No Gradle.
+```
+ANDROID_HOME=/path/to/sdk android/build.sh      # makes android/build/sprocket.apk (and a signing key, once)
+adb install android/build/sprocket.apk
+scripts/test.sh                                  # the plain-Java tests, on your computer
+```
+Then open Sprocket as in step 3 above.
+
+**Using a coding agent?** Claude Code, Codex or Gemini CLI can do all of this for you: open this folder in it and say
+"set up Sprocket on my phone". The steps it follows are in [AGENTS.md](AGENTS.md).
+
 ## Updating
 - **Hearing about new versions:** Sprocket doesn't check for updates itself. To be told, sign in to GitHub and, at
   the top of this page, click **Watch > Custom**, tick **Releases**, then **Apply**. GitHub then emails you (or shows
@@ -85,18 +97,6 @@ own key instead, so it can't update a downloaded one (or the other way round) wi
   your access code (the file `token`), and a fresh one makes a new code, which your phone won't know. Then stop the
   go-between (Ctrl+C in its window, or `systemctl --user restart go-between` if you set it up as a service) and
   start it again.
-
-### Build it yourself
-You need the Android SDK (platform 35, build-tools 35.0.0) and a JDK 17 or newer. No Gradle.
-```
-ANDROID_HOME=/path/to/sdk android/build.sh      # makes android/build/sprocket.apk (and a signing key, once)
-adb install android/build/sprocket.apk
-scripts/test.sh                                  # the plain-Java tests, on your computer
-```
-Then open Sprocket as in step 3 above.
-
-**Using a coding agent?** Claude Code, Codex or Gemini CLI can do all of this for you: open this folder in it and say
-"set up Sprocket on my phone". The steps it follows are in [AGENTS.md](AGENTS.md).
 
 ## Running it on your own model
 1. Start a model server on your computer. New to this? Install [Ollama](https://ollama.com) and `ollama pull` a
