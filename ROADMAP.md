@@ -6,10 +6,7 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 ## Planned
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
-- **Faster first words on your own model.** Before answering, your model reads Sprocket's instructions (about 16,000
-  words), which takes 15 seconds or more on a home graphics card when it hasn't just read them. Two ways to cut that:
-  start sending the instructions the moment you tap Talk, so only your words are left when you finish speaking; and
-  send shorter instructions, with only the tools a question is likely to need.
+
 - **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
   Anthropic models (a cheaper, faster one, for instance), and DeepSeek and Google's Gemini through their own APIs,
   each with its own key, tested with Sprocket's tools before it's offered.
