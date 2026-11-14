@@ -8,7 +8,9 @@ It starts out friendly and plain, and its personality is yours to write in Setti
 with an example to start from: a loud little robot who is sure he was built for war and now sets your timers.
 
 ## See it
-[![The demo: 1 minute 24 seconds, sound on](docs/demo-thumb.jpg)](docs/demo.mp4)
+The demo (1 minute 24 seconds, sound on):
+
+https://github.com/user-attachments/assets/51c5d3e5-6f76-4e1d-820a-68b2ae39b231
 
 | Setup, one feature at a time | Answers out loud | Texts wait for your yes | Lists, sorted by aisle |
 |:---:|:---:|:---:|:---:|
