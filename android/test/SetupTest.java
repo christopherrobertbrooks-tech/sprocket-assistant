@@ -81,6 +81,14 @@ public class SetupTest {
         for (String[] f : Config.FEATURES) all.add(f[0]);
         eq("all of Settings' switches wait for setup", new java.util.TreeSet<>(Setup.features()), all);
 
+        // the side button, last (the owner 2026-11-13: "do both"): the phone's digital assistant, set in Android's settings
+        Setup.Step side = Setup.STEPS[Setup.STEPS.length - 1];
+        eq("the side button is the last question", side.id, "assistant");
+        eq("it opens Android's own page", side.way, Setup.Way.ASSISTANT);
+        eq("it says what to tap", side.ask.contains("Digital assistant app"), true);
+        eq("done says the Samsung side-button step", Setup.ack(side, true).contains("Side button"), true);
+        eq("still not picked: says where to find it later", Setup.ASSISTANT_NOT_YET.contains("Digital assistant app"), true);
+
         System.out.println(fails == 0 ? "setup: all " + n + " checks pass" : fails + " of " + n + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }

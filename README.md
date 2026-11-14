@@ -86,6 +86,14 @@ Then open Sprocket as in step 3 above.
 **Using a coding agent?** Claude Code, Codex or Gemini CLI can do all of this for you: open this folder in it and say
 "set up Sprocket on my phone". The steps it follows are in [AGENTS.md](AGENTS.md).
 
+## Make it your phone's assistant
+Then holding the side button (or the home button) opens Sprocket over any app, even on the lock screen. Setup asks
+about this last; to do it yourself:
+- **Most phones:** Settings > Apps > Default apps > **Digital assistant app** > Sprocket.
+- **Samsung:** Settings > Apps > Choose default apps > **Digital assistant app** > Sprocket. The side button still
+  opens Bixby until you also change Settings > Advanced features > **Side button** > Press and hold > **Digital
+  assistant**.
+
 ## Updating
 - **Hearing about new versions:** Sprocket doesn't check for updates itself. To be told, sign in to GitHub and, at
   the top of this page, click **Watch > Custom**, tick **Releases**, then **Apply**. GitHub then emails you (or shows

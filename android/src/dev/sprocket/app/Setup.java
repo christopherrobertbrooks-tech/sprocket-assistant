@@ -14,7 +14,7 @@ final class Setup {
     static final int OFF = -1;                           // no setup running
 
     /** How a step gets what it needs once they say yes. */
-    enum Way { NOTHING, PERMISSIONS, NOTIFICATION_ACCESS, SCREEN_CONTROL, BOTH_SWITCHES, GITHUB_NAME }
+    enum Way { NOTHING, PERMISSIONS, NOTIFICATION_ACCESS, SCREEN_CONTROL, BOTH_SWITCHES, GITHUB_NAME, ASSISTANT }
 
     static final class Step {
         final String id, feature, name, ask, needs;      // feature: the Config switch it turns on or off (null: none)
@@ -86,6 +86,11 @@ final class Setup {
             new Step("github", "github", "GitHub",
                     "Do you use GitHub? I can keep an eye on your threads and repositories. I'll need your username.",
                     "your GitHub username", Way.GITHUB_NAME),
+            new Step("assistant", null, "The side button",       // the owner, 2026-11-13: "do both" (README and setup)
+                    "Want to open me by holding your phone's side button (or the home button), from any app and even the "
+                            + "lock screen? That makes me your phone's digital assistant. I'll open Android's Default apps "
+                            + "page: tap Digital assistant app, pick Sprocket, then come back here.",
+                    "Sprocket picked as the phone's digital assistant (a choice in Android's settings)", Way.ASSISTANT),
     };
 
     static boolean running(int at) { return at >= 0 && at < STEPS.length; }
@@ -118,10 +123,16 @@ final class Setup {
     static final String DENIED = "Android didn't allow it, so that part won't work until you allow it in Android's "
             + "settings. Moving on.";
 
+    static final String ASSISTANT_NOT_YET = "I'm not the phone's assistant yet. You can pick me any time: Android's "
+            + "Settings > Apps > Default apps > Digital assistant app (Choose default apps on a Samsung). Moving on.";
+
     static final String GITHUB_ASK = "What's your GitHub username? Type it below.";
 
     /** What Sprocket says after their answer, before the next question. */
     static String ack(Step s, boolean yes) {
+        if (yes && s.way == Way.ASSISTANT)
+            return "Done: hold the side button any time. On a Samsung, the side button opens Bixby until you change it: "
+                    + "Settings > Advanced features > Side button > Press and hold > Digital assistant.";
         if (yes) return "Done.";
         return s.feature == null ? "Okay, skipped. I'll ask again if you ever need it." : "Okay, that stays off.";
     }

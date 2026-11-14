@@ -1510,9 +1510,28 @@ public class MainActivity extends Activity {
             startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
             return;
         }
+        if (st.way == Setup.Way.ASSISTANT) {     // Android lets no app ask for this role: its own Default apps page
+            if (!isAssistant() && setupTried.add("assistant")) {
+                setupReturning = true;
+                startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+                return;
+            }
+            setupNext(isAssistant() ? Setup.ack(st, true) : Setup.ASSISTANT_NOT_YET);
+            return;
+        }
         boolean switches = (!listener || MessageListener.on(this)) && (!screen || ScreenHands.on());
         if (Place.allowed(this)) Place.refresh(this);
         setupNext(!switches ? Setup.STILL_OFF : missingPerms(st.perms).length > 0 ? Setup.DENIED : Setup.ack(st, true));
+    }
+
+    /** True when Sprocket is the phone's digital assistant (the side button), as far as this Android can tell. */
+    private boolean isAssistant() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            android.app.role.RoleManager rm = getSystemService(android.app.role.RoleManager.class);
+            return rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
+        }
+        String a = android.provider.Settings.Secure.getString(getContentResolver(), "assistant");
+        return a != null && a.startsWith(getPackageName() + "/");
     }
 
     private String[] missingPerms(String[] perms) {
