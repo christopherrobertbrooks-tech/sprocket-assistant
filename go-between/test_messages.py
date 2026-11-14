@@ -209,5 +209,32 @@ class Streamed(unittest.TestCase):
         self.assertEqual(evs[-2]["delta"]["stop_reason"], "max_tokens")
 
 
+
+class ToolNames(unittest.TestCase):
+    """2026-11-14: Qwen's "call" came out as check_texts; the model sees phone_call, the phone gets call back."""
+    REQ = {"tools": [{"name": "call", "description": "Phone someone.", "input_schema": {"type": "object", "properties": {}}}],
+           "messages": [{"role": "user", "content": [{"type": "text", "text": "call Mom"}]},
+                        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "call", "input": {"to": "Mom"}}]},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Called."}]}]}
+
+    def test_model_sees_phone_call(self):
+        body = m.to_openai(self.REQ)[0]
+        self.assertEqual([t["function"]["name"] for t in body["tools"]], ["phone_call"])
+        self.assertEqual(body["messages"][1]["tool_calls"][0]["function"]["name"], "phone_call")
+
+    def test_phone_gets_call_back(self):
+        r = m.from_openai(qwen("", [("phone_call", {"to": "Mom"})]), "qwen")
+        self.assertEqual([(b["name"], b["input"]) for b in r["content"] if b["type"] == "tool_use"], [("call", {"to": "Mom"})])
+
+    def test_phone_gets_call_back_streamed(self):
+        out = []
+        m.run_stream(self.REQ, lambda body: iter(chunks([], calls=[("phone_call", {"to": "Mom"})])), lambda q: "", "qwen", out.append)
+        evs = [json.loads([x for x in e.splitlines() if x.startswith("data:")][0][5:]) for e in out]
+        self.assertEqual([e["content_block"]["name"] for e in evs if e["type"] == "content_block_start"
+                          and e["content_block"]["type"] == "tool_use"], ["call"])
+
+    def test_other_names_untouched(self):
+        self.assertEqual(m.to_openai(SPROCKET_REQ)[0]["tools"][0]["function"]["name"], "set_timer")
+
 if __name__ == "__main__":
     unittest.main()

@@ -174,6 +174,25 @@ class StreamedOverHttp(unittest.TestCase):
             proxy.SLOT = saved
         self.assertEqual([b.get("id_slot") for b in bodies], [1, None])
 
+    def test_a_brain_file_switches_sprockets_model_for_a_trial(self):
+        import tempfile
+        f = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
+        saved = proxy.SLOT, proxy.MODEL_FILE
+        proxy.SLOT, proxy.MODEL_FILE = 1, f.name
+        tools = {"messages": [], "tools": [{"type": "function", "function": {"name": "set_timer"}}]}
+        try:
+            f.write("mai-ui-8b\n"); f.flush()
+            trial = proxy.sprocket_body(dict(tools))
+            open(f.name, "w").close()
+            back = proxy.sprocket_body(dict(tools))
+            os.unlink(f.name)
+            gone = proxy.sprocket_body(dict(tools))
+        finally:
+            proxy.SLOT, proxy.MODEL_FILE = saved
+        self.assertEqual((trial["model"], trial.get("id_slot")), ("mai-ui-8b", None))   # its own one slot, not Sprocket's
+        self.assertEqual((back["model"], back.get("id_slot")), (proxy.MODEL, 1))
+        self.assertEqual((gone["model"], gone.get("id_slot")), (proxy.MODEL, 1))
+
     def test_model_unreachable_is_a_502(self):
         def upstream(body):
             raise OSError("connection refused")

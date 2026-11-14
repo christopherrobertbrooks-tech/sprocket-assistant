@@ -58,6 +58,21 @@ def _user_parts(blocks):
     return parts
 
 
+# Tool names the model's tool-call reader garbles (2026-11-14: Sprocket's "call" tool came out as check_texts or other
+# tools in 3 of 3 tries on Qwen3.8 in llama.cpp, though Qwen's own reasoning said "call"; renamed phone_call: 4 of 4
+# right). The model sees the new name; the phone gets the old one back.
+MODEL_NAMES = {"call": "phone_call"}
+PHONE_NAMES = {v: k for k, v in MODEL_NAMES.items()}
+
+
+def _to_model(name):
+    return MODEL_NAMES.get(name, name)
+
+
+def _to_phone(name):
+    return PHONE_NAMES.get(name, name)
+
+
 def to_openai(req):
     """(OpenAI body, whether Claude's web search was offered). Server tools other than web search are dropped."""
     system = _text_of(req.get("system", ""))
@@ -70,7 +85,7 @@ def to_openai(req):
                 continue
             text = "\n".join(b.get("text", "") for b in content if b.get("type") == "text")
             calls = [{"id": b.get("id", ""), "type": "function",
-                      "function": {"name": b.get("name", ""), "arguments": json.dumps(b.get("input", {}))}}
+                      "function": {"name": _to_model(b.get("name", "")), "arguments": json.dumps(b.get("input", {}))}}
                      for b in content if b.get("type") == "tool_use"]
             msg = {"role": "assistant", "content": text}
             if calls:
@@ -95,7 +110,7 @@ def to_openai(req):
         if str(t.get("type", "")).startswith("web_search"):
             searchable = True
         elif "input_schema" in t:
-            tools.append({"type": "function", "function": {"name": t["name"], "description": t.get("description", ""),
+            tools.append({"type": "function", "function": {"name": _to_model(t["name"]), "description": t.get("description", ""),
                                                            "parameters": t["input_schema"]}})
     effort = (req.get("output_config") or {}).get("effort", "low")
     body = {"messages": messages, "max_tokens": max(int(req.get("max_tokens", 0) or 0), MIN_MAX_TOKENS),
@@ -122,7 +137,7 @@ def from_openai(resp, model):
         except ValueError:
             args = {}
         content.append({"type": "tool_use", "id": c.get("id") or "toolu_" + uuid.uuid4().hex[:20],
-                        "name": c.get("function", {}).get("name", ""), "input": args if isinstance(args, dict) else {}})
+                        "name": _to_phone(c.get("function", {}).get("name", "")), "input": args if isinstance(args, dict) else {}})
     if any(b["type"] == "tool_use" for b in content):
         stop = "tool_use"
     elif choice.get("finish_reason") == "length":
@@ -264,7 +279,7 @@ def run_stream(req, call_upstream, search, model, emit):
             except ValueError:
                 args = {}
             emit(_sse("content_block_start", {"type": "content_block_start", "index": index, "content_block": {
-                "type": "tool_use", "id": c["id"] or "toolu_" + uuid.uuid4().hex[:20], "name": c["name"], "input": {}}}))
+                "type": "tool_use", "id": c["id"] or "toolu_" + uuid.uuid4().hex[:20], "name": _to_phone(c["name"]), "input": {}}}))
             emit(_sse("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {
                 "type": "input_json_delta", "partial_json": json.dumps(args if isinstance(args, dict) else {})}}))
             emit(_sse("content_block_stop", {"type": "content_block_stop", "index": index}))
