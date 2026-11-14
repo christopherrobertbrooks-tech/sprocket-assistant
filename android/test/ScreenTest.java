@@ -76,7 +76,38 @@ public class ScreenTest {
         eq("never into a password field", Screen.refuseType("com.android.settings", pw) != null, true);
         eq("not into a button", Screen.refuseType("com.android.settings", button("OK")) != null, true);
 
-        eq("a spot it can't name asks first (Codex 042 #1)", Screen.unknownSpotCard("Maps"), "Tap a spot in Maps? I can't tell what it is, so I'm checking first.");
+        // a tap only lands on what's really on top (11-12: a menu button hidden behind Gmail's search page was tapped,
+        // and the finger landed on a recent search; 11-13: what covered it there wasn't a button, just the page).
+        // Chains: what's drawn at the item's middle, then what it sits in; the item, then what it sits in.
+        List<String> drawer = Arrays.asList("drawer button", "toolbar", "inbox"), row = Arrays.asList("recent search", "search page");
+        eq("covered by a button on another layer", Screen.onTop(row, drawer), false);
+        eq("covered by a page that isn't a button", Screen.onTop(Arrays.asList("search page", "root"), drawer), false);
+        eq("nothing drawn there (off the window)", Screen.onTop(new ArrayList<String>(), drawer), false);
+        eq("the item itself is drawn there", Screen.onTop(drawer, drawer), true);
+        eq("something inside the item is drawn there", Screen.onTop(Arrays.asList("icon", "drawer button", "toolbar"), drawer), true);
+        eq("what the item sits in, not the item", Screen.onTop(Arrays.asList("toolbar", "inbox"), drawer), false);
+        eq("the keyboard note says how to close it", Screen.KEYBOARD.contains("back"), true);
+
+        // a screenshot tap asks first when Sprocket can't read the spot, or the spot or the brain's words say risky
+        // (11-12: Play Store's page read as nothing, so its spots skipped the card)
+        eq("an unreadable spot asks", Screen.pointNeedsCard(null, "the Manage apps row"), true);
+        eq("a plain readable spot doesn't", Screen.pointNeedsCard(button("Top charts"), "Top charts"), false);
+        eq("a risky readable spot asks", Screen.pointNeedsCard(button("Install"), "a game"), true);
+        eq("the brain's words count too", Screen.pointNeedsCard(button("Open"), "the Install button"), true);
+        eq("the card for an unreadable spot says what the brain meant", Screen.pointCard("Google Play Store", null, "the Install button"),
+                "Tap a spot Sprocket can't read in Google Play Store?\nIt says it's tapping: \u201cthe Install button\u201d");
+        eq("and when it didn't say", Screen.pointCard("Maps", null, " "), "Tap a spot Sprocket can't read in Maps?");
+        eq("a risky readable spot gets the usual card", Screen.pointCard("Photos", button("Delete"), "trash"), "Tap \u201cDelete\u201d in Photos?");
+
+        // is screen control on: Android's list of switched-on services (11-13: Android switched it off by itself once)
+        eq("on, short name", Screen.handsOn("com.x/.Talk:dev.sprocket.app/.ScreenHands", "dev.sprocket.app"), true);
+        eq("on, full name", Screen.handsOn("dev.sprocket.app/dev.sprocket.app.ScreenHands", "dev.sprocket.app"), true);
+        eq("Sprocket Test's own name", Screen.handsOn("dev.sprocket.test/dev.sprocket.app.ScreenHands", "dev.sprocket.test"), true);
+        eq("only the other app's on", Screen.handsOn("dev.sprocket.test/dev.sprocket.app.ScreenHands", "dev.sprocket.app"), false);
+        eq("nothing on", Screen.handsOn(null, "dev.sprocket.app"), false);
+        eq("the notice says how", Screen.handsOffNotice("3:12 am").contains("Installed apps"), true);
+        eq("and when", Screen.handsOffNotice("3:12 am").contains("3:12 am"), true);
+
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");
         if (fails > 0) System.exit(1);
     }

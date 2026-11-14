@@ -53,6 +53,7 @@ public final class FeedService extends Service {
         NotificationManager nm = getSystemService(NotificationManager.class);
         try {
             MainActivity.init(app);
+            ScreenHands.check(app);            // screen control switched off overnight (11-13): told with the brief
             Feed f = MainActivity.feed;
             long now = System.currentTimeMillis();
             TimeZone tz = TimeZone.getDefault();

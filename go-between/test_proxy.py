@@ -118,7 +118,8 @@ class StreamedOverHttp(unittest.TestCase):
     def post(self):
         import http.client
         c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=10)
-        body = {"model": "qwen", "max_tokens": 100, "stream": True, "messages": [{"role": "user", "content": "hi"}]}
+        body = {"model": "qwen", "max_tokens": 100, "stream": True, "messages": [{"role": "user", "content": "hi"}],
+                "tools": [{"name": "set_timer", "description": "Start a timer.", "input_schema": {"type": "object", "properties": {}}}]}
         c.request("POST", "/v1/messages", json.dumps(body), {"x-api-key": "code", "content-type": "application/json"})
         return c.getresponse()
 
@@ -162,6 +163,16 @@ class StreamedOverHttp(unittest.TestCase):
         self.post().read()
         proxy.SLOT = saved
         self.assertNotIn("id_slot", seen[1])
+
+    def test_a_side_question_without_tools_stays_out_of_sprockets_slot(self):
+        bodies = []
+        saved, proxy.SLOT = proxy.SLOT, 1
+        try:
+            bodies.append(proxy.sprocket_body({"messages": [], "tools": [{"type": "function", "function": {"name": "set_timer"}}]}))
+            bodies.append(proxy.sprocket_body({"messages": []}))
+        finally:
+            proxy.SLOT = saved
+        self.assertEqual([b.get("id_slot") for b in bodies], [1, None])
 
     def test_model_unreachable_is_a_502(self):
         def upstream(body):

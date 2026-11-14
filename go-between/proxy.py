@@ -10,7 +10,7 @@ pass through untouched.
 Settings (environment): UPSTREAM (your model server, default http://127.0.0.1:8080), MODEL (its model name),
 BIND / PORT (default 127.0.0.1:8048), MONTHLY_CAP (Brave searches a month, default 1000), BRAVE_KEY_FILE (default
 ~/.config/brave-search/api-key), LOG_TOOL_RESULTS=1 to log the first words of each phone tool's answer (off by
-default: they can be private), SLOT=1 to keep a llama.cpp server slot for Sprocket (with the server on -np 2 -kvu, so
+default: they can be private), SLOT=1 to keep a llama.cpp server slot for Sprocket (with the server on -np 2 and without -kvu, so
 other apps sharing the model don't make it re-read its instructions). Clients send the access code in ./token as x-api-key or a bearer token.
 Brave results are used for the answer and never stored; only the month's search count is kept.
 Standard library only.
@@ -38,8 +38,9 @@ TOKEN_FILE = os.path.join(HERE, "token")
 USAGE_FILE = os.path.join(HERE, "usage.json")
 BRAVE_KEY_FILE = os.path.expanduser(os.environ.get("BRAVE_KEY_FILE", "~/.config/brave-search/api-key"))
 LOG_TOOL_RESULTS = os.environ.get("LOG_TOOL_RESULTS") == "1"
-# SLOT: a llama.cpp server slot kept for Sprocket (run it with -np 2 -kvu), so other apps sharing the model don't wipe
-# out Sprocket's long instructions and every question re-reads them (16,000 tokens, ~16 s on a V100; 2026-11-12)
+# SLOT: a llama.cpp server slot kept for Sprocket (run it with -np 2, not -kvu: a shared cache let other apps push it
+# out), so other apps sharing the model don't wipe out Sprocket's long instructions and every question re-reads them
+# (16,000 tokens, ~16 s on a V100; 2026-11-12)
 SLOT = int(os.environ["SLOT"]) if os.environ.get("SLOT", "").strip() else None
 
 SEARCH_TOOL = {
@@ -131,8 +132,11 @@ def call_upstream(body):
 
 
 def sprocket_body(body):
-    """Sprocket's request for the model: its model name, and its own slot when one is kept for it."""
-    return dict(body, model=MODEL, **({"id_slot": SLOT} if SLOT is not None else {}))
+    """Sprocket's request for the model: its model name, and its own slot when one is kept for it. Only its real
+    questions take the slot (they always carry its tools); a side question without tools (the route Sprocket asks for
+    after a screen task) goes elsewhere, or it would replace Sprocket's instructions in the slot (2026-11-12)."""
+    slot = {"id_slot": SLOT} if SLOT is not None and body.get("tools") else {}
+    return dict(body, model=MODEL, **slot)
 
 
 def call_upstream_stream(body):

@@ -14,11 +14,6 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   send shorter instructions, with only the tools a question is likely to need.
 - **A backup brain.** If your own server doesn't answer, Sprocket switches to Claude for that question (when you have
   a Claude key), and if Claude is down, it switches to your own server. It tells you when it does.
-- **App memory for screen control** (being built). Today Sprocket works out where things are in an app every time it
-  taps through it. It will keep a short note per app ("Battery is under Device care"), read it before tapping, and add
-  what it learns after a task that worked. The notes stay on your phone, and you can read or delete them under
-  ⋯ > Memory. Ideas from [Mika](https://github.com/wangzan101/Mika)'s per-app knowledge files and the
-  [TAG-Nav](https://arxiv.org/abs/2610.22672) paper.
 
 ## Maybe
 - Other languages for talking and listening.

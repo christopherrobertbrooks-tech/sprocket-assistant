@@ -101,7 +101,9 @@ final class PhoneTools {
                         "action", "place"))
                 .put(tool("open_screen", "Open a part of the phone for him: the camera, his photos, the voice recorder, the "
                                 + "Clock's timers or alarms, a settings page, or the home screen (that is how to get him out of "
-                                + "an app: Sprocket can't close apps). It only opens it; it changes nothing there.",
+                                + "an app: Sprocket can't close apps). It only opens it; it changes nothing there. Use it before the "
+                                + "screen tool for any settings page listed here; the software version is in about_phone_settings "
+                                + "> Software information.",
                         new JSONObject().put("screen", new JSONObject().put("type", "string").put("enum", new JSONArray(SCREENS.keySet()))), "screen"))
                 .put(tool("clock_control", "Cancel alarms in the Clock app (by time, by name, the next one, or all), snooze a "
                                 + "ringing alarm, or stop a ringing timer. The Clock app may show the alarm for him to confirm.",
@@ -122,22 +124,35 @@ final class PhoneTools {
                 .put(tool("share_location", "Text his current location (a Google Maps link) to someone, through the same Send card "
                                 + "as any text.",
                         new JSONObject().put("to", str(WHO)), "to"))
+                .put(tool("go_to", "Go to a place in an app the way Sprocket got there before: Sprocket does the taps itself, much "
+                                + "faster than the screen tool. Name the place he asked for (\"Gmail spam folder\"). Try it FIRST "
+                                + "for any place inside an app; if there's no saved way yet it says so, then use the screen tool "
+                                + "(the way is saved for next time). It returns the screen it ended on; if it stops partway, carry "
+                                + "on from there with the screen tool.",
+                        new JSONObject().put("place", str("The place, in a few words (\"Gmail spam folder\").")), "place"))
                 .put(tool("screen", "Use the phone's screen like a person, for apps and settings no other tool covers (use "
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read. scroll up/down, back, home. look: a screenshot, for screens the list "
-                                + "can't describe (maps, pictures); then tap_point at x, y in that picture. Each action returns "
-                                + "the screen after it. When you're done Sprocket comes back to its own screen by itself; if he asked to open or see "
-                                + "something (photos, an app, a map), call stay last so it stays on screen. Money and password apps are off limits. Pay, buy, delete, install, sign-out, "
+                                + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
+                                + "(a spot the list can't read asks him first). Each action returns the screen after it. Never "
+                                + "tell him something is on his screen unless you read it, or go_to returned it, in this "
+                                + "question: while he asks, Sprocket's own screen is up. When you're done Sprocket comes back to its own screen by itself; if he asked to open or see "
+                                + "something (photos, an app, a map), call stay last so it stays on screen. note: once you've reached what he "
+                                + "asked for in an app, save ONE short fact for next time about where it was, as a route (\"Battery "
+                                + "health: Battery and device care > Battery > Battery information\"); only facts you saw work, never "
+                                + "personal details. Notes you saved come back with that app's screen: use them, and check they still "
+                                + "match. Money and password apps are off limits. Pay, buy, delete, install, sign-out, "
                                 + "send, post, call and answer buttons show him a card first, and only go ahead if he taps it.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
-                                                .put("look").put("tap_point").put("stay")))
+                                                .put("look").put("tap_point").put("stay").put("note")))
                                 .put("item", new JSONObject().put("type", "integer").put("description", "For tap and type: the item's number."))
-                                .put("text", str("For type: what to type."))
+                                .put("text", str("For type: what to type. For note: the fact to save."))
                                 .put("direction", new JSONObject().put("type", "string").put("enum", new JSONArray().put("up").put("down"))
                                         .put("description", "For scroll; default down."))
                                 .put("x", new JSONObject().put("type", "integer").put("description", "For tap_point: pixels from the left of the screenshot."))
-                                .put("y", new JSONObject().put("type", "integer").put("description", "For tap_point: pixels from the top of the screenshot.")),
+                                .put("y", new JSONObject().put("type", "integer").put("description", "For tap_point: pixels from the top of the screenshot."))
+                                .put("what", str("For tap_point: what you're tapping, as it looks in the picture (\"the Install button\").")),
                         "action"));
     }
 
@@ -209,6 +224,27 @@ final class PhoneTools {
                 {"sound_settings", "android.settings.SOUND_SETTINGS", "the sound settings"},
                 {"notification_settings", "android.settings.ALL_APPS_NOTIFICATION_SETTINGS", "the notification settings"},
                 {"storage_settings", "android.settings.INTERNAL_STORAGE_SETTINGS", "the storage settings"},
+                // asked for by name: opened straight away instead of found by scrolling (11-12: ten screen steps to About phone)
+                {"about_phone_settings", "android.settings.DEVICE_INFO_SETTINGS", "About phone (model, phone number; Software information is in it)"},
+                {"apps_settings", "android.settings.MANAGE_APPLICATIONS_SETTINGS", "the list of apps"},
+                {"default_apps_settings", "android.settings.MANAGE_DEFAULT_APPS_SETTINGS", "the default apps settings"},
+                {"accessibility_settings", "android.settings.ACCESSIBILITY_SETTINGS", "the accessibility settings"},
+                {"security_settings", "android.settings.SECURITY_SETTINGS", "the security and privacy settings"},
+                {"privacy_settings", "android.settings.PRIVACY_SETTINGS", "the privacy settings"},
+                {"date_time_settings", "android.settings.DATE_SETTINGS", "the date and time settings"},
+                {"language_settings", "android.settings.LOCALE_SETTINGS", "the language settings"},
+                {"keyboard_settings", "android.settings.INPUT_METHOD_SETTINGS", "the keyboard settings"},
+                {"developer_options_settings", "android.settings.APPLICATION_DEVELOPMENT_SETTINGS", "the developer options"},
+                {"vpn_settings", "android.settings.VPN_SETTINGS", "the VPN settings"},
+                {"nfc_settings", "android.settings.NFC_SETTINGS", "the NFC settings"},
+                {"battery_saver_settings", "android.settings.BATTERY_SAVER_SETTINGS", "the power saving settings"},
+                {"dark_mode_settings", "android.settings.DARK_THEME_SETTINGS", "the dark mode settings"},
+                {"eye_comfort_settings", "android.settings.NIGHT_DISPLAY_SETTINGS", "the eye comfort (night light) settings"},
+                {"do_not_disturb_settings", "android.settings.ZEN_MODE_PRIORITY_SETTINGS", "the Do not disturb settings"},
+                {"accounts_settings", "android.settings.SYNC_SETTINGS", "the accounts settings"},
+                {"cast_settings", "android.settings.CAST_SETTINGS", "the screen casting settings"},
+                {"data_usage_settings", "android.settings.DATA_USAGE_SETTINGS", "the data usage settings"},
+                {"mobile_network_settings", "android.settings.NETWORK_OPERATOR_SETTINGS", "the mobile network settings"},
                 {"all_settings", "android.settings.SETTINGS", "the settings"},
                 {"home_screen", "android.intent.action.MAIN", "the home screen"},
         };

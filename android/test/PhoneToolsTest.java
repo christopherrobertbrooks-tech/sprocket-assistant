@@ -22,7 +22,7 @@ public class PhoneToolsTest {
         for (int i = 0; i < defs.length(); i++) names.append(i > 0 ? " " : "").append(defs.getJSONObject(i).getString("name"));
         eq("the everyday set, then the rest of the earlier test app's", names, "set_timer set_alarm set_reminder send_text call find_contact "
                 + "check_calendar add_event open_app phone_control phone_status media maps open_screen clock_control missed_calls "
-                + "email add_contact share_location screen");
+                + "email add_contact share_location go_to screen");
         for (int i = 0; i < defs.length(); i++) {
             JSONObject d = defs.getJSONObject(i);
             eq(d.getString("name") + ": a description and an object schema",
@@ -87,6 +87,14 @@ public class PhoneToolsTest {
         eq("every screen he can ask for opens something", screens != null && screens.length() >= 15 ? "[" + unmapped + "]" : "no screens", "[]");
         eq("the wifi page", PhoneTools.screen("wifi_settings")[0], "android.settings.WIFI_SETTINGS");
         eq("the alarms list", PhoneTools.screen("alarms")[0], "android.intent.action.SHOW_ALARMS");
+        // the settings pages a person asks for by name, opened directly instead of scrolling (app memory test, 11-12:
+        // ten screen steps to reach About phone)
+        eq("About phone", PhoneTools.screen("about_phone_settings")[0], "android.settings.DEVICE_INFO_SETTINGS");
+        eq("Do not disturb", PhoneTools.screen("do_not_disturb_settings")[0], "android.settings.ZEN_MODE_PRIORITY_SETTINGS");
+        eq("default apps", PhoneTools.screen("default_apps_settings")[0], "android.settings.MANAGE_DEFAULT_APPS_SETTINGS");
+        int pages = 0;
+        for (String k : PhoneTools.SCREENS.keySet()) if (k.endsWith("_settings")) pages++;
+        eq("every settings page falls back to the settings when a phone lacks it (the _settings names)", pages >= 30, true);
         eq("brightness: percent to the phone's 0-255", PhoneTools.brightness(0) + " " + PhoneTools.brightness(50) + " " + PhoneTools.brightness(100)
                 + " " + PhoneTools.brightness(140), "1 128 255 255");
         eq("brightness: the phone's level back to percent", PhoneTools.percent(128) + " " + PhoneTools.percent(255), "50 100");

@@ -33,6 +33,26 @@ public class ScreenHands extends AccessibilityService {
     private static final List<AccessibilityNodeInfo> lastNodes = new ArrayList<>();
     private static final List<Screen.Item> lastItems = new ArrayList<>();
 
+    /** This question's steps on the phone, for learning the route afterwards (AppNotes.routePrompt; app memory, 11-12). */
+    static final class Trail {
+        final List<AppNotes.Step> steps = new ArrayList<>();
+        String pkg = "", app = "", end = "";        // the app it tapped through, and the last screen it read
+        boolean tapped, replayed;                   // replayed: a saved way got all the way there (nothing new to learn)
+    }
+
+    private static Trail trail = new Trail();
+
+    /** A new question: an empty trail. */
+    static synchronized void startTrail() { trail = new Trail(); }
+
+    /** This question's trail, handed over once; a new empty one starts. */
+    static synchronized Trail takeTrail() { Trail t = trail; trail = new Trail(); return t; }
+
+    /** Another tool opened an app or a screen (kind open_app or open_screen). */
+    static synchronized void opened(String kind, String name) { if (trail.steps.size() < 40) trail.steps.add(AppNotes.Step.open(kind, name)); }
+
+    private static boolean mine(String pkg) { return pkg != null && pkg.startsWith("dev.sprocket"); }
+
     /** Set by the "stay" action: leave this app on screen when the answer is done, instead of coming back to Sprocket. */
     static volatile boolean stay;
 
@@ -42,20 +62,73 @@ public class ScreenHands extends AccessibilityService {
     static final String OFF = "screen control is off: he can turn it on under Settings > Accessibility > Installed apps "
             + "> Sprocket: screen control";
 
-    @Override protected void onServiceConnected() { live = this; }
-    @Override public boolean onUnbind(android.content.Intent i) { live = null; return super.onUnbind(i); }
+    @Override protected void onServiceConnected() { live = this; backOn(this); }
+    @Override public boolean onUnbind(android.content.Intent i) { live = null; wentOff(this); return super.onUnbind(i); }
     @Override public void onDestroy() { live = null; super.onDestroy(); }
     @Override public void onAccessibilityEvent(AccessibilityEvent e) { }
     @Override public void onInterrupt() { }
 
     static boolean on() { return live != null; }
 
+    // ------------------------------------------------------------------ screen control switched off (11-13)
+    // Android switched it off by itself once and he only found out from a failed task. Android lets no app lock it on
+    // (his choice: be told, not a way around the lock), so Sprocket notes when it went off and puts up a notice that
+    // opens the right settings page.
+
+    private static final int OFF_ID = 64;
+    private static final String OFF_CHANNEL = "screen_control";
+
+    private static android.content.SharedPreferences prefs(android.content.Context c) { return c.getSharedPreferences("hands", MODE_PRIVATE); }
+
+    /** Unbound: note the time, and put the notice up if it's really off a moment later (not just a restart). */
+    private static void wentOff(android.content.Context c) {
+        android.content.Context app = c.getApplicationContext();
+        prefs(app).edit().putLong("off_at", System.currentTimeMillis()).apply();
+        android.util.Log.i("Sprocket", "screen control unbound");
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> check(app), 3000);
+    }
+
+    private static void backOn(android.content.Context c) {
+        prefs(c).edit().remove("off_at").putBoolean("noticed", false).apply();
+        c.getSystemService(android.app.NotificationManager.class).cancel(OFF_ID);
+    }
+
+    /** Puts the notice up once per time it's found off (Sprocket opening, the morning brief, an unbind). */
+    static void check(android.content.Context c) {
+        String enabled = android.provider.Settings.Secure.getString(c.getContentResolver(),
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (Screen.handsOn(enabled, c.getPackageName()) || prefs(c).getBoolean("noticed", false)) return;
+        long at = prefs(c).getLong("off_at", 0);
+        String when = null;
+        if (at > 0) {
+            boolean today = android.text.format.DateUtils.isToday(at);
+            when = new java.text.SimpleDateFormat(today ? "h:mm a" : "MMM d, h:mm a", java.util.Locale.US).format(new java.util.Date(at))
+                    .replace("AM", "am").replace("PM", "pm");
+        }
+        android.app.NotificationManager nm = c.getSystemService(android.app.NotificationManager.class);
+        if (Build.VERSION.SDK_INT >= 26)
+            nm.createNotificationChannel(new android.app.NotificationChannel(OFF_CHANNEL, "Screen control off", android.app.NotificationManager.IMPORTANCE_DEFAULT));
+        android.app.PendingIntent open = android.app.PendingIntent.getActivity(c, 64,
+                new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                android.app.PendingIntent.FLAG_IMMUTABLE);
+        String text = Screen.handsOffNotice(when);
+        android.app.Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new android.app.Notification.Builder(c, OFF_CHANNEL) : new android.app.Notification.Builder(c);
+        nm.notify(OFF_ID, b.setSmallIcon(android.R.drawable.ic_dialog_alert).setContentTitle("Screen control is off").setContentText(text)
+                .setStyle(new android.app.Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
+        prefs(c).edit().putBoolean("noticed", true).apply();
+        android.util.Log.i("Sprocket", "screen control off notice" + (when == null ? "" : " (off at " + when + ")"));
+    }
+
     /** The screen tool: read, tap, type, scroll, back, home, look. Returns what the brain reads next. */
     static String run(JSONObject in) throws Exception {
         String step = in.optString("action", "read") + (in.has("item") ? " " + in.optInt("item") : "")
                 + (in.has("x") ? " " + in.optInt("x") + "," + in.optInt("y") : "");
+        String action = in.optString("action", "read"), before = lastPackage, label = "";
+        int item = in.optInt("item", 0);
+        synchronized (ScreenHands.class) { if (item >= 1 && item <= lastItems.size()) label = lastItems.get(item - 1).label; }
         try {
             String out = act(in);
+            remember(action, before, label, in, out);
             int nl = out.indexOf('\n');   // just the first line ("Screen of Messages:"): the screen's words stay off the log
             android.util.Log.i("Sprocket", "screen " + step + " -> " + (nl < 0 ? out : out.substring(0, nl)));
             return out;
@@ -63,6 +136,109 @@ public class ScreenHands extends AccessibilityService {
             android.util.Log.i("Sprocket", "screen " + step + " -> refused: " + e.getMessage());
             throw e;
         }
+    }
+
+    /** Adds a screen step to this question's trail, by name ("tapped \"About phone\""), not by number. */
+    private static synchronized void remember(String action, String before, String label, JSONObject in, String out) {
+        ScreenHands h = live;
+        String app = h == null || before.isEmpty() ? "the app" : h.appName(before);
+        AppNotes.Step st = null;
+        switch (action) {
+            case "tap": st = AppNotes.Step.tap(app, label); break;
+            case "type": st = AppNotes.Step.type(app, label, in.optString("text")); break;
+            case "scroll": st = AppNotes.Step.scroll(app, in.optString("direction", "down")); break;
+            case "back": st = AppNotes.Step.back(); break;
+            case "home": st = new AppNotes.Step("home", "", "", ""); break;
+            case "tap_point": st = new AppNotes.Step("tap_point", app, "", ""); break;   // a spot on a screenshot: not replayable
+            default:
+        }
+        track(st, before, out);
+    }
+
+    private static void track(AppNotes.Step st, String before, String out) {
+        if (st != null && trail.steps.size() < 40) { trail.steps.add(st); trail.replayed = false; }
+        if (st != null && ("tap".equals(st.kind) || "type".equals(st.kind) || "tap_point".equals(st.kind)) && !before.isEmpty() && !mine(before)) {
+            trail.tapped = true;
+            trail.pkg = before;
+            trail.app = st.app;
+        }
+        if (out != null && out.startsWith("Screen of ") && !mine(lastPackage))
+            trail.end = out.length() > 1500 ? out.substring(0, 1500) : out;
+    }
+
+    /**
+     * The go_to tool: a saved way to a place, done again by Sprocket itself, each button found by its name on screen
+     * (11-12: a note couldn't shorten a route that was already shortest; skipping the brain's round trip per step can).
+     * Taps go through tap(), so risky buttons still wait for his yes on a card. Stops and hands back if a button
+     * isn't there (the app changed), with the screen as it is.
+     */
+    static String replay(AppNotes.Route r, String appName) throws Exception {
+        ScreenHands h = live;
+        if (h == null) throw new Exception(OFF);
+        String out = "";
+        int n = 0;
+        for (AppNotes.Step st : r.steps) {
+            n++;
+            if (!st.kind.startsWith("open") && h.keyboardUp()) {   // 11-13: Gmail's search page kept it up over the menu's Spam
+                h.performGlobalAction(GLOBAL_ACTION_BACK);
+                Thread.sleep(500);
+                android.util.Log.i("Sprocket", "replay closed the keyboard");
+            }
+            String before = lastPackage;
+            switch (st.kind) {
+                case "open_app":
+                case "open_screen":
+                    Phone.run(h, st.kind, new JSONObject().put(st.kind.equals("open_app") ? "name" : "screen", st.label));
+                    out = h.settleAndRead();
+                    break;
+                case "tap":
+                case "type": {
+                    String now = h.read();
+                    if (!st.app.isEmpty() && !st.app.equals(h.appName(lastPackage)))   // 11-13: the screen it expects, first
+                        return handBack(r, n, st, "Sprocket is in " + h.appName(lastPackage) + ", not " + st.app, now);
+                    List<String> labels = new ArrayList<>();
+                    synchronized (ScreenHands.class) { for (Screen.Item it : lastItems) labels.add(it.label); }
+                    int k = AppNotes.itemFor(st.label, labels);
+                    if (k == 0) return handBack(r, n, st, "\"" + st.label + "\" isn't on this screen (the app may have changed)", now);
+                    before = lastPackage;
+                    try {
+                        out = st.kind.equals("tap") ? h.tap(k, false) : h.type(k, st.text);
+                    } catch (Exception e) {   // covered by another layer, or refused: stop before a wrong tap
+                        return handBack(r, n, st, "\"" + st.label + "\" can't be tapped: " + e.getMessage(), h.read());
+                    }
+                    break;
+                }
+                case "scroll": {
+                    String want = AppNotes.nextTarget(r.steps, n - 1);   // n is 1-based
+                    if (!want.isEmpty()) {
+                        String now = h.read();
+                        List<String> labels = new ArrayList<>();
+                        synchronized (ScreenHands.class) { for (Screen.Item it : lastItems) labels.add(it.label); }
+                        if (AppNotes.itemFor(want, labels) > 0) {   // already showing: no more scrolling (11-13)
+                            out = now;
+                            android.util.Log.i("Sprocket", "replay " + n + "/" + r.steps.size() + " scroll skipped: the next button shows");
+                            continue;
+                        }
+                    }
+                    out = h.scroll(!"up".equals(st.label));
+                    break;
+                }
+                case "back": h.performGlobalAction(GLOBAL_ACTION_BACK); out = h.settleAndRead(); break;
+                default: return "The saved way to " + r.goal + " has a step Sprocket can't do again (" + st.kind + "): use the screen tool.";
+            }
+            synchronized (ScreenHands.class) { track(st, before, out); }
+            android.util.Log.i("Sprocket", "replay " + n + "/" + r.steps.size() + " " + st.said());
+        }
+        synchronized (ScreenHands.class) { trail.replayed = true; }
+        return "Went to " + r.goal + " by the saved way (" + r.steps.size() + " steps, no screen tool needed). The screen now:\n" + out;
+    }
+
+    /** Replay stopped before step n: the reason, and the screen as it is, for the brain to carry on from. */
+    private static String handBack(AppNotes.Route r, int n, AppNotes.Step st, String why, String now) {
+        synchronized (ScreenHands.class) { trail.end = now.length() > 1500 ? now.substring(0, 1500) : now; }
+        android.util.Log.i("Sprocket", "replay stopped at " + n + "/" + r.steps.size() + " " + st.said());
+        return "Followed the saved way to " + r.goal + " as far as step " + n + " (" + st.said() + "), but " + why
+                + ". Nothing was tapped for that step. Carry on with the screen tool from here:\n" + now;
     }
 
     private static String act(JSONObject in) throws Exception {
@@ -78,7 +254,8 @@ public class ScreenHands extends AccessibilityService {
             case "home": h.performGlobalAction(GLOBAL_ACTION_HOME); return h.settleAndRead();
             case "look": return h.look();
             case "stay": stay = true; return "This screen stays up when you're done; Sprocket won't come back to its own screen.";
-            case "tap_point": return h.tapPoint(in.optInt("x", -1), in.optInt("y", -1));
+            case "note": return MainActivity.noteApp(lastPackage, h.appName(lastPackage), in.optString("text"));
+            case "tap_point": return h.tapPoint(in.optInt("x", -1), in.optInt("y", -1), in.optString("what"));
             default: throw new Exception("the screen tool has no action " + action);
         }
     }
@@ -91,7 +268,7 @@ public class ScreenHands extends AccessibilityService {
         lastPackage = String.valueOf(root.getPackageName());
         if (Screen.blockedApp(lastPackage)) return "The screen shows an app that is off limits (money or passwords): not read.";
         walk(root, 0, false);
-        return Screen.describe(appName(lastPackage), lastItems);
+        return Screen.describe(appName(lastPackage), lastItems) + (keyboardUp() ? Screen.KEYBOARD : "") + MainActivity.appNotesFor(lastPackage);
     }
 
     /** inRow: inside a tappable row whose label already holds its texts, so plain texts aren't listed again. */
@@ -165,12 +342,16 @@ public class ScreenHands extends AccessibilityService {
         return lastNodes.get(item - 1);
     }
 
-    private String tap(int item) throws Exception {
+    private String tap(int item) throws Exception { return tap(item, true); }
+
+    /** finger: may fall back to a finger on the spot when the button's own click fails (never for replay, 11-13). */
+    private String tap(int item, boolean finger) throws Exception {
         AccessibilityNodeInfo n = node(item);
         Screen.Item it = lastItems.get(item - 1);
         String no = Screen.refuseTap(lastPackage, it);
         if (no != null) throw new Exception(no);
         stillThere(n, 0);
+        if (!onTop(n)) throw new Exception("item " + item + Screen.COVERED);
         if (Screen.risky(it)) {   // stage 3: pay, delete, send, call... only after his OK on a card
             Boolean yes = askOnScreen(Screen.tapCard(appName(lastPackage), it, Screen.sends(it) ? typedNow() : null), "Tap it");
             if (yes == null) return "Not tapped: the boss didn't answer the card.";
@@ -180,14 +361,44 @@ public class ScreenHands extends AccessibilityService {
         AccessibilityNodeInfo target = n;
         while (target != null && !target.isClickable()) target = target.getParent();   // a label inside a clickable row
         boolean done = target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-        if (!done) {   // a finger on the same spot, but only on the screen it was read from
-            stillThere(n, 0);
+        if (!done && finger) {   // a finger on the same spot, only on the screen it was read from, and only when the
+            stillThere(n, 0);    // spot is the item itself (11-12: a failed click's finger landed on a recent search)
             Rect r = new Rect();
             n.getBoundsInScreen(r);
+            AccessibilityNodeInfo root = getRootInActiveWindow(), hit = root == null ? null : topAt(root, r.centerX(), r.centerY(), 0);
+            if (hit == null || !Screen.onTop(chain(hit), chain(n))) throw new Exception("item " + item + Screen.COVERED);
             done = gesture(r.centerX(), r.centerY(), r.centerX(), r.centerY(), 60);
         }
         if (!done) throw new Exception("the tap didn't go through");
         return settleAndRead();
+    }
+
+    /** True unless something else tappable is drawn over the item's middle, where a finger would land (Screen.onTop). */
+    private boolean onTop(AccessibilityNodeInfo n) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        Rect r = new Rect();
+        n.getBoundsInScreen(r);
+        AccessibilityNodeInfo hit = topAt(root, r.centerX(), r.centerY(), 0);
+        if (hit == null) return false;   // nothing you could see or tap there
+        boolean top = Screen.onTop(chain(hit), chain(n));
+        if (!top) android.util.Log.i("Sprocket", "covered: " + n.getClassName() + " at " + r.centerX() + "," + r.centerY() + " under "
+                + hit.getClassName() + " (kinds only: the screen's words stay off the log)");
+        return top;
+    }
+
+    /** A node, then what it sits in (empty for none). */
+    private static List<AccessibilityNodeInfo> chain(AccessibilityNodeInfo n) {
+        List<AccessibilityNodeInfo> out = new ArrayList<>();
+        for (int d = 0; n != null && d < 40; d++) { out.add(n); n = n.getParent(); }
+        return out;
+    }
+
+    /** True while the keyboard is on screen (it hides the bottom of the app, and Gmail leaves it up on its search page). */
+    private boolean keyboardUp() {
+        for (android.view.accessibility.AccessibilityWindowInfo w : getWindows())
+            if (w.getType() == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) return true;
+        return false;
     }
 
     /** The app on screen now ("" when none). */
@@ -446,10 +657,11 @@ public class ScreenHands extends AccessibilityService {
     /**
      * A tap at a spot in the last screenshot, for things the screen list can't name (maps, pictures, games). It goes
      * through the same checks as a numbered tap (Codex 040 #2): the screenshot's app must still be up, and when the
-     * spot is a button the list could name (Delete, Send, Pay...) the same card asks first; a spot it can't name at
-     * all asks too (Codex 042 #1).
+     * spot is a button the list could name (Delete, Send, Pay...) the same card asks first. A spot the list can't name
+     * asks too (Codex 042 #1; 11-12: Play Store read as nothing, so its spots skipped the card), saying what the brain
+     * meant (what).
      */
-    private String tapPoint(int x, int y) throws Exception {
+    private String tapPoint(int x, int y, String what) throws Exception {
         if (shotPackage.isEmpty()) throw new Exception("tap_point needs a screenshot first (look)");
         if (x < 0 || y < 0 || x >= SHOT_WIDTH || y >= shotHeight) throw new Exception("tap_point needs x and y inside the last screenshot");
         if (Screen.blockedApp(nowPackage())) throw new Exception("that app is off limits to Sprocket (money or passwords)");
@@ -458,9 +670,10 @@ public class ScreenHands extends AccessibilityService {
         int sx = Math.round(x * scale), sy = Math.round(y * scale);
         AccessibilityNodeInfo root = getRootInActiveWindow();
         Screen.Item it = root == null ? null : itemAt(root, sx, sy);
-        if (it == null || Screen.risky(it)) {     // not knowing what a spot does is no permission to tap it (Codex 042 #1)
-            Boolean yes = askOnScreen(it == null ? Screen.unknownSpotCard(appName(shotPackage))
-                    : Screen.tapCard(appName(shotPackage), it, Screen.sends(it) ? typedNow() : null), "Tap it");
+        if (Screen.pointNeedsCard(it, what)) {
+            String card = it != null && Screen.sends(it) ? Screen.tapCard(appName(shotPackage), it, typedNow())
+                    : Screen.pointCard(appName(shotPackage), it, what);
+            Boolean yes = askOnScreen(card, "Tap it");
             if (yes == null) return "Not tapped: the boss didn't answer the card.";
             if (!yes) return "Not tapped: the boss cancelled.";
             long end = System.currentTimeMillis() + 1500;   // his yes was for this screen
@@ -488,6 +701,24 @@ public class ScreenHands extends AccessibilityService {
         if (!under.isEmpty() && !inner.contains(under)) inner.add(under);
         String label = Screen.rowLabel(inner);
         return label.isEmpty() ? null : new Screen.Item(role(use), label, use.isClickable(), use.isEditable(), false, false, use.isPassword());
+    }
+
+    /**
+     * What a finger at a spot would touch: like deepestAt, but invisible layers don't count (11-13: Gmail lays an empty
+     * full-screen layer over everything, which made its own visible Back button look covered). Only something with
+     * words, a picture, or a tap or text box of its own; null when there's nothing like that at the spot.
+     */
+    private static AccessibilityNodeInfo topAt(AccessibilityNodeInfo n, int x, int y, int depth) {
+        if (n == null || depth > 40 || !n.isVisibleToUser()) return null;
+        Rect r = new Rect();
+        n.getBoundsInScreen(r);
+        if (!r.contains(x, y)) return null;
+        for (int i = n.getChildCount() - 1; i >= 0; i--) {   // the last child is drawn on top
+            AccessibilityNodeInfo hit = topAt(n.getChild(i), x, y, depth + 1);
+            if (hit != null) return hit;
+        }
+        boolean seen = n.isClickable() || n.isEditable() || !text(n).isEmpty() || role(n).equals("image");
+        return seen ? n : null;
     }
 
     private static AccessibilityNodeInfo deepestAt(AccessibilityNodeInfo n, int x, int y, int depth) {

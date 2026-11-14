@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
     private static Chat.Turn pending;          // the reply streaming in right now
     static Memory memory;                      // phase 3b: what he's had remembered (files/memory.json)
     static Lists lists;                        // his lists (files/lists.json)
+    static AppNotes appNotes;                  // app memory for screen control (files/app-notes.json)
     static Goals goals;                        // what he's working toward (files/goals.json)
     static Feed feed;                          // the morning brief: settings, AI news topics, the last week (files/feed.json)
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
@@ -127,6 +128,7 @@ public class MainActivity extends Activity {
         about = loadAbout();
         importAbout();
         lists = loadLists();
+        appNotes = loadAppNotes();
         goals = Goals.fromJson(read("goals.json"));
         feed = Feed.fromJson(read("feed.json"));
         FeedService.channels(app);
@@ -626,6 +628,7 @@ public class MainActivity extends Activity {
         }
         StudioService.resume(this);           // anything the studio was still making when Android ended the app
         Place.refresh(this);                  // the town, if it's older than 20 minutes (background)
+        ScreenHands.check(this);              // screen control switched off since (11-13): a notice that opens the page
     }
 
     /** This morning's brief didn't happen (the phone was off, or Android held it back): make it now that he's here. Only
@@ -1880,6 +1883,7 @@ public class MainActivity extends Activity {
         startedInApp = resumed;
         askedNow = said == null ? "" : said;
         usedHands = false;
+        ScreenHands.startTrail();
         ScreenHands.stay = false;
         boolean think = harder;
         harder = false;                          // "Think harder" is for the next question only
@@ -1888,7 +1892,7 @@ public class MainActivity extends Activity {
         MainActivity a = current;
         if (a != null) { a.styleHarder(); a.styleSend(); a.render(); }
         Claude.Brain k = brain();
-        List<Chat.Turn> history = chat.window(Claude.HISTORY_TURNS);
+        List<Chat.Turn> history = withHint(chat.window(Claude.HISTORY_TURNS), said);
         String remembered;
         synchronized (memory) { remembered = Config.on("memory") ? memory.forClaude() : null; }
         if (Setup.running(setupAt)) remembered = remembered == null ? Setup.helpNote(setupAt) : Setup.helpNote(setupAt) + "\n\n" + remembered;
@@ -1929,6 +1933,20 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** The history with a saved way that might fit added to his latest message, for this request only (not the chat). */
+    private static List<Chat.Turn> withHint(List<Chat.Turn> history, String said) {
+        String hint = "";
+        if (appNotes != null) synchronized (appNotes) { hint = appNotes.hint(said); }
+        int last = history.size() - 1;
+        while (last >= 0 && !history.get(last).role.equals("user")) last--;
+        if (hint.isEmpty() || last < 0) return history;
+        List<Chat.Turn> out = new ArrayList<>(history);
+        Chat.Turn his = out.get(last), with = new Chat.Turn("user", his.text + hint, his.at);
+        with.photos.addAll(his.photos);
+        out.set(last, with);
+        return out;
+    }
+
     /** Runs on the main thread against the screen on show, if there is one. */
     private static void onScreen(java.util.function.Consumer<MainActivity> f) {
         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { if (current != null) f.accept(current); });
@@ -1959,6 +1977,7 @@ public class MainActivity extends Activity {
         saveChat();
         if (startedInApp && usedHands && !ScreenHands.stay && !PhoneTools.wantsToSee(askedNow) && !resumed)   // the hands left him in another app: come back
             app.startActivity(new Intent(app, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+        if (r != null && error == null && usedHands) learnRoute(askedNow, reply.text);
         usedHands = false;
         if (st != null) st.write(app, r, error);
         Watch w = watch;
@@ -2022,6 +2041,91 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             android.util.Log.w("Sprocket", "lists not saved: " + e);
         }
+    }
+
+    // ------------------------------------------------------------------ app memory for screen control (AppNotes)
+    private static File appNotesFile() { return new File(app.getFilesDir(), "app-notes.json"); }
+
+    private static AppNotes loadAppNotes() {
+        try { return AppNotes.fromJson(new String(Files.readAllBytes(appNotesFile().toPath()), StandardCharsets.UTF_8)); }
+        catch (Exception e) { return new AppNotes(); }
+    }
+
+    private static void saveAppNotes() {
+        try {
+            File tmp = new File(app.getFilesDir(), "app-notes.json.tmp");
+            Files.write(tmp.toPath(), appNotes.toJson().getBytes(StandardCharsets.UTF_8));
+            if (!tmp.renameTo(appNotesFile())) throw new Exception("rename failed");
+        } catch (Exception e) {
+            android.util.Log.w("Sprocket", "app notes not saved: " + e);
+        }
+    }
+
+    private static final java.util.Set<String> REPLAYABLE = new java.util.HashSet<>(java.util.Arrays.asList("open_app",
+            "open_screen", "tap", "type", "scroll", "back"));
+
+    /**
+     * After a question that tapped through an app: ask the brain, in the background, which of the steps it took make
+     * the shortest way there and what to call the place, and save that route for go_to to replay (Qwen never used the
+     * note action itself in the first live test, 2026-11-12). Nothing to learn when a saved way got all the way there.
+     */
+    private static void learnRoute(String asked, String said) {
+        ScreenHands.Trail t = ScreenHands.takeTrail();
+        if (!t.tapped || t.replayed || t.pkg.isEmpty()) return;
+        Claude.Brain b = brain();
+        new Thread(() -> {
+            try {
+                JSONObject req = new JSONObject().put("model", Claude.qwen ? Claude.QWEN : Claude.SONNET).put("max_tokens", 400)
+                        .put("stream", true).put("messages", new JSONArray().put(new JSONObject().put("role", "user")
+                                .put("content", AppNotes.routePrompt(asked, t.steps, t.end, said))));
+                AppNotes.Choice ch = AppNotes.choice(Claude.send(b, req, null, null, null).text, t.steps.size());
+                String saved;
+                if (ch == null) saved = "no route (it didn't get there, or the answer wasn't a route)";
+                else {
+                    List<AppNotes.Step> steps = AppNotes.pick(t.steps, ch.steps);
+                    boolean ok = true;
+                    for (AppNotes.Step st : steps)
+                        if (!REPLAYABLE.contains(st.kind) || ((st.kind.equals("tap") || st.kind.equals("type")) && st.label.isEmpty())) ok = false;
+                    if (!ok) saved = "no route (a step can't be done again by name)";
+                    else synchronized (appNotes) {
+                        saved = appNotes.learnRoute(t.pkg, t.app, ch.goal, steps, System.currentTimeMillis());
+                        if (saved.startsWith("Noted")) saveAppNotes();
+                    }
+                }
+                android.util.Log.i("Sprocket", "app memory: " + saved);
+            } catch (Exception e) {
+                android.util.Log.w("Sprocket", "app memory: couldn't learn the route: " + e.getMessage());
+            }
+        }, "sprocket-route").start();
+    }
+
+    /** The go_to tool: a saved way to the place he asked for, replayed by the hands; or why not. */
+    private static String goTo(String place) throws Exception {
+        AppNotes.Route r;
+        String appName;
+        synchronized (appNotes) {
+            r = appNotes.find(place);
+            AppNotes.App a = r == null ? null : appNotes.appOf(r);
+            appName = a == null ? "" : a.name;
+        }
+        if (r == null) return "There's no saved way to that yet. Use a shortcut or the screen tool; Sprocket saves the way once it works.";
+        return ScreenHands.replay(r, appName);
+    }
+
+    /** The screen tool's note action: one fact about the app on screen, for next time. */
+    static String noteApp(String pkg, String name, String fact) {
+        if (appNotes == null) return "App notes aren't ready yet.";
+        synchronized (appNotes) {
+            String said = appNotes.learn(pkg, name, fact, System.currentTimeMillis());
+            if (said.startsWith("Noted")) saveAppNotes();
+            return said;
+        }
+    }
+
+    /** What a read of this app's screen carries: the facts noted about it, or "". */
+    static String appNotesFor(String pkg) {
+        if (appNotes == null) return "";
+        synchronized (appNotes) { return appNotes.forScreen(pkg); }
     }
 
     // ------------------------------------------------------------------ his lists in Notion (NotionSync)
@@ -2561,6 +2665,35 @@ public class MainActivity extends Activity {
             row.addView(del, delp);
             c.addView(row);
         }
+        List<AppNotes.App> apps = new ArrayList<>();       // app memory for screen control: each fact, with Delete
+        if (appNotes != null) synchronized (appNotes) {
+            for (AppNotes.App a : appNotes.apps) { AppNotes.App copy = new AppNotes.App(a.pkg, a.name); copy.facts.addAll(a.facts); apps.add(copy); }
+        }
+        TextView ah = text("What Sprocket learned about apps", 17, TEXT);
+        ah.setTypeface(Typeface.DEFAULT_BOLD);
+        ah.setPadding(0, dp(20), 0, 0);
+        c.addView(ah);
+        c.addView(text(apps.isEmpty() ? "Nothing yet. When Sprocket finds something in an app for you, it notes where it was, "
+                + "so next time it can go straight there." : "Where things are in your apps, read before Sprocket taps through "
+                + "them. Delete any that are wrong.", 14, MUTED));
+        for (AppNotes.App a : apps)
+            for (AppNotes.Fact f : a.facts) {
+                LinearLayout row = new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(10), 0, 0);
+                row.addView(text(a.name + ": " + f.text, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
+                Button del = chip("Delete");
+                del.setBackground(round(MINE, 18));
+                del.setTextColor(TEXT);
+                del.setOnClickListener(v -> {
+                    synchronized (appNotes) { appNotes.delete(a.pkg, f.id); saveAppNotes(); }
+                    memoryCard();
+                });
+                LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
+                delp.setMargins(dp(10), 0, 0, 0);
+                row.addView(del, delp);
+                c.addView(row);
+            }
         Button done = chip("Done");
         done.setBackground(round(TEXT, 18));
         done.setTextColor(0xFF111111);
@@ -2680,6 +2813,9 @@ public class MainActivity extends Activity {
     private static final Claude.Tools TOOLS = new Claude.Tools() {
         @Override public String run(String name, JSONObject input) throws Exception {
             if (name.equals("screen")) usedHands = true;
+            if (name.equals("open_app")) ScreenHands.opened("open_app", input.optString("name"));
+            if (name.equals("open_screen")) ScreenHands.opened("open_screen", input.optString("screen"));
+            if (name.equals("go_to")) { usedHands = true; return goTo(input.optString("place")); }
             if (name.equals("remember") || name.equals("forget")) return remember(name, input);
             if (name.startsWith("list_")) return listTool(name, input);
             if (name.startsWith("goal")) return goalTool(name, input);

@@ -112,15 +112,60 @@ final class Screen {
     }
 
     /**
+     * True when Android's list of switched-on accessibility services (Settings.Secure enabled_accessibility_services)
+     * holds this app's screen control (11-13: Android switched it off by itself once, and he only found out from a
+     * failed task).
+     */
+    static boolean handsOn(String enabled, String pkg) {
+        if (enabled == null) return false;
+        for (String s : enabled.split(":"))
+            if (s.equals(pkg + "/.ScreenHands") || s.equals(pkg + "/dev.sprocket.app.ScreenHands")) return true;
+        return false;
+    }
+
+    /** The notice when screen control is found off; when: the time it went off, or null if not known. */
+    static String handsOffNotice(String when) {
+        return "Android switched screen control off" + (when == null ? "" : " at " + when) + ". Tap here, then Installed apps "
+                + "> Sprocket: screen control, to turn it back on.";
+    }
+
+    /**
+     * True when the item is really what a finger on its middle would touch (11-12: a menu button hidden behind Gmail's
+     * search page still read as visible, and the tap landed on a recent search; 11-13: what covered it there was the
+     * page, not a button). top: what's drawn at the item's middle, then what it sits in (empty: nothing there); item:
+     * the item, then what it sits in. Only the item itself or something inside it counts.
+     */
+    static <T> boolean onTop(List<T> top, List<T> item) {
+        return !item.isEmpty() && top.contains(item.get(0));
+    }
+
+    static final String KEYBOARD = "(The keyboard is open over the bottom of the screen and hides what's under it: back "
+            + "closes it.)\n";
+
+    static final String COVERED = " is covered by something else on the screen (a menu, a search page or a pop-up is on top "
+            + "of it); read again, or go back first";
+
+    /**
+     * A screenshot tap asks first when Sprocket can't read the spot (11-12: Play Store's page read as nothing, so its
+     * spots skipped the card), or the spot or the brain's words for it are risky. it: what the screen list calls the
+     * spot, or null; what: the brain's words for it.
+     */
+    static boolean pointNeedsCard(Item it, String what) {
+        return it == null || risky(it) || risky(new Item("button", what == null ? "" : what, true, false, false, false, false));
+    }
+
+    /** The card for a screenshot tap that asks first. */
+    static String pointCard(String app, Item it, String what) {
+        if (it != null) return tapCard(app, it, null);
+        String card = "Tap a spot Sprocket can't read" + (app == null || app.isEmpty() ? "" : " in " + app) + "?";
+        return what == null || what.trim().isEmpty() ? card : card + "\nIt says it's tapping: “" + what.trim() + "”";
+    }
+
+    /**
      * Null when the screen is still the one the brain was shown, or why the hands must look again first (Codex 040
      * #3: a number or a picture spot from an old screen must never land on a new one). readApp: the app when it was
      * read; nowApp: the app on screen now; stillShown: the item is still there (null for a picture spot).
      */
-    /** The card for a tap at a spot the screen list can't name (a picture, a map, a game, an unlabelled button). */
-    static String unknownSpotCard(String app) {
-        return "Tap a spot in " + (app == null || app.isEmpty() ? "this app" : app) + "? I can't tell what it is, so I'm checking first.";
-    }
-
     static String changed(String readApp, String nowApp, Boolean stillShown) {
         if (readApp == null || readApp.isEmpty()) return "read the screen first";
         if (!readApp.equals(nowApp)) return "the screen changed since it was read (another app is up now); read it again";

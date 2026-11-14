@@ -31,6 +31,10 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
   (or say) yes on a card that shows exactly what will happen.
 - **Screen control:** for anything else, Sprocket reads the screen and taps through other apps like a person. Buttons
   like pay, buy, delete, install or sign out wait for your yes; banking, wallet and password apps are off limits.
+  After a task that worked, it remembers the way (say, Gmail's spam folder) and next time goes there by itself in a
+  few seconds, stopping and handing back if the app looks different. The saved ways stay on your phone, under
+  ⋯ > Memory to delete. (Ideas from [Mika](https://github.com/wangzan101/Mika)'s per-app knowledge files and the
+  [TAG-Nav](https://arxiv.org/abs/2610.22672) paper.)
 - **Call announcer:** with the phone on vibrate, it says who is calling and listens for "answer", "decline" or
   "text". Works over the lock screen. You set the hours.
 - **Lists:** groceries sorted by aisle, to-dos with due dates, lists from a photo of a recipe, and (optionally) kept
