@@ -398,7 +398,8 @@ public class ScreenHands extends AccessibilityService {
             }
             if (interactive || (!label.isEmpty() && !inRow)) {
                 lastNodes.add(n);
-                lastItems.add(new Screen.Item(role(n), label, clickable || checkable, editable, scrollable, n.isChecked(), n.isPassword()));
+                lastItems.add(new Screen.Item(role(n), label, clickable || checkable, editable, scrollable, n.isChecked(), n.isPassword(),
+                        n.isEnabled()));
             }
         }
         for (int i = 0; i < n.getChildCount(); i++) walk(n.getChild(i), depth + 1, row);
@@ -801,11 +802,11 @@ public class ScreenHands extends AccessibilityService {
             if (Screen.clickUnderPoint(b.contains(sx, sy), (long) b.width() * b.height(), (long) dm.widthPixels * dm.heightPixels)
                     && hit.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 android.util.Log.i("Sprocket", "tap_point clicked the button under the spot");
-                return settleAndRead();
+                return Screen.afterPoint(settleAndRead());
             }
         }
         if (!gesture(sx, sy, sx, sy, 60)) throw new Exception("the tap didn't go through");
-        return settleAndRead();
+        return Screen.afterPoint(settleAndRead());
     }
 
     /** What sits under a spot on screen, labelled as the screen list would label it, or null for nothing nameable. */

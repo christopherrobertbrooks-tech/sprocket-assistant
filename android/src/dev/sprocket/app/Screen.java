@@ -16,12 +16,18 @@ final class Screen {
     /** One thing on the screen, as ScreenHands found it. */
     static final class Item {
         final String role, label;
-        final boolean clickable, editable, scrollable, checked, password;
+        final boolean clickable, editable, scrollable, checked, password, enabled;
 
         Item(String role, String label, boolean clickable, boolean editable, boolean scrollable, boolean checked, boolean password) {
+            this(role, label, clickable, editable, scrollable, checked, password, true);
+        }
+
+        /** enabled false: greyed out, the phone won't let it change right now (11-15: Battery Saver while charging). */
+        Item(String role, String label, boolean clickable, boolean editable, boolean scrollable, boolean checked, boolean password,
+             boolean enabled) {
             this.role = role; this.label = label == null ? "" : label.trim().replace('\n', ' ');
             this.clickable = clickable; this.editable = editable; this.scrollable = scrollable;
-            this.checked = checked; this.password = password;
+            this.checked = checked; this.password = password; this.enabled = enabled;
         }
     }
 
@@ -32,6 +38,7 @@ final class Screen {
     static String describe(String app, List<Item> items) {
         StringBuilder b = new StringBuilder("Screen of ").append(app == null || app.isEmpty() ? "an unknown app" : app).append(":\n");
         int shown = Math.min(items.size(), MAX_ITEMS);
+        boolean grey = false;
         for (int i = 0; i < shown; i++) {
             Item it = items.get(i);
             String label = it.password ? "(password field)" : it.label;
@@ -39,13 +46,15 @@ final class Screen {
             b.append('[').append(i + 1).append("] ").append(it.role);
             if (!label.isEmpty()) b.append(" \"").append(label).append('"');
             if (it.checked) b.append(" (on)");
-            if (it.editable) b.append(" (type)");
+            if (!it.enabled) { b.append(" (greyed out)"); grey = true; }
+            else if (it.editable) b.append(" (type)");
             else if (it.clickable) b.append(" (tap)");
             if (it.scrollable) b.append(" (scrolls)");
             b.append('\n');
         }
         if (items.size() > shown) b.append("... and ").append(items.size() - shown).append(" more; scroll to see them.\n");
         if (items.isEmpty()) b.append("(nothing readable on this screen)\n");
+        if (grey) b.append(GREYED);
         return b.toString();
     }
 
@@ -189,6 +198,22 @@ final class Screen {
         return keyboardUp && pkg != null && !pkg.isEmpty() && !mine && !pkg.equals(alreadyClosedIn) && !blockedApp(pkg);
     }
 
+    /**
+     * Under a screen with greyed-out items (11-15 playground: Battery Saver's switch is greyed out while the phone
+     * charges; it read as a plain switch and the brain said it was on).
+     */
+    static final String GREYED = "(Greyed out: the phone won't let that item be used or changed right now, often for a "
+            + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done.)\n";
+
+    /**
+     * A tap on a spot in a picture can land somewhere else (11-15 playground: it opened the wrong page and the brain
+     * said "both done"), so its screen comes back with a reminder.
+     */
+    static String afterPoint(String screen) {
+        return screen + "(That was a tap on a spot in a picture, so it may have landed somewhere else: say it worked only "
+                + "if this screen shows the change.)\n";
+    }
+
     static final String KEYBOARD = "(The keyboard is open over the bottom of the screen and hides what's under it: back "
             + "closes it.)\n";
 
@@ -262,6 +287,8 @@ final class Screen {
     /** Null when the tap may go ahead (after a card if risky()), or why it never may. */
     static String refuseTap(String packageName, Item it) {
         if (blockedApp(packageName)) return "that app is off limits to Sprocket (money or passwords)";
+        if (it != null && !it.enabled) return "that item is greyed out: the phone won't let it change right now (look for a "
+                + "reason on the screen, like charging); tell the boss that instead of saying it's done";
         return null;
     }
 

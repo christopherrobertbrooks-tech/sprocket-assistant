@@ -25,6 +25,19 @@ public class ScreenTest {
         eq("numbered, with what each can do", Screen.describe("Settings", items),
                 "Screen of Settings:\n[1] text \"Wi-Fi\"\n[2] switch \"Wi-Fi\" (on) (tap)\n[3] box \"Search settings\" (type)\n"
                         + "[4] list (scrolls)\n[5] box \"(password field)\" (type)\n");
+        // 11-15 playground h08: Battery Saver's switch is greyed out while charging; it read as a plain "switch (on)"
+        // and Sprocket said it was on. Greyed-out items say so, the list explains, and a tap on one is refused.
+        Screen.Item grey = new Screen.Item("switch", "Use Battery Saver", true, false, false, true, false, false);
+        eq("a greyed-out item says so, and the list says what that means", Screen.describe("Settings", Arrays.asList(grey)),
+                "Screen of Settings:\n[1] switch \"Use Battery Saver\" (on) (greyed out)\n" + Screen.GREYED);
+        eq("an item is usable unless told otherwise", button("OK").enabled, true);
+        eq("a tap on a greyed-out item is refused, saying why", Screen.refuseTap("com.android.settings", grey) != null
+                && Screen.refuseTap("com.android.settings", grey).contains("greyed out"), true);
+        eq("the greyed-out note tells it not to claim the change", Screen.GREYED.contains("can't be changed right now"), true);
+        // 11-15 playground h07: a tap on a spot in a picture landed on the wrong page and Sprocket said "both done".
+        eq("a tap on a spot reminds it to check the screen before saying it worked",
+                Screen.afterPoint("Screen of Settings:\n").startsWith("Screen of Settings:\n")
+                        && Screen.afterPoint("Screen of Settings:\n").contains("only if this screen shows the change"), true);
         eq("an empty screen says so", Screen.describe("", new ArrayList<>()), "Screen of an unknown app:\n(nothing readable on this screen)\n");
 
         List<Screen.Item> many = new ArrayList<>();
