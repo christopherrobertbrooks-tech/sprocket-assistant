@@ -20,6 +20,14 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **Food spending.** "How much have I spent on DoorDash this month?" reads the order history in your delivery apps and
   adds it up, which fits with lunch budgets and remembering your food.
 
+- **Scheduled and conditional tasks.** Ask once and Sprocket does it later, or on repeat: "at 8 tomorrow, check the
+  weather and only tell me if it'll rain", "every Friday at 5, see if my usual pizza place has a deal". It runs on
+  time even when you're not in the app, and anything that sends, calls or buys still waits for your yes (it asks with
+  a notification). The idea comes from [Mika](https://github.com/wangzan101/Mika).
+
+- **Correct it mid-task.** Talk to Sprocket while it's working to change the plan ("make that a large", "skip the
+  fries") without starting over, and after you stop it, "keep going" picks up where it left off. Also an idea from Mika.
+
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
 - **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
