@@ -4,6 +4,22 @@ Sprocket is a personal project, shared as-is, and grows with what its owner uses
 what might happen, and what won't (with the reason). Ideas are welcome in [Discussions](../../discussions/categories/ideas).
 
 ## Planned
+- **Grocery list to cart.** "Put my grocery list in my Walmart cart": Sprocket takes the list it already keeps and
+  adds each item to your grocery or delivery app's cart (Walmart, Instacart, Target and others), asks when an item has
+  several close matches, tells you what it couldn't find, and stops on the cart for your tap. It never places the order.
+
+- **Where's my food?** "Where's my order?" opens your delivery app or the restaurant's own app and reads the live
+  status: being made, picked up, or a few minutes away.
+
+- **What did you just do? Undo that.** A short log on your phone of what Sprocket tapped and changed for each request,
+  so you can ask what it did, and "undo that" puts a setting it changed back the way it was.
+
+- **Talk with your headset button.** Press the button on Bluetooth earbuds, a headset or your car to talk to Sprocket
+  with the phone in your pocket. Still push to talk: it listens only after the press.
+
+- **Food spending.** "How much have I spent on DoorDash this month?" reads the order history in your delivery apps and
+  adds it up, which fits with lunch budgets and remembering your food.
+
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
 - **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
@@ -34,6 +50,8 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
   Disturb and dims the screen. Anything risky in a routine still asks first, like it does today.
+- **What did I miss?** A spoken run-through of the notifications that came in since you last looked, leaving out the
+  noise.
 - Other languages for talking and listening.
 - More brains tested through the go-between (it should already work with any OpenAI-style server that handles
   tool calls well).
