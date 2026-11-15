@@ -14,6 +14,12 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   with the same name, a tool that times out after it worked, a change of mind halfway, a card you cancel), with pretend
   apps and data only. A checker grades what actually happened, not what Sprocket said, and each failure becomes a fix.
 
+- **Show me how.** Teach Sprocket a task by doing it once yourself: say "watch me", then tap through it (a setting
+  buried three screens deep, a reorder in a food app). Sprocket records which screens you open and which buttons you
+  tap, and saves them as a skill it follows the next time you ask, checking each step still matches as it goes. Only
+  while you've asked it to watch, with a notice on screen the whole time. What you type and anything in banking or
+  password apps is never recorded, and recordings stay on the phone.
+
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
   Disturb and dims the screen. Anything risky in a routine still asks first, like it does today.
