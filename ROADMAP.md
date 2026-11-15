@@ -10,7 +10,13 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   Anthropic models (a cheaper, faster one, for instance), and DeepSeek and Google's Gemini through their own APIs,
   each with its own key, tested with Sprocket's tools before it's offered.
 
+- **A practice ground.** Sprocket's brain works through hard, made-up phone situations before releases (two contacts
+  with the same name, a tool that times out after it worked, a change of mind halfway, a card you cancel), with pretend
+  apps and data only. A checker grades what actually happened, not what Sprocket said, and each failure becomes a fix.
+
 ## Maybe
+- **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
+  Disturb and dims the screen. Anything risky in a routine still asks first, like it does today.
 - Other languages for talking and listening.
 - More brains tested through the go-between (it should already work with any OpenAI-style server that handles
   tool calls well).
