@@ -49,6 +49,22 @@ public class ScreenTest {
         eq("a fractional range keeps its decimals", Screen.sliderValue("", true, 1.15f, 0.85f, 2f, 1), "at 1.15, from 0.85 to 2");
         eq("no value, nothing added", Screen.sliderValue("", false, 0f, 0f, 0f, 0), "");
         eq("an item has no value unless told", button("OK").value, "");
+        // a phone test: "add 42 cheeseburgers" ran out of steps; a quantity + takes 41 taps. One tap
+        // action can now press the same button again and again, finding it by its label after each screen change.
+        List<Screen.Item> qtyScreen = Arrays.asList(button("Decrease quantity"), new Screen.Item("text", "1", false, false, false, false, false),
+                button("Increase quantity"), button("Add to cart"));
+        eq("the same button where it was", Screen.repeatTarget(qtyScreen, button("Increase quantity"), 3), 3);
+        List<Screen.Item> shifted = Arrays.asList(new Screen.Item("text", "Max 50", false, false, false, false, false),
+                button("Decrease quantity"), new Screen.Item("text", "2", false, false, false, false, false), button("Increase quantity"));
+        eq("the same button after the list shifted", Screen.repeatTarget(shifted, button("Increase quantity"), 3), 4);
+        eq("gone: stop", Screen.repeatTarget(Arrays.asList(button("Add to cart")), button("Increase quantity"), 1), -1);
+        eq("two the same and neither where it was: stop", Screen.repeatTarget(Arrays.asList(button("x"), button("+"), button("+")),
+                button("+"), 1), -1);
+        eq("an unlabelled button only where it was", Screen.repeatTarget(Arrays.asList(button(""), button("")), button(""), 2), 2);
+        eq("a risky button is never repeated", Screen.refuseRepeat(button("Place order")) != null, true);
+        eq("a plain + is fine to repeat", Screen.refuseRepeat(button("Increase quantity")), null);
+        eq("a greyed-out + isn't", Screen.refuseRepeat(new Screen.Item("button", "+", true, false, false, false, false, false)) != null, true);
+        eq("Sprocket's own screen says how to get out of it", Screen.OWN_SCREEN.contains("open_app"), true);
         eq("an empty screen says so", Screen.describe("", new ArrayList<>()), "Screen of an unknown app:\n(nothing readable on this screen)\n");
 
         List<Screen.Item> many = new ArrayList<>();

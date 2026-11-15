@@ -239,6 +239,48 @@ public class ClaudeTest {
         eq("screen task: says it's on it, then only the answer", heard, "[On it., There's your search page.]");
         eq("every step still shows on screen", shownSteps.size(), 4);
 
+        // a phone test: two food orders hit the step limit and Sprocket went silent: the "too many steps" line
+        // only showed on screen, and an answer given on the very last allowed step wasn't spoken either.
+        for (boolean answersLast : new boolean[]{false, true}) {
+            Claude.Transport before5 = Claude.transport;
+            int[] n = {0};
+            int limit = Claude.roundLimit(true, true);
+            Claude.transport = (key, body, l2, cancel) -> {
+                Claude.Reply x = new Claude.Reply();
+                x.model = "own-model";
+                n[0]++;
+                boolean last = answersLast && n[0] == limit;
+                String line = n[0] == 1 ? "On it, boss." : last ? "Two hash browns are in your cart, boss." : "Tapping the plus.";
+                if (l2 != null) { l2.text(line); l2.sentence(line, ""); }
+                x.text = line;
+                x.content.put(new JSONObject().put("type", "text").put("text", line));
+                if (!last) {
+                    x.stop = "tool_use";
+                    JSONObject t = new JSONObject().put("type", "tool_use").put("id", "toolu_l" + n[0]).put("name", "screen").put("input", new JSONObject());
+                    x.content.put(t);
+                    x.calls.add(t);
+                } else x.stop = "end_turn";
+                return x;
+            };
+            List<String> said5 = new ArrayList<>();
+            Claude.Listener ears5 = new Claude.Listener() {
+                public void text(String soFar) { }
+                public void sentence(String x, String mood) { said5.add(x); }
+            };
+            JSONObject r5 = new JSONObject().put("model", "own-model").put("messages", new JSONArray()
+                    .put(new JSONObject().put("role", "user").put("content", "add hash browns")));
+            Claude.Reply got5 = null;
+            try { got5 = Claude.send(new Claude.Brain(Claude.base, "k", true, "own-model"), r5, ears5, null, (name, in) -> "Screen of DoorDash:"); }
+            catch (Exception e) { said5.add("ERROR " + e); }
+            Claude.transport = before5;
+            String lastHeard = said5.isEmpty() ? "" : said5.get(said5.size() - 1);
+            if (answersLast) eq("an answer on the last allowed step is spoken", lastHeard, "Two hash browns are in your cart, boss.");
+            else {
+                eq("out of steps: it says so out loud", String.join(" ", said5).endsWith(Claude.OUT_OF_STEPS), true);
+                eq("out of steps: and that's the reply", got5 == null ? "" : got5.text, Claude.OUT_OF_STEPS);
+            }
+        }
+
         // a tool turn whose last round has no words (Claude said it before acting): the earlier words are the reply,
         // not "no answer" (the owner 2026-10-17: the lost reply joined his next message to the texting one, which re-sent)
         Claude.Transport keep = Claude.transport;
@@ -475,7 +517,7 @@ public class ClaudeTest {
                 c.window(24), false).getString("model"), Claude.SONNET);
         // the hands: more rounds once the screen is used, Qwen more than Claude
         eq("plain questions: 6 rounds", Claude.roundLimit(false, false), Claude.MAX_ROUNDS);
-        eq("screen on his own model: 25", Claude.roundLimit(true, true), 25);
+        eq("screen on their own model: 40", Claude.roundLimit(true, true), 40);
         eq("screen on Claude: 12", Claude.roundLimit(true, false), 12);
         // each message says which brain is answering (the owner 2026-11-11: "sprocket thinks it's running from claude still")
         Config.own = true;

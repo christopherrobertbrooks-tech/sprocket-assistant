@@ -549,7 +549,7 @@ final class Claude {
     static final int MAX_ROUNDS = 6;
     // The hands (stage 1) take a step per tap or scroll, so a question that uses the screen gets more rounds: plenty on
     // Qwen (free), fewer on Claude (every round re-sends the whole prompt, at a price).
-    static final int SCREEN_ROUNDS_QWEN = 25, SCREEN_ROUNDS_CLAUDE = 12;
+    static final int SCREEN_ROUNDS_QWEN = 40, SCREEN_ROUNDS_CLAUDE = 12;
     static final String OUT_OF_STEPS = "That took more steps than I'm allowed. I stopped partway; ask again and I'll pick it up.";
 
     static int roundLimit(boolean usedScreen, boolean onOwn) {
@@ -666,8 +666,16 @@ final class Claude {
             }
             total = rep;
             for (JSONObject call : rep.calls) if ("screen".equals(call.optString("name"))) usedScreen = true;
-            if (round >= roundLimit(usedScreen, b.own)) {
-                if ("tool_use".equals(rep.stop) && rep.text.isEmpty()) rep.text = OUT_OF_STEPS;   // never stop silently
+            if (round >= roundLimit(usedScreen, b.own)) {   // two food orders once ended here in silence
+                boolean acting = ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) || "pause_turn".equals(rep.stop);
+                if (acting || rep.text.isEmpty()) {   // still mid-task: say so out loud, not a step's words
+                    if (quiet != null) quiet.drop();
+                    rep.text = OUT_OF_STEPS;
+                    if (l != null) {
+                        l.text(OUT_OF_STEPS);
+                        for (String s : OUT_OF_STEPS.split("(?<=[.!?])\\s+")) l.sentence(s, "");
+                    }
+                } else if (quiet != null) quiet.flush();   // it answered on its last allowed step: speak the answer
                 break;
             }
             boolean more = ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) || "pause_turn".equals(rep.stop);

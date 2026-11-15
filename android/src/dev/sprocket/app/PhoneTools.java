@@ -134,7 +134,8 @@ final class PhoneTools {
                         new JSONObject().put("place", str("The place, in a few words (\"Gmail spam folder\").")), "place"))
                 .put(tool("screen", "Use the phone's screen like a person, for apps and settings no other tool covers (use "
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
-                                + "from the last read. scroll up/down, back, home. look: a screenshot, for screens the list "
+                                + "from the last read; tap with times presses the same button again and again in one step (a "
+                                + "quantity +), up to 50. scroll up/down, back, home. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
                                 + "(it asks them first only when it sounds risky). Each action returns the screen after it. Never "
                                 + "tell them something is on their screen unless you read it, or go_to returned it, in this "
@@ -152,6 +153,7 @@ final class PhoneTools {
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
                                                 .put("look").put("tap_point").put("stay").put("note").put("switch_off")))
                                 .put("item", new JSONObject().put("type", "integer").put("description", "For tap and type: the item's number."))
+                                .put("times", new JSONObject().put("type", "integer").put("description", "For tap: press it this many times (default 1, at most 50)."))
                                 .put("text", str("For type: what to type. For note: the fact to save."))
                                 .put("direction", new JSONObject().put("type", "string").put("enum", new JSONArray().put("up").put("down"))
                                         .put("description", "For scroll; default down."))

@@ -215,6 +215,37 @@ final class Screen {
     static final String GREYED = "(Greyed out: the phone won't let that item be used or changed right now, often for a "
             + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done.)\n";
 
+    /** A tap pressed again and again (a quantity +) goes at most this many times in one step. */
+    static final int MAX_REPEAT = 50;
+
+    /**
+     * Where the button being pressed again is now (1-based), or -1 to stop (a phone test: 42 cheeseburgers meant 41
+     * taps of a delivery app's +, past the step limit). The screen is read again after every tap: the same spot if it still
+     * holds that button, else the one button with the same role and label; gone or ambiguous stops. An unlabelled
+     * button is only trusted where it was.
+     */
+    static int repeatTarget(List<Item> items, Item wanted, int oldIndex) {
+        if (oldIndex >= 1 && oldIndex <= items.size() && same(items.get(oldIndex - 1), wanted)) return oldIndex;
+        if (wanted.label.isEmpty()) return -1;
+        int found = -1;
+        for (int i = 0; i < items.size(); i++) {
+            if (!same(items.get(i), wanted)) continue;
+            if (found != -1) return -1;
+            found = i + 1;
+        }
+        return found;
+    }
+
+    private static boolean same(Item a, Item b) { return a.role.equals(b.role) && a.label.equals(b.label); }
+
+    /** Null when this button may be pressed again and again, or why not. */
+    static String refuseRepeat(Item it) {
+        if (risky(it)) return "a button that needs his OK is never pressed more than once in a go";
+        if (!it.enabled) return "that button is greyed out";
+        if (!it.clickable) return "that item isn't a button";
+        return null;
+    }
+
     /**
      * Where a slider is, for the screen list (11-15 sealed set, Codex 047: the font size slider read as a bare
      * "slider", so the brain guessed its position from a picture and said "back to normal" when it wasn't). Android's
@@ -241,6 +272,13 @@ final class Screen {
         return screen + "(That was a tap on a spot in a picture, so it may have landed somewhere else: say it worked only "
                 + "if this screen shows the change.)\n";
     }
+
+    /**
+     * Under Sprocket's own screen (a phone test: asked for hash browns, it read its own screen 8 times in a row, a
+     * third of its steps, before going to the delivery app).
+     */
+    static final String OWN_SCREEN = "(This is Sprocket's own screen, which is up while he asks; reading again shows it "
+            + "again. To use another app, open it first: open_app, go_to or open_screen.)\n";
 
     static final String KEYBOARD = "(The keyboard is open over the bottom of the screen and hides what's under it: back "
             + "closes it.)\n";

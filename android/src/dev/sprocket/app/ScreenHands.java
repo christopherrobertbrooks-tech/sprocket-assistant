@@ -348,7 +348,7 @@ public class ScreenHands extends AccessibilityService {
         }
         switch (action) {
             case "read": return h.read();
-            case "tap": return h.tap(in.optInt("item"));
+            case "tap": return in.optInt("times", 1) > 1 ? h.tapTimes(in.optInt("item"), in.optInt("times")) : h.tap(in.optInt("item"));
             case "type": return h.type(in.optInt("item"), in.optString("text"));
             case "scroll": return h.scroll(!"up".equals(in.optString("direction", "down")));
             case "back": h.performGlobalAction(GLOBAL_ACTION_BACK); return h.settleAndRead();
@@ -377,7 +377,8 @@ public class ScreenHands extends AccessibilityService {
         lastPackage = String.valueOf(root.getPackageName());
         if (Screen.blockedApp(lastPackage)) return "The screen shows an app that is off limits (money or passwords): not read.";
         walk(root, 0, false);
-        return Screen.describe(appName(lastPackage), lastItems) + (keyboardUp() ? Screen.KEYBOARD : "") + MainActivity.appNotesFor(lastPackage);
+        return Screen.describe(appName(lastPackage), lastItems) + (keyboardUp() ? Screen.KEYBOARD : "")
+                + (mine(lastPackage) ? Screen.OWN_SCREEN : "") + MainActivity.appNotesFor(lastPackage);
     }
 
     /** inRow: inside a tappable row whose label already holds its texts, so plain texts aren't listed again. */
@@ -462,6 +463,30 @@ public class ScreenHands extends AccessibilityService {
     }
 
     private String tap(int item) throws Exception { return tap(item, true); }
+
+    /**
+     * The same button pressed times times in one step (a quantity +), re-finding it after every tap (Screen.repeatTarget).
+     * Never a button that needs his card; stops early when the button goes away or stops being pressable.
+     */
+    private String tapTimes(int item, int times) throws Exception {
+        node(item);   // throws for a number that isn't on the last read
+        Screen.Item want = lastItems.get(item - 1);
+        String no = Screen.refuseRepeat(want);
+        if (no != null) throw new Exception(no);
+        int n = Math.min(times, Screen.MAX_REPEAT), done = 0, at = item;
+        String screen = "";
+        for (; done < n; done++) {
+            if (done > 0) {
+                at = Screen.repeatTarget(lastItems, want, at);
+                if (at < 0 || !lastItems.get(at - 1).enabled) break;
+            }
+            screen = tap(at, true);
+        }
+        String head = "Tapped \u201c" + (want.label.isEmpty() ? want.role : want.label) + "\u201d " + done
+                + (done == 1 ? " time" : " times") + (done < times ? " (asked for " + times + (times > Screen.MAX_REPEAT
+                ? "; at most " + Screen.MAX_REPEAT + " in one go" : "; it went away or greyed out") + ")" : "") + ". Check the screen shows it.\n";
+        return head + screen;
+    }
 
     /** finger: may fall back to a finger on the spot when the button's own click fails (never for replay, 11-13). */
     private String tap(int item, boolean finger) throws Exception {
