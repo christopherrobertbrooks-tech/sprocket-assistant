@@ -148,6 +148,24 @@ public class ScreenTest {
         eq("a whole-screen layer: use a finger", Screen.clickUnderPoint(true, 1080L * 2000, 1080L * 2340), false);
         eq("the spot isn't on it: use a finger", Screen.clickUnderPoint(false, 984L * 168, 1080L * 2340), false);
 
+
+        // the phone's own details, so a how-to search finds steps for this phone and this texting app (2026-11-14)
+        eq("phone line, Samsung", Screen.phoneLine("samsung", "SM-S936U", "17", "90000", "com.google.android.apps.messaging", "Messages"),
+                "This phone: Samsung SM-S936U, Android 17, One UI 9.0. Its texting app is Google Messages.");
+        eq("phone line, One UI point release", Screen.phoneLine("samsung", "SM-S931U", "16", "80500", "com.samsung.android.messaging", "Messages"),
+                "This phone: Samsung SM-S931U, Android 16, One UI 8.5. Its texting app is Samsung Messages.");
+        eq("phone line, not Samsung, no texting app", Screen.phoneLine("Google", "Pixel 10", "17", "", null, null),
+                "This phone: Google Pixel 10, Android 17.");
+        eq("phone line, label already says the maker", Screen.phoneLine("Google", "Pixel 10", "17", null, "com.google.android.apps.messaging", "Google Messages"),
+                "This phone: Google Pixel 10, Android 17. Its texting app is Google Messages.");
+        eq("phone line, a junk One UI value is left out", Screen.phoneLine("samsung", "SM-S936U", "17", "abc", null, null),
+                "This phone: Samsung SM-S936U, Android 17.");
+        try {
+            String persona = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/assets/persona.md")), "UTF-8");
+            eq("persona: stuck in an app, search with this phone's details", persona.contains("Stuck in an app") && persona.contains("This phone"), true);
+            eq("persona: one conversation's look is in its own menu", persona.contains("that conversation's own menu"), true);
+        } catch (java.io.IOException e) { eq("persona readable", e, ""); }
+
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");
         if (fails > 0) System.exit(1);
     }

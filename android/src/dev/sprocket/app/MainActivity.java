@@ -116,6 +116,23 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------ setup
     /** Everything Sprocket needs, loaded once per run of the app: by this screen or by the side-button card, whichever
      * comes first (the card can open when the app hasn't been opened since the phone started). */
+    /** This phone's maker, model, Android and One UI versions and texting app, for how-to searches (Screen.phoneLine). */
+    static String phoneLine(Context c) {
+        String oneUi = "", smsPkg = null, smsLabel = null;
+        try {
+            oneUi = (String) Class.forName("android.os.SystemProperties").getMethod("get", String.class, String.class)
+                    .invoke(null, "ro.build.version.oneui", "");
+        } catch (Exception e) { /* not Samsung, or hidden */ }
+        try {
+            smsPkg = android.provider.Telephony.Sms.getDefaultSmsPackage(c);
+            if (smsPkg != null) {
+                android.content.pm.PackageManager pm = c.getPackageManager();
+                smsLabel = String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(smsPkg, 0)));
+            }
+        } catch (Exception e) { smsPkg = null; }
+        return Screen.phoneLine(Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE, oneUi, smsPkg, smsLabel);
+    }
+
     static synchronized void init(Context c) {
         if (app != null && chat != null) return;
         app = c.getApplicationContext();
@@ -123,6 +140,7 @@ public class MainActivity extends Activity {
         sp.loadConfig();
         Claude.useBrain(Config.own);
         persona = sp.persona().trim().isEmpty() ? defaultPersona() : sp.persona();
+        persona = persona.trim() + "\n\n" + phoneLine(app);   // fixed per phone, so the cached prompt stays the same
         chat = loadChat();
         memory = loadMemory();
         about = loadAbout();

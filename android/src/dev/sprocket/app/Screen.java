@@ -112,6 +112,29 @@ final class Screen {
     }
 
     /**
+     * One line about this phone for the brain, so a how-to search when it's stuck in an app finds steps for this
+     * phone and this texting app ("remove chat background Google Messages Samsung One UI 9"), not an old or different
+     * one. oneUi is Samsung's ro.build.version.oneui (90000 = 9.0, 80500 = 8.5; empty off Samsung). Nothing personal:
+     * the model code and versions only, never the phone's own name.
+     */
+    static String phoneLine(String maker, String model, String android, String oneUi, String smsPkg, String smsLabel) {
+        String m = maker == null || maker.isEmpty() ? "" : Character.toUpperCase(maker.charAt(0)) + maker.substring(1);
+        StringBuilder b = new StringBuilder("This phone: ").append((m + " " + (model == null ? "" : model)).trim())
+                .append(", Android ").append(android);
+        try {
+            int v = Integer.parseInt(oneUi == null ? "" : oneUi.trim());
+            if (v > 0) b.append(", One UI ").append(v / 10000).append('.').append(v % 10000 / 100);
+        } catch (NumberFormatException e) { /* not Samsung */ }
+        b.append('.');
+        if (smsPkg != null && smsLabel != null && !smsLabel.isEmpty()) {
+            String by = smsPkg.startsWith("com.google.") ? "Google" : smsPkg.startsWith("com.samsung.") ? "Samsung" : "";
+            String name = by.isEmpty() || smsLabel.startsWith(by) ? smsLabel : by + " " + smsLabel;
+            b.append(" Its texting app is ").append(name).append('.');
+        }
+        return b.toString();
+    }
+
+    /**
      * True when Android's list of switched-on accessibility services (Settings.Secure enabled_accessibility_services)
      * holds this app's screen control (11-13: Android switched it off by itself once, and he only found out from a
      * failed task).
