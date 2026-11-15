@@ -20,6 +20,10 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   while you've asked it to watch, with a notice on screen the whole time. What you type and anything in banking or
   password apps is never recorded, and recordings stay on the phone.
 
+- **A glow while it works.** A soft orange glow around the edge of the screen whenever Sprocket is tapping or reading
+  in another app, so you can tell at a glance when it's in control and when it's done. Taps go straight through the
+  glow, and it never shows up in what Sprocket reads.
+
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
   Disturb and dims the screen. Anything risky in a routine still asks first, like it does today.
