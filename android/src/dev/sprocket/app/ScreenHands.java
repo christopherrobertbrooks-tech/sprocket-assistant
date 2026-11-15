@@ -399,7 +399,7 @@ public class ScreenHands extends AccessibilityService {
             if (interactive || (!label.isEmpty() && !inRow)) {
                 lastNodes.add(n);
                 lastItems.add(new Screen.Item(role(n), label, clickable || checkable, editable, scrollable, n.isChecked(), n.isPassword(),
-                        n.isEnabled()));
+                        n.isEnabled(), value(n)));
             }
         }
         for (int i = 0; i < n.getChildCount(); i++) walk(n.getChild(i), depth + 1, row);
@@ -422,6 +422,15 @@ public class ScreenHands extends AccessibilityService {
         if (t == null || t.length() == 0) t = n.getContentDescription();
         if ((t == null || t.length() == 0) && Build.VERSION.SDK_INT >= 26) t = n.getHintText();
         return t == null ? "" : t.toString();
+    }
+
+    /** Where a slider is ("130%", or "at 3, from 0 to 6"), "" for anything without a value (Screen.sliderValue). */
+    private static String value(AccessibilityNodeInfo n) {
+        AccessibilityNodeInfo.RangeInfo r = n.getRangeInfo();
+        CharSequence state = Build.VERSION.SDK_INT >= 30 ? n.getStateDescription() : null;
+        if (r == null && !"slider".equals(role(n))) return "";   // a switch's "On" is already shown as (on)
+        return Screen.sliderValue(state, r != null, r == null ? 0 : r.getCurrent(), r == null ? 0 : r.getMin(),
+                r == null ? 0 : r.getMax(), r == null ? 0 : r.getType());
     }
 
     private static String role(AccessibilityNodeInfo n) {

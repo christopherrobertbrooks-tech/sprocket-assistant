@@ -38,6 +38,17 @@ public class ScreenTest {
         eq("a tap on a spot reminds it to check the screen before saying it worked",
                 Screen.afterPoint("Screen of Settings:\n").startsWith("Screen of Settings:\n")
                         && Screen.afterPoint("Screen of Settings:\n").contains("only if this screen shows the change"), true);
+        // 11-15 sealed set (Codex 047): Settings' font size slider read as plain "slider "Font size,"", so Sprocket
+        // guessed its position from a picture and said "back to normal" three times when it wasn't.
+        Screen.Item slider = new Screen.Item("slider", "Font size,", true, false, false, false, false, true,
+                Screen.sliderValue("", true, 3f, 0f, 6f, 0));
+        eq("a slider says where it is", Screen.describe("Settings", Arrays.asList(slider)),
+                "Screen of Settings:\n[1] slider \"Font size\" (at 3, from 0 to 6) (tap)\n");
+        eq("Android's own words for the value win", Screen.sliderValue("130%", true, 3f, 0f, 6f, 0), "130%");
+        eq("a percent range", Screen.sliderValue(null, true, 42.5f, 0f, 100f, 2), "42.5%");
+        eq("a fractional range keeps its decimals", Screen.sliderValue("", true, 1.15f, 0.85f, 2f, 1), "at 1.15, from 0.85 to 2");
+        eq("no value, nothing added", Screen.sliderValue("", false, 0f, 0f, 0f, 0), "");
+        eq("an item has no value unless told", button("OK").value, "");
         eq("an empty screen says so", Screen.describe("", new ArrayList<>()), "Screen of an unknown app:\n(nothing readable on this screen)\n");
 
         List<Screen.Item> many = new ArrayList<>();

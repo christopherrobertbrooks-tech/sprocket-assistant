@@ -17,6 +17,8 @@ final class Screen {
     static final class Item {
         final String role, label;
         final boolean clickable, editable, scrollable, checked, password, enabled;
+        /** Where a slider (or anything with a range) is now, "" for none (sliderValue). */
+        final String value;
 
         Item(String role, String label, boolean clickable, boolean editable, boolean scrollable, boolean checked, boolean password) {
             this(role, label, clickable, editable, scrollable, checked, password, true);
@@ -25,9 +27,16 @@ final class Screen {
         /** enabled false: greyed out, the phone won't let it change right now (11-15: Battery Saver while charging). */
         Item(String role, String label, boolean clickable, boolean editable, boolean scrollable, boolean checked, boolean password,
              boolean enabled) {
-            this.role = role; this.label = label == null ? "" : label.trim().replace('\n', ' ');
+            this(role, label, clickable, editable, scrollable, checked, password, enabled, "");
+        }
+
+        Item(String role, String label, boolean clickable, boolean editable, boolean scrollable, boolean checked, boolean password,
+             boolean enabled, String value) {
+            this.role = role;
+            this.label = label == null ? "" : label.trim().replace('\n', ' ').replaceAll("[,;]+$", "").trim();
             this.clickable = clickable; this.editable = editable; this.scrollable = scrollable;
             this.checked = checked; this.password = password; this.enabled = enabled;
+            this.value = value == null ? "" : value.trim();
         }
     }
 
@@ -45,6 +54,7 @@ final class Screen {
             if (label.length() > MAX_LABEL) label = label.substring(0, MAX_LABEL) + "...";
             b.append('[').append(i + 1).append("] ").append(it.role);
             if (!label.isEmpty()) b.append(" \"").append(label).append('"');
+            if (!it.value.isEmpty()) b.append(" (").append(it.value).append(')');
             if (it.checked) b.append(" (on)");
             if (!it.enabled) { b.append(" (greyed out)"); grey = true; }
             else if (it.editable) b.append(" (type)");
@@ -204,6 +214,24 @@ final class Screen {
      */
     static final String GREYED = "(Greyed out: the phone won't let that item be used or changed right now, often for a "
             + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done.)\n";
+
+    /**
+     * Where a slider is, for the screen list (11-15 sealed set, Codex 047: the font size slider read as a bare
+     * "slider", so the brain guessed its position from a picture and said "back to normal" when it wasn't). Android's
+     * own words for it (stateDescription, "130%") win; else its range: type 0 = whole numbers, 1 = decimals, 2 = percent.
+     */
+    static String sliderValue(CharSequence state, boolean hasRange, float now, float min, float max, int type) {
+        if (state != null && state.toString().trim().length() > 0) return state.toString().trim();
+        if (!hasRange) return "";
+        if (type == 2) return num(now) + "%";
+        return "at " + num(now) + ", from " + num(min) + " to " + num(max);
+    }
+
+    private static String num(float f) {
+        if (f == Math.rint(f) && Math.abs(f) < 1e9) return String.valueOf((long) f);
+        String t = String.format(Locale.US, "%.2f", f);
+        return t.replaceAll("0+$", "").replaceAll("\\.$", "");
+    }
 
     /**
      * A tap on a spot in a picture can land somewhere else (11-15 playground: it opened the wrong page and the brain
