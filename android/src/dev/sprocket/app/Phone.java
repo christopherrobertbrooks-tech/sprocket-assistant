@@ -94,6 +94,10 @@ final class Phone {
     }
 
     private static void start(Context c, Intent i) throws Exception {
+        if (BgScreen.on() && !c.getPackageName().equals(i.getPackage())) {   // the hidden screen: open it there
+            BgScreen.start(i);
+            return;
+        }
         try {
             c.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));   // its own app, not inside Sprocket
         } catch (ActivityNotFoundException e) {
@@ -153,21 +157,27 @@ final class Phone {
     }
 
     // ---------------------------------------------------------------- contacts, texts, calls
-    /** Matching contacts: name -> their numbers (mobile first). */
-    private static Map<String, List<String>> contacts(Context c, String name) throws Exception {
+    /** Matching contacts: name -> their numbers as {number, label}, mobile first (label: mobile, work, home, other). */
+    private static Map<String, List<String[]>> contacts(Context c, String name) throws Exception {
         if (!Hands.need(Manifest.permission.READ_CONTACTS)) throw new Exception("Sprocket isn't allowed to read contacts");
         String n = name.replaceFirst("(?i)^(my|the)\\s+", "").trim();
-        Map<String, List<String>> out = new LinkedHashMap<>();
+        Map<String, List<String[]>> out = new LinkedHashMap<>();
         String[] cols = {ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY, ContactsContract.CommonDataKinds.Phone.NUMBER,
                 ContactsContract.CommonDataKinds.Phone.TYPE};
         for (String like : new String[]{n + "%", "% " + n + "%"}) {
             try (Cursor cur = c.getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, cols,
                     cols[0] + " LIKE ?", new String[]{like}, cols[0])) {
                 while (cur != null && cur.moveToNext()) {
-                    List<String> nums = out.computeIfAbsent(cur.getString(0), k -> new ArrayList<>());
+                    List<String[]> nums = out.computeIfAbsent(cur.getString(0), k -> new ArrayList<>());
                     String num = cur.getString(1).replaceAll("[^0-9+]", "");
-                    if (nums.contains(num)) continue;
-                    if (cur.getInt(2) == ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE) nums.add(0, num); else nums.add(num);
+                    boolean dup = false;
+                    for (String[] x : nums) if (x[0].equals(num)) dup = true;
+                    if (dup) continue;
+                    int type = cur.getInt(2);
+                    String label = type == ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE ? "mobile"
+                            : type == ContactsContract.CommonDataKinds.Phone.TYPE_WORK || type == ContactsContract.CommonDataKinds.Phone.TYPE_WORK_MOBILE ? "work"
+                            : type == ContactsContract.CommonDataKinds.Phone.TYPE_HOME ? "home" : "other";
+                    if (label.equals("mobile")) nums.add(0, new String[]{num, label}); else nums.add(new String[]{num, label});
                 }
             }
             if (!out.isEmpty()) break;
@@ -190,19 +200,24 @@ final class Phone {
         return out;
     }
 
-    /** {name, number} for who he means, or a plain reason Claude can ask him about. */
-    static String[] who(Context c, String to) throws Exception {
+    /** {name, number} for who they mean (a text), or a plain reason Claude can ask them about. */
+    static String[] who(Context c, String to) throws Exception { return who(c, to, true); }
+
+    /** forText: a text goes only to a cell number; a call takes any (PhoneTools.pickNumber). */
+    static String[] who(Context c, String to, boolean forText) throws Exception {
         if (to.trim().isEmpty()) throw new Exception("who to? No name or number was given");
         String num = PhoneTools.number(to);
         if (num != null) return new String[]{num, num};
-        Map<String, List<String>> spelled = contacts(c, to);
+        String[] split = PhoneTools.splitLabel(to);   // "Mom at work" -> Mom, work
+        to = split[0];
+        Map<String, List<String[]>> spelled = contacts(c, to);
         PhoneTools.Pick p = PhoneTools.resolve(to, spelled.keySet(), spelled.isEmpty() ? allNames(c) : new ArrayList<>());
         if (p.name == null && !p.choices.isEmpty())
             throw new Exception("more than one contact could be " + to + ": " + String.join(", ", p.choices) + ". Ask the boss which");
         if (p.name == null) throw new Exception("no contact called " + to + " (or anything like it) on this phone; ask the boss for the number");
-        List<String> nums = spelled.containsKey(p.name) ? spelled.get(p.name) : contacts(c, p.name).get(p.name);
+        List<String[]> nums = spelled.containsKey(p.name) ? spelled.get(p.name) : contacts(c, p.name).get(p.name);
         if (nums == null || nums.isEmpty()) throw new Exception(p.name + " has no phone number");
-        return new String[]{p.name, nums.get(0)};
+        return new String[]{p.name, PhoneTools.pickNumber(p.name, nums, split[1], forText)};
     }
 
     private static String text(Context c, String to, String message) throws Exception { return text(c, to, message, null); }
@@ -216,6 +231,7 @@ final class Phone {
         if (yes == null) return "Nothing was sent: the boss didn't answer the card.";
         if (!yes) return "Nothing was sent: the boss cancelled.";
         String result = sms(c, w[1], message);
+        if (UNCONFIRMED.equals(result)) throw new Exception(PhoneTools.unconfirmed(w[0]));
         if (result == null) {
             Hands.record(recordAs != null ? recordAs + " " + w[0] : "Texted " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")") + ": “" + message + "”");
             return "Sent to " + w[0] + ".";
@@ -223,7 +239,9 @@ final class Phone {
         throw new Exception("the text did not go: " + result);
     }
 
-    /** Sends and waits for the phone to say each part went (null) or why not. */
+    static final String UNCONFIRMED = "unconfirmed";
+
+    /** Sends and waits for the phone to say each part went (null), UNCONFIRMED if it never says, or why not. */
     static String sms(Context c, String number, String message) throws Exception {
         SmsManager sm = Build.VERSION.SDK_INT >= 31 ? c.getSystemService(SmsManager.class) : SmsManager.getDefault();
         ArrayList<String> parts = sm.divideMessage(message);
@@ -243,7 +261,7 @@ final class Phone {
             for (int k = 0; k < parts.size(); k++)
                 sent.add(PendingIntent.getBroadcast(c, k, new Intent(action).setPackage(c.getPackageName()), PendingIntent.FLAG_IMMUTABLE));
             sm.sendMultipartTextMessage(number, null, parts, sent, null);
-            if (!left.await(45, TimeUnit.SECONDS)) return "the phone never confirmed it went out (no signal?)";
+            if (!left.await(45, TimeUnit.SECONDS)) return UNCONFIRMED;
             return bad.get() == 0 ? null : "the phone refused it (error " + bad.get() + ")";
         } finally {
             c.unregisterReceiver(r);
@@ -251,7 +269,7 @@ final class Phone {
     }
 
     private static String call(Context c, String to) throws Exception {
-        String[] w = who(c, to);
+        String[] w = who(c, to, false);
         if (!Hands.need(Manifest.permission.CALL_PHONE)) throw new Exception("Sprocket isn't allowed to place calls");
         Boolean yes = Hands.confirm(PhoneTools.callCard(w[0], w[1]), "Call");
         if (yes == null) return "No call: the boss didn't answer the card.";
@@ -262,7 +280,7 @@ final class Phone {
     }
 
     private static String findContact(Context c, String name) throws Exception {
-        Map<String, List<String>> found = contacts(c, name);
+        Map<String, List<String[]>> found = contacts(c, PhoneTools.splitLabel(name)[0]);
         if (found.isEmpty()) {   // no spelling match: the ones it sounds like
             PhoneTools.Pick p = PhoneTools.resolve(name, found.keySet(), allNames(c));
             List<String> close = p.name != null ? java.util.Collections.singletonList(p.name) : p.choices;
@@ -271,8 +289,12 @@ final class Phone {
         }
         StringBuilder b = new StringBuilder();
         int k = 0;
-        for (Map.Entry<String, List<String>> e : found.entrySet())
-            if (k++ < 8) b.append(e.getKey()).append(": ").append(String.join(", ", e.getValue())).append('\n');
+        for (Map.Entry<String, List<String[]>> e : found.entrySet()) {
+            if (k++ >= 8) break;
+            List<String> shown = new ArrayList<>();   // "cell +1202..., work +1202..." (which number is which)
+            for (String[] n : e.getValue()) shown.add((n[1].equals("mobile") ? "cell" : n[1]) + " " + n[0]);
+            b.append(e.getKey()).append(": ").append(String.join(", ", shown)).append('\n');
+        }
         return b.toString().trim();
     }
 

@@ -224,7 +224,7 @@ public class ScreenHands extends AccessibilityService {
         for (AppNotes.Step st : r.steps) {
             n++;
             if (!st.kind.startsWith("open") && h.keyboardUp()) {   // 11-13: Gmail's search page kept it up over the menu's Spam
-                h.performGlobalAction(GLOBAL_ACTION_BACK);
+                h.back();
                 Thread.sleep(500);
                 android.util.Log.i("Sprocket", "replay closed the keyboard");
             }
@@ -282,7 +282,7 @@ public class ScreenHands extends AccessibilityService {
                     out = h.scroll(!"up".equals(st.label));
                     break;
                 }
-                case "back": h.performGlobalAction(GLOBAL_ACTION_BACK); out = h.settleAndRead(); break;
+                case "back": h.back(); out = h.settleAndRead(); break;
                 default: return "The saved way to " + r.goal + " has a step Sprocket can't do again (" + st.kind + "): use the screen tool.";
             }
             synchronized (ScreenHands.class) { track(st, before, out); }
@@ -316,7 +316,7 @@ public class ScreenHands extends AccessibilityService {
             android.util.Log.i("Sprocket", "replay looking for \"" + label + "\": " + move);
             switch (move) {
                 case "go": return k;
-                case "back": performGlobalAction(GLOBAL_ACTION_BACK); backs++; settleAndRead(); break;
+                case "back": back(); backs++; settleAndRead(); break;
                 case "reopen": Phone.run(this, "open_app", new JSONObject().put("name", open.label)); reopened = true; settleAndRead(); break;
                 default: return 0;
             }
@@ -340,7 +340,7 @@ public class ScreenHands extends AccessibilityService {
         synchronized (ScreenHands.class) { close = Screen.closeKeyboardFirst(h.keyboardUp(), pkg, keyboardClosedIn, mine(pkg)); }
         if (close && !action.equals("type") && !action.equals("back")) {   // 11-14: Gmail's search page + keyboard: it tapped a
             synchronized (ScreenHands.class) { keyboardClosedIn = pkg; }      // recent search twice
-            h.performGlobalAction(GLOBAL_ACTION_BACK);
+            h.back();
             Thread.sleep(500);
             android.util.Log.i("Sprocket", "closed the keyboard before looking");
             if (!action.equals("read")) return "The keyboard was open over " + h.appName(pkg) + " (a search page may have been up), "
@@ -351,10 +351,14 @@ public class ScreenHands extends AccessibilityService {
             case "tap": return in.optInt("times", 1) > 1 ? h.tapTimes(in.optInt("item"), in.optInt("times")) : h.tap(in.optInt("item"));
             case "type": return h.type(in.optInt("item"), in.optString("text"));
             case "scroll": return h.scroll(!"up".equals(in.optString("direction", "down")));
-            case "back": h.performGlobalAction(GLOBAL_ACTION_BACK); return h.settleAndRead();
-            case "home": h.performGlobalAction(GLOBAL_ACTION_HOME); return h.settleAndRead();
+            case "find": return h.find(in.optString("text"));
+            case "back": h.back(); return h.settleAndRead();
+            case "home": h.home(); return h.settleAndRead();
             case "look": return h.look();
-            case "stay": stay = true; return "This screen stays up when you're done; Sprocket won't come back to its own screen.";
+            case "stay":
+                stay = true;   // on the hidden screen: moved onto the real screen when the answer is done (MainActivity)
+                if (BgScreen.on()) return Screen.STAY_HIDDEN;
+                return "Tthe screen stays up when you're done; Sprocket won't come back to its own screen.";
             case "note": return MainActivity.noteApp(lastPackage, h.appName(lastPackage), in.optString("text"));
             case "tap_point": return h.tapPoint(in.optInt("x", -1), in.optInt("y", -1), in.optString("what"));
             case "switch_off": {                       // the user asked Sprocket to turn it off
@@ -370,10 +374,14 @@ public class ScreenHands extends AccessibilityService {
     }
 
     private synchronized String read() throws Exception {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = root();
         lastNodes.clear();
         lastItems.clear();
-        if (root == null) { lastPackage = ""; return Screen.describe("", lastItems); }
+        if (root == null) {
+            lastPackage = "";
+            if (BgScreen.on()) return Screen.HIDDEN_EMPTY;   // an empty hidden screen read as "screen control is off"
+            return Screen.describe("", lastItems);
+        }
         lastPackage = String.valueOf(root.getPackageName());
         if (Screen.blockedApp(lastPackage)) return "The screen shows an app that is off limits (money or passwords): not read.";
         walk(root, 0, false);
@@ -427,6 +435,14 @@ public class ScreenHands extends AccessibilityService {
 
     /** Where a slider is ("130%", or "at 3, from 0 to 6"), "" for anything without a value (Screen.sliderValue). */
     private static String value(AccessibilityNodeInfo n) {
+        if (n.isScrollable() && !"slider".equals(role(n))) {   // a list: is there more below? (it said "I checked every
+            boolean down = false, up = false;                   // line" of a menu 3 scrolls in; the item was one more down)
+            for (AccessibilityNodeInfo.AccessibilityAction a : n.getActionList()) {
+                if (a.getId() == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) down = true;
+                if (a.getId() == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) up = true;
+            }
+            return Screen.scrollState(down, up);
+        }
         AccessibilityNodeInfo.RangeInfo r = n.getRangeInfo();
         CharSequence state = Build.VERSION.SDK_INT >= 30 ? n.getStateDescription() : null;
         if (r == null && !"slider".equals(role(n))) return "";   // a switch's "On" is already shown as (on)
@@ -463,6 +479,32 @@ public class ScreenHands extends AccessibilityService {
     }
 
     private String tap(int item) throws Exception { return tap(item, true); }
+
+    /**
+     * Looks through the whole list for an item with these words: back to the top, then down a screen at a time until it
+     * shows or the list ends (practice: with "(more below)" on every screen the brain still said "I went through
+     * the entire menu" after 4 of 7 scrolls; now the code does the looking).
+     */
+    private String find(String text) throws Exception {
+        if (text == null || text.trim().isEmpty()) throw new Exception("find needs the words to look for");
+        String screen = read();
+        int hit = Screen.findItem(lastItems, text);
+        if (hit > 0) return "Found \u201c" + text + "\u201d: item " + hit + ".\n" + screen;
+        for (int i = 0; i < 30; i++) {   // to the top first: what it's after may be above
+            String before = Screen.describe("", lastItems);
+            screen = scroll(false);
+            if (Screen.describe("", lastItems).equals(before)) break;
+        }
+        for (int i = 0; i < 40; i++) {
+            hit = Screen.findItem(lastItems, text);
+            if (hit > 0) return "Found \u201c" + text + "\u201d: item " + hit + ".\n" + screen;
+            String before = Screen.describe("", lastItems);
+            if (!Screen.moreBelow(lastItems) && i > 0) break;
+            screen = scroll(true);
+            if (Screen.describe("", lastItems).equals(before)) break;
+        }
+        return "No \u201c" + text + "\u201d anywhere in this list: Sprocket looked from the top to the bottom. Say so plainly.\n" + screen;
+    }
 
     /**
      * The same button pressed times times in one step (a quantity +), re-finding it after every tap (Screen.repeatTarget).
@@ -523,7 +565,7 @@ public class ScreenHands extends AccessibilityService {
             stillThere(n, 0);    // spot is the item itself (11-12: a failed click's finger landed on a recent search)
             Rect r = new Rect();
             n.getBoundsInScreen(r);
-            AccessibilityNodeInfo root = getRootInActiveWindow(), hit = root == null ? null : topAt(root, r.centerX(), r.centerY(), 0);
+            AccessibilityNodeInfo root = root(), hit = root == null ? null : topAt(root, r.centerX(), r.centerY(), 0);
             if (hit == null || !Screen.onTop(chain(hit), chain(n))) throw new Exception("item " + item + Screen.COVERED);
             done = gesture(r.centerX(), r.centerY(), r.centerX(), r.centerY(), 60);
         }
@@ -533,7 +575,7 @@ public class ScreenHands extends AccessibilityService {
 
     /** True unless something else tappable is drawn over the item's middle, where a finger would land (Screen.onTop). */
     private boolean onTop(AccessibilityNodeInfo n) {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = root();
         if (root == null) return false;
         Rect r = new Rect();
         n.getBoundsInScreen(r);
@@ -545,6 +587,35 @@ public class ScreenHands extends AccessibilityService {
         return top;
     }
 
+    /**
+     * The top window's content: on the hidden screen when it's up (BgScreen), else the real screen's active window.
+     * ("work in the background".)
+     */
+    private AccessibilityNodeInfo root() {
+        if (!BgScreen.on()) return getRootInActiveWindow();
+        android.util.SparseArray<List<android.view.accessibility.AccessibilityWindowInfo>> all = getWindowsOnAllDisplays();
+        List<android.view.accessibility.AccessibilityWindowInfo> ws = all.get(BgScreen.display());
+        if (ws == null) return null;
+        android.view.accessibility.AccessibilityWindowInfo best = null;
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+            if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+            if (best == null || w.isFocused() || (!best.isFocused() && w.getLayer() > best.getLayer())) best = w;
+        }
+        return best == null ? null : best.getRoot();
+    }
+
+    /** Back, on whichever screen Sprocket is working. */
+    boolean back() {
+        if (!BgScreen.on()) return performGlobalAction(GLOBAL_ACTION_BACK);
+        try { return BgScreen.cmd("key 4").startsWith("ok"); } catch (Exception e) { return false; }
+    }
+
+    /** Home: the hidden screen has no home screen of its own, so there it just goes back to the app's start. */
+    boolean home() {
+        if (!BgScreen.on()) return performGlobalAction(GLOBAL_ACTION_HOME);
+        try { return BgScreen.cmd("key 3").startsWith("ok"); } catch (Exception e) { return false; }
+    }
+
     /** A node, then what it sits in (empty for none). */
     private static List<AccessibilityNodeInfo> chain(AccessibilityNodeInfo n) {
         List<AccessibilityNodeInfo> out = new ArrayList<>();
@@ -554,14 +625,16 @@ public class ScreenHands extends AccessibilityService {
 
     /** True while the keyboard is on screen (it hides the bottom of the app, and Gmail leaves it up on its search page). */
     private boolean keyboardUp() {
-        for (android.view.accessibility.AccessibilityWindowInfo w : getWindows())
+        List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+        if (BgScreen.on()) { List<android.view.accessibility.AccessibilityWindowInfo> b = getWindowsOnAllDisplays().get(BgScreen.display()); ws = b == null ? new ArrayList<>() : b; }
+        for (android.view.accessibility.AccessibilityWindowInfo w : ws)
             if (w.getType() == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) return true;
         return false;
     }
 
     /** The app on screen now ("" when none). */
     private String nowPackage() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = root();
         return root == null || root.getPackageName() == null ? "" : root.getPackageName().toString();
     }
 
@@ -578,7 +651,7 @@ public class ScreenHands extends AccessibilityService {
 
     /** The words in the screen's text box (the message about to go out), or null. */
     private String typedNow() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = root();
         return root == null ? null : typedIn(root, 0);
     }
 
@@ -611,7 +684,7 @@ public class ScreenHands extends AccessibilityService {
         int w = getResources().getDisplayMetrics().widthPixels, h = getResources().getDisplayMetrics().heightPixels;
         boolean done = down ? gesture(w / 2, h * 7 / 10, w / 2, h * 3 / 10, 400) : gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
         if (!done) {
-            AccessibilityNodeInfo root = getRootInActiveWindow();
+            AccessibilityNodeInfo root = root();
             AccessibilityNodeInfo best = root == null ? null : biggestScrollable(root, null, 0);
             done = best != null && best.performAction(down ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD);
         }
@@ -642,6 +715,12 @@ public class ScreenHands extends AccessibilityService {
     }
 
     private boolean gesture(int x1, int y1, int x2, int y2, long ms) throws InterruptedException {
+        if (BgScreen.on()) {   // the hidden screen: the helper presses there
+            try {
+                String r = BgScreen.cmd(x1 == x2 && y1 == y2 ? "tap " + x1 + " " + y1 : "swipe " + x1 + " " + y1 + " " + x2 + " " + y2 + " " + ms);
+                return r.startsWith("ok");
+            } catch (Exception e) { return false; }
+        }
         Path p = new Path();
         p.moveTo(x1, y1);
         p.lineTo(x2, y2);
@@ -665,6 +744,13 @@ public class ScreenHands extends AccessibilityService {
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<Boolean> answer = new AtomicReference<>();
         Runnable takeDown = cardOver(text, new String[]{"Cancel", yes}, i -> { answer.set(i == 1); done.countDown(); }, done::countDown);
+        // a practice run against the stand-in only (made-up key): the card answers itself, as Sprocket's own cards do
+        String auto = MainActivity.standIn() ? Hands.autoAnswer : null;
+        if (auto != null) {
+            android.util.Log.i("PA-REPLY", "CARD " + text.replace('\n', ' ') + " -> " + auto);
+            Hands.practiceCard(text, auto);
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> { answer.set(auto.equals("yes")); done.countDown(); }, 2000);
+        }
         boolean answered = done.await(CARD_WAIT_S, TimeUnit.SECONDS);
         takeDown.run();
         return answered ? answer.get() : null;
@@ -678,6 +764,92 @@ public class ScreenHands extends AccessibilityService {
 
     /** A solid dark card at the bottom of the screen with these buttons; picked gets the button's number (main
      * thread). failed runs if it can't be shown. Returns what takes it down (any thread, any number of times). */
+    /** The glow drawn now, or null (main thread only). */
+    private static android.view.View glowView;
+
+    /**
+     * A soft orange glow around the screen's edge while Sprocket is working the screen for their question
+     * (like the glow some desktop assistants show while they control a computer). Taps go straight through; it's hidden for Sprocket's own screenshots.
+     * Any thread; does nothing while screen control is off.
+     */
+    static void glow(boolean on) {
+        ScreenHands h = live;
+        if (h == null) return;
+        h.getMainExecutor().execute(() -> h.setGlow(on));
+    }
+
+    private void setGlow(boolean on) {
+        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        if (on && glowView == null) {
+            android.view.View v = new GlowView(this);
+            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    android.graphics.PixelFormat.TRANSLUCENT);
+            if (Build.VERSION.SDK_INT >= 28)
+                lp.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            try { wm.addView(v, lp); glowView = v; } catch (Exception e) { android.util.Log.w("Sprocket", "glow: " + e); }
+            v.post(new Runnable() {   // on the hidden screen, nothing to show while they's locked or the screen is off
+                @Override public void run() {   // (it lit up the always-on display)
+                    if (glowView != v) return;
+                    android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+                    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                    boolean hide = Screen.glowHidden(BgScreen.on(), km != null && km.isKeyguardLocked(), pm != null && pm.isInteractive());
+                    v.setVisibility(hide ? android.view.View.INVISIBLE : android.view.View.VISIBLE);
+                    v.postDelayed(this, 1500);
+                }
+            });
+        } else if (!on && glowView != null) {
+            try { wm.removeView(glowView); } catch (Exception ignored) { }
+            glowView = null;
+        }
+    }
+
+    /** Hides or shows the glow around a screenshot, so the brain never sees it (waits a frame either way). */
+    private void glowForShot(boolean visible) throws InterruptedException {
+        CountDownLatch done = new CountDownLatch(1);
+        getMainExecutor().execute(() -> {
+            if (glowView != null) glowView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.INVISIBLE);
+            done.countDown();
+        });
+        done.await(1, TimeUnit.SECONDS);
+        if (!visible) Thread.sleep(120);
+    }
+
+    /** The glow itself: three soft orange strokes around the screen's rounded edge, gently breathing. */
+    static final class GlowView extends android.view.View {
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final float d;
+
+        GlowView(android.content.Context c) {
+            super(c);
+            d = c.getResources().getDisplayMetrics().density;
+            setLayerType(LAYER_TYPE_SOFTWARE, null);   // the blur needs it
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setColor(0xFFFF8A1F);
+            android.animation.ObjectAnimator a = android.animation.ObjectAnimator.ofFloat(this, "alpha", 1f, 0.55f);
+            a.setDuration(1400);
+            a.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            a.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            a.start();
+        }
+
+        @Override protected void onDraw(android.graphics.Canvas c) {
+            float w = getWidth(), h = getHeight(), r = 40 * d;
+            float[] widths = {16, 9, 4}, blurs = {12, 6, 2};
+            int[] alphas = {70, 130, 230};
+            for (int i = 0; i < 3; i++) {
+                p.setStrokeWidth(widths[i] * d);
+                p.setAlpha(alphas[i]);
+                p.setMaskFilter(new android.graphics.BlurMaskFilter(blurs[i] * d, android.graphics.BlurMaskFilter.Blur.NORMAL));
+                float in = widths[i] * d / 2;
+                c.drawRoundRect(new android.graphics.RectF(in, in, w - in, h - in), r, r, p);
+            }
+        }
+    }
+
     private Runnable cardOver(String text, String[] buttons, java.util.function.IntConsumer picked, Runnable failed) {
         AtomicReference<android.view.View> shown = new AtomicReference<>();
         AtomicBoolean gone = new AtomicBoolean(false);
@@ -734,6 +906,62 @@ public class ScreenHands extends AccessibilityService {
         return takeDown;
     }
 
+    /**
+     * Stage 3 setup: the 6-digit code on the system's "Pair with pairing code" window, read through screen control so they
+     * never types it (the way Mika does). Only looks at the Settings app's windows; null when no code is showing. The
+     * code is never logged.
+     */
+    static boolean isOn() { return live != null; }
+
+    /** Setup's own steps (BgSetup): looks through the screen's list for this label and taps it; false when it isn't there. */
+    static synchronized boolean findAndTap(String label) {
+        ScreenHands h = live;
+        if (h == null) return false;
+        try {
+            String r = h.find(label);
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("item (\\d+)\\.").matcher(r);
+            if (!m.find()) return false;
+            h.tap(Integer.parseInt(m.group(1)));
+            Thread.sleep(800);
+            return true;
+        } catch (Exception e) {
+            android.util.Log.w("Sprocket", "background setup: couldn't tap " + label + ": " + e.getMessage());
+            return false;
+        }
+    }
+    private static volatile long lastSeenLog;
+
+    static String pairingCode() {
+        ScreenHands h = live;
+        if (h == null) return null;
+        StringBuilder seen = new StringBuilder();
+        for (android.view.accessibility.AccessibilityWindowInfo w : h.getWindows()) {
+            AccessibilityNodeInfo r = w.getRoot();
+            seen.append(" [").append(w.getType()).append(' ').append(w.getTitle()).append(' ')
+                    .append(r == null ? "no-root" : String.valueOf(r.getPackageName())).append(']');
+            if (r == null || r.getPackageName() == null || !Screen.isSettingsApp(String.valueOf(r.getPackageName()))) continue;
+            String code = findCode(r, 0);
+            if (code != null) return code;
+        }
+        if (System.currentTimeMillis() - lastSeenLog > 10_000) {   // what it can see (window kinds and titles only)
+            lastSeenLog = System.currentTimeMillis();
+            android.util.Log.i("Sprocket", "background: windows seen:" + seen);
+        }
+        return null;
+    }
+
+    private static String findCode(AccessibilityNodeInfo n, int depth) {
+        if (n == null || depth > 30) return null;
+        String t = n.getText() == null ? "" : n.getText().toString();
+        String code = Screen.pairingCodeIn(t);
+        if (code != null) return code;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            String c = findCode(n.getChild(i), depth + 1);
+            if (c != null) return c;
+        }
+        return null;
+    }
+
     /** The call announcer (worker thread): taps the button with this label on the screen in front, such as the
      * in-call screen's Speaker. Tries for a few seconds while the screen appears; false if it never found it. */
     static boolean tapLabel(String label) throws InterruptedException {
@@ -771,10 +999,12 @@ public class ScreenHands extends AccessibilityService {
     /** A screenshot for the brain to see, for screens the list can't describe (maps, pictures, games). */
     private String look() throws Exception {
         if (Build.VERSION.SDK_INT < 30) throw new Exception("this phone is too old for screenshots");
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = root();
         String pkg = root == null ? "" : String.valueOf(root.getPackageName());
         shotPackage = "";
         if (Screen.blockedApp(pkg)) return "The screen shows an app that is off limits (money or passwords): no picture taken.";
+        if (BgScreen.on()) return lookHidden(pkg);
+        glowForShot(false);   // the brain never sees the glow
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<byte[]> jpeg = new AtomicReference<>();
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
@@ -794,12 +1024,33 @@ public class ScreenHands extends AccessibilityService {
             }
             @Override public void onFailure(int code) { done.countDown(); }
         });
-        if (!done.await(5, TimeUnit.SECONDS) || jpeg.get() == null) throw new Exception("couldn't take a screenshot");
+        boolean got = done.await(5, TimeUnit.SECONDS);
+        glowForShot(true);
+        if (!got || jpeg.get() == null) throw new Exception("couldn't take a screenshot");
         lastShot = jpeg.get();
         shotPackage = pkg;
         try (java.io.FileOutputStream f = new java.io.FileOutputStream(new java.io.File(Photo.dir(this), SHOT_FILE))) {
             f.write(lastShot);   // saved where the brain's pictures come from, so the answer carries the picture itself
         }
+        return Claude.PICTURE + SHOT_FILE + "]]Screenshot taken (" + lastShot.length / 1024 + " KB, " + SHOT_WIDTH + " pixels wide), shown above. "
+                + "Tap by item number when the screen list has the item; otherwise tap_point with x and y in this picture's pixels.";
+    }
+
+    /** look on the hidden screen: the helper's snapshot, made small the same way. */
+    private String lookHidden(String pkg) throws Exception {
+        java.io.File png = new java.io.File(getExternalFilesDir(null), "bgshot.png");
+        png.delete();
+        BgScreen.must("shot " + png.getAbsolutePath());
+        Bitmap soft = android.graphics.BitmapFactory.decodeFile(png.getAbsolutePath());
+        if (soft == null) throw new Exception("couldn't take a screenshot of the hidden screen");
+        int w = SHOT_WIDTH, h = Math.round(soft.getHeight() * (float) SHOT_WIDTH / soft.getWidth());
+        Bitmap small = Bitmap.createScaledBitmap(soft, w, h, true);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        small.compress(Bitmap.CompressFormat.JPEG, 70, out);
+        shotHeight = h;
+        lastShot = out.toByteArray();
+        shotPackage = pkg;
+        try (java.io.FileOutputStream f = new java.io.FileOutputStream(new java.io.File(Photo.dir(this), SHOT_FILE))) { f.write(lastShot); }
         return Claude.PICTURE + SHOT_FILE + "]]Screenshot taken (" + lastShot.length / 1024 + " KB, " + SHOT_WIDTH + " pixels wide), shown above. "
                 + "Tap by item number when the screen list has the item; otherwise tap_point with x and y in this picture's pixels.";
     }
@@ -826,7 +1077,7 @@ public class ScreenHands extends AccessibilityService {
         if (Screen.changed(shotPackage, nowPackage(), null) != null) throw new Exception(SHOT_OLD);
         float scale = getResources().getDisplayMetrics().widthPixels / (float) SHOT_WIDTH;
         int sx = Math.round(x * scale), sy = Math.round(y * scale);
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = root();
         Screen.Item it = root == null ? null : itemAt(root, sx, sy);
         if (Screen.pointNeedsCard(it, what)) {
             String card = it != null && Screen.sends(it) ? Screen.tapCard(appName(shotPackage), it, typedNow())
@@ -840,7 +1091,7 @@ public class ScreenHands extends AccessibilityService {
                 Thread.sleep(150);
             }
         }
-        AccessibilityNodeInfo now = getRootInActiveWindow();   // 11-14: an app that ignores finger taps
+        AccessibilityNodeInfo now = root();   // an app that ignores finger taps
         AccessibilityNodeInfo hit = now == null ? null : topAt(now, sx, sy, 0);   // on the right row; a click on the row
         while (hit != null && !hit.isClickable()) hit = hit.getParent();          // itself goes through
         if (hit != null) {

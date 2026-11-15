@@ -42,6 +42,17 @@ final class Hands {
         });
     }
 
+    /** Practice runs only: each card that answered itself, kept where the checker can read it (who a text went to). */
+    static void practiceCard(String text, String answer) {
+        android.content.Context app = MainActivity.appContext();
+        if (!app.getPackageName().endsWith(".test")) return;
+        java.io.File dir = app.getExternalFilesDir(null);
+        if (dir == null) return;
+        try (java.io.FileWriter w = new java.io.FileWriter(new java.io.File(dir, "cards.txt"), true)) {
+            w.write(text.replace('\n', ' ') + " -> " + answer + "\n");
+        } catch (Exception ignored) { }
+    }
+
     /** Worker thread: shows the card and waits for his tap. true = yes, false = cancelled, null = no answer. */
     static Boolean confirm(String text, String yes) throws InterruptedException {
         Card c = new Card(text, yes);
@@ -53,6 +64,7 @@ final class Hands {
             auto = testCards;
             android.util.Log.i("PA-REPLY", "CARD " + text.replace('\n', ' ') + " -> " + auto);
         }
+        if (auto != null) practiceCard(text, auto);
         final String answerWith = auto;
         if (answerWith != null) onMain(() -> new Handler(Looper.getMainLooper()).postDelayed(() -> answer(c, answerWith.equals("yes")), 3000));
         else onMain(() -> listenFor(c));

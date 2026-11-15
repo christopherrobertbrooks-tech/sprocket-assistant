@@ -158,6 +158,41 @@ public class PhoneToolsTest {
         eq("his own voice keeps going when Sprocket opens an app mid-question", PhoneTools.stopVoiceOnLeave(true, true), false);
         eq("he left on his own: quiet", PhoneTools.stopVoiceOnLeave(true, false), true);
         eq("he left after the answer: quiet", PhoneTools.stopVoiceOnLeave(false, true), true);
+        // practice runs: tools that fail on purpose
+        eq("faults: two tools", new java.util.TreeMap<>(PhoneTools.faults("send_text:refused; add_event:no_confirm")).toString(), "{add_event=no_confirm, send_text=refused}");
+        eq("faults: unknown kinds are dropped", PhoneTools.faults("send_text:explode;call:refused").toString(), "{call=refused}");
+        eq("faults: none", PhoneTools.faults(null).isEmpty(), true);
+        // a text with no confirmation said "the text did not go", though it often did; Sprocket then offered to
+        // send it again (a double text). Unconfirmed is its own answer: it may have gone, don't resend, ask them to check.
+        String unconfirmed = PhoneTools.unconfirmed("Mom");
+        eq("unconfirmed: may have gone", unconfirmed.contains("may have gone"), true);
+        eq("unconfirmed: never 'did not go'", unconfirmed.contains("did not go"), false);
+        eq("unconfirmed: don't send it again", unconfirmed.contains("don't send it again"), true);
+        eq("the practice fault says the same", PhoneTools.FAULT_NO_CONFIRM, PhoneTools.unconfirmed("them"));
+        // a contact with work, cell and home numbers. "at work" / "'s cell" picks that one; a text
+        // goes only to a cell (no cell: say which numbers there are and ask); a call with no label: the cell first.
+        eq("label: at work", String.join("|", PhoneTools.splitLabel("Mom at work")), "Mom|work");
+        eq("label: 's cell number", String.join("|", PhoneTools.splitLabel("Sam's cell number")), "Sam|mobile");
+        eq("label: work number for", String.join("|", PhoneTools.splitLabel("the work number for Grandpa")), "Grandpa|work");
+        eq("label: home phone", String.join("|", PhoneTools.splitLabel("Grandpa's home phone")), "Grandpa|home");
+        eq("label: none", String.join("|", PhoneTools.splitLabel("Mom")), "Mom|");
+        eq("label: a name that just ends in Home stays", String.join("|", PhoneTools.splitLabel("Sweet Home")), "Sweet Home|");
+        java.util.List<String[]> mom = java.util.Arrays.asList(new String[]{"+12025550131", "work"}, new String[]{"+12025550111", "mobile"},
+                new String[]{"+12025550141", "home"});
+        java.util.List<String[]> grandpa = java.util.Arrays.asList(new String[]{"+12025550151", "home"}, new String[]{"+12025550161", "work"});
+        try {
+            eq("text Mom: her cell", PhoneTools.pickNumber("Mom", mom, "", true), "+12025550111");
+            eq("text Mom at work: her work", PhoneTools.pickNumber("Mom", mom, "work", true), "+12025550131");
+            eq("call Mom: her cell", PhoneTools.pickNumber("Mom", mom, "", false), "+12025550111");
+            eq("call Mom at home: home", PhoneTools.pickNumber("Mom", mom, "home", false), "+12025550141");
+            eq("call Grandpa (no cell): the first", PhoneTools.pickNumber("Grandpa", grandpa, "", false), "+12025550151");
+        } catch (Exception e) { eq("number picking threw", e.getMessage(), ""); }
+        String why = "";
+        try { PhoneTools.pickNumber("Grandpa", grandpa, "", true); } catch (Exception e) { why = e.getMessage(); }
+        eq("text Grandpa (no cell): ask, naming their numbers", why.contains("no cell") && why.contains("home") && why.contains("work") && why.contains("Ask the boss"), true);
+        why = "";
+        try { PhoneTools.pickNumber("Grandpa", grandpa, "mobile", false); } catch (Exception e) { why = e.getMessage(); }
+        eq("call Grandpa's cell (none): say so", why.contains("no cell number"), true);
         eq("is the store open comes back", PhoneTools.wantsToSee("is the hardware store open today?"), false);
         eq("can you open my photos stays", PhoneTools.wantsToSee("can you open my photos"), true);
         eq("then open Maps stays", PhoneTools.wantsToSee("find a gas station and then open Maps"), true);

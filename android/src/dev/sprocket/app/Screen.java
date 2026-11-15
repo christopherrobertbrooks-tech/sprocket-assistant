@@ -299,6 +299,43 @@ final class Screen {
         return "at " + num(now) + ", from " + num(min) + " to " + num(max);
     }
 
+    /**
+     * The first item (1-based) whose label has every word they're looking for (small words like "a" and "the" skipped), or
+     * -1. The list itself never counts. For the screen tool's find (practice: it gave up on a long menu and said
+     * it had checked it all).
+     */
+    static int findItem(List<Item> items, String want) {
+        List<String> words = new java.util.ArrayList<>();
+        for (String w : (want == null ? "" : want).toLowerCase(Locale.US).split("[^a-z0-9']+"))
+            if (!w.isEmpty() && !w.matches("a|an|the|some|of|my|and")) words.add(w);
+        if (words.isEmpty()) return -1;
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it.scrollable || it.label.isEmpty()) continue;
+            String l = it.label.toLowerCase(Locale.US);
+            boolean all = true;
+            for (String w : words) if (!l.matches("(?s).*\\b" + java.util.regex.Pattern.quote(w) + ".*")) { all = false; break; }
+            if (all) return i + 1;
+        }
+        return -1;
+    }
+
+    /** True while some list on the screen says it has more below. */
+    static boolean moreBelow(List<Item> items) {
+        for (Item it : items) if ("more below".equals(it.value)) return true;
+        return false;
+    }
+
+    /**
+     * Where a list is (practice: three scrolls into a 30-item menu it said "I checked every line" and the item
+     * was one scroll further): more below, at the bottom, or "" when it can't tell or doesn't scroll at all.
+     */
+    static String scrollState(boolean canScrollDown, boolean canScrollUp) {
+        if (canScrollDown) return "more below";
+        if (canScrollUp) return "at the bottom";
+        return "";
+    }
+
     private static String num(float f) {
         if (f == Math.rint(f) && Math.abs(f) < 1e9) return String.valueOf((long) f);
         String t = String.format(Locale.US, "%.2f", f);
@@ -320,6 +357,56 @@ final class Screen {
      */
     static final String OWN_SCREEN = "(This is Sprocket's own screen, which is up while he asks; reading again shows it "
             + "again. To use another app, open it first: open_app, go_to or open_screen.)\n";
+
+    /** The hidden screen with nothing open on it yet (BgScreen: Sprocket works there while they use the phone). */
+    static final String HIDDEN_EMPTY = "Sprocket is working on its own hidden screen (they keep using their phone meanwhile), "
+            + "and nothing is open on it yet: open the app first with open_app or open_screen. Screen control is on.\n";
+
+    /**
+     * Whether the working glow stays hidden: when Sprocket works on its hidden screen, nothing shows while the phone is
+     * locked or its screen is off (the glow lit up the always-on display). On the real screen it always shows.
+     */
+    static boolean glowHidden(boolean hiddenScreen, boolean locked, boolean screenOn) {
+        return hiddenScreen && (locked || !screenOn);
+    }
+
+    /**
+     * One line for the brain about whether they can see the screen (locked, working on the hidden screen, it said
+     * "the screen's left up so you can see it"). "" when they're looking at their unlocked phone as usual.
+     */
+    static String situation(boolean locked, boolean screenOn, boolean hiddenScreen) {
+        boolean away = locked || !screenOn;
+        if (hiddenScreen && away)
+            return "Their phone is locked with the screen off, and Sprocket works on its own hidden screen: they can't see anything "
+                    + "you open. Tell them what you did and what you found. What you leave up with stay (a cart for their checkout "
+                    + "tap) moves onto the real screen when you're done: say it'll be there when they unlock, not that it's up now.";
+        if (hiddenScreen)
+            return "Sprocket works on its own hidden screen while they keep using their phone: they can't see what you open there "
+                    + "until you're done. Tell them the result. What you leave up with stay (a cart for their checkout tap) moves "
+                    + "onto the real screen when you finish.";
+        if (away)
+            return "Their phone is locked with the screen off: apps and settings on the screen can't be used until they unlock it. "
+                    + "Say so if their question needs them.";
+        return "";
+    }
+
+    /** "stay" on the hidden screen: there's nothing they can see to leave up. */
+    static final String STAY_HIDDEN = "This moves from Sprocket's hidden screen onto the real screen when you're done (if their "
+            + "phone is locked, it's there when they unlock). Tell them what it shows.";
+
+    /** The phone's own Settings app (Google's, Samsung's...), where the wireless-debugging pairing window lives. */
+    static boolean isSettingsApp(String pkg) {
+        return pkg != null && (pkg.equals("com.android.settings") || pkg.endsWith(".settings") || pkg.equals("com.samsung.android.settings"));
+    }
+
+    /** A pairing code (exactly 6 digits, maybe spaced like "123 456") in a piece of screen text, or null. */
+    static String pairingCodeIn(String text) {
+        if (text == null) return null;
+        String t = text.trim();
+        if (t.matches("\\d{6}")) return t;
+        if (t.matches("\\d{3} \\d{3}")) return t.replace(" ", "");
+        return null;
+    }
 
     static final String KEYBOARD = "(The keyboard is open over the bottom of the screen and hides what's under it: back "
             + "closes it.)\n";

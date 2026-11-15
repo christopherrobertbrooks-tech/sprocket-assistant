@@ -20,20 +20,16 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   while you've asked it to watch, with a notice on screen the whole time. What you type and anything in banking or
   password apps is never recorded, and recordings stay on the phone.
 
-- **A glow while it works.** A soft orange glow around the edge of the screen while Sprocket is controlling your
-  screen for the request you just made. It comes on when Sprocket starts tapping in another app and goes away as soon
-  as it answers, so you can tell at a glance when it's in control and when it's done. Taps go straight through the
-  glow, and it never shows up in what Sprocket reads.
+- **Remembers your food.** Sprocket keeps track of what you order and how you like it (no onions, the large, your
+  usual from each place), so "get my usual from Taco Bell" just works. Tell it your allergies once ("I'm allergic to
+  peanuts") and it steers clear of them in every food order: it checks the menu's ingredient and allergen notes where
+  the app has them, and tells you when it can't tell. It's a helper, not a guarantee: menus can be wrong or
+  incomplete, so check anything serious yourself.
 
 - **Home devices.** Control the smart-home and TV apps already on your phone by voice, and check in on cameras: "how
   are the snakes doing?" opens your pet or reptile camera app, looks at the live view, and tells you what it sees (the
   light on, an animal out and about, the water dish full). The picture goes only to the brain you've set up, nowhere
   else. Remote and camera apps are often all picture buttons, so this needs testing app by app.
-
-- **Work in the background.** Let Sprocket tap through apps on a hidden second screen, so it can fill a cart or change
-  a setting while you keep using your phone, the way the open-source [Mika](https://github.com/wangzan101/Mika) app
-  does. It needs a one-time pairing with your phone's own wireless debugging (Android 12 or later). The phone still
-  has to be unlocked with the screen on (it can stay dim): Android ignores taps once the screen is off.
 
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not

@@ -1,7 +1,14 @@
 # Sprocket
 
-**Beta.** Sprocket is used every day on the phone it was built on, but it's one person's project and hasn't been tried
-on many other phones yet. Expect rough edges, and please report anything that breaks under Issues.
+## Beta testers wanted
+Sprocket is used every day on the phone it was built on, but it's one person's project and hasn't been tried on many
+other phones yet. Expect rough edges. If you have an Android phone (8 or newer; 12 or newer for background work) and
+want to help:
+1. Install it (see "Install") and use it for a few days for whatever you'd ask a phone assistant.
+2. When something breaks, open an issue with the [bug form](../../issues/new/choose): your phone's make and model, its
+   Android version, the brain you use, what you asked, and what happened.
+
+Reports from phones that aren't Samsung help most. There's nothing to sign up for: just install it.
 
 A talking phone assistant for Android. You talk or type; Sprocket answers out loud and does things on your phone.
 It starts out friendly and plain, and its personality is yours to write in Settings > Personality, which comes
@@ -36,7 +43,15 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
   After a task that worked, it remembers the way (say, Gmail's spam folder) and next time goes there by itself in a
   few seconds, stopping and handing back if the app looks different. The saved ways stay on your phone, under
   ⋯ > Memory to delete. (Ideas from [Mika](https://github.com/wangzan101/Mika)'s per-app knowledge files and the
-  [TAG-Nav](https://arxiv.org/abs/2610.22672) paper.)
+  [TAG-Nav](https://arxiv.org/abs/2610.22672) paper.) A soft orange glow around the edge of the screen shows while
+  Sprocket is in control.
+- **Work in the background (Android 12 or newer):** Sprocket can do its tapping on a hidden screen while you keep
+  using your phone, then put the result on your screen when it's done. See "Work in the background" below.
+- **Food orders:** say what you want and it fills the cart in your delivery app or a restaurant's own app (DoorDash,
+  McDonald's, Taco Bell and others), checks every item, then stops on the cart for your tap. It never places the order.
+  Give it a budget ("I've got $20 for lunch") and it counts delivery, fees, tax and tip, and suggests what fits.
+- **Packages:** "where's my package?" looks in Shop, then Amazon, Walmart or Target, then your shipping emails, and
+  opens the tracking link to tell you where it is and when it's due.
 - **Call announcer:** with the phone on vibrate, it says who is calling and listens for "answer", "decline" or
   "text". Works over the lock screen. You set the hours.
 - **Lists:** groceries sorted by aisle, to-dos with due dates, lists from a photo of a recipe, and (optionally) kept
@@ -115,6 +130,29 @@ Sprocket uses that permission for nothing else, but it is a powerful one: an app
 settings. To take it back: `adb shell pm revoke dev.sprocket.app android.permission.WRITE_SECURE_SETTINGS`, or
 uninstall Sprocket. Without it, asking Sprocket to turn screen control on opens the Accessibility page for you.
 
+## Work in the background (optional)
+On Android 12 or newer, Sprocket can work on a hidden second screen, so you can keep using your phone while it fills a
+cart or changes a setting. To set it up:
+1. Turn on Developer options, once: Settings > About phone (on Samsung, then Software information) > tap **Build
+   number** seven times.
+2. In Sprocket, tap ⋯ > **Background work (hidden screen)**. Sprocket opens Developer options > Wireless debugging >
+   "Pair device with pairing code" for you (the orange glow shows while it works), reads the code through screen
+   control, and pairs with your phone's own wireless debugging. If Android asks to allow wireless debugging on this
+   network, tap **Allow**.
+3. That's it. From now on apps open on the hidden screen. When you ask to see something, or an order needs your tap,
+   Sprocket moves it onto your screen.
+
+Good to know:
+- It needs Wi-Fi, because wireless debugging only runs on Wi-Fi.
+- After the phone restarts, Sprocket starts it again the next time you open the app.
+- Pairing gives Sprocket the same access a computer with adb would have. It uses that only to start its hidden screen
+  and to give itself the permission described above under "let Sprocket switch screen control back on" (so it can
+  turn wireless debugging back on after a restart).
+- To undo it: tap the menu item again to switch it off, and under Wireless debugging > Paired devices, forget
+  **sprocket@** followed by your phone's model.
+- Tested on a Samsung phone and an Android 14 tablet, including with the screen locked. Other phones may differ:
+  reports help.
+
 ## Updating
 - **Hearing about new versions:** Sprocket doesn't check for updates itself. To be told, sign in to GitHub and, at
   the top of this page, click **Watch > Custom**, tick **Releases**, then **Apply**. GitHub then emails you (or shows
@@ -180,6 +218,8 @@ It's a personal project, so answers may take a while.
 - Your keys stay on your phone. Your chat, memory and lists stay on your phone (and in your own Notion, if you
   connect it).
 - What you ask goes to the brain you chose: Anthropic for Claude, or your own server.
+- Background work talks only to your own phone's wireless debugging (on the phone itself); its pairing code is read
+  from the screen and never saved.
 - Weather comes from Open-Meteo, GitHub from GitHub's public API, lists from your Notion when connected. Web search
   goes through Anthropic's search (Claude) or the go-between's Brave Search (your own model).
 - Nothing is collected by anyone else. There are no analytics.
@@ -191,9 +231,12 @@ don't want.
 
 ## Credits
 - Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0); place names from GeoNames.
+- Background work's wireless-debugging pairing client is ported from [Mika](https://github.com/wangzan101/Mika)
+  (Apache 2.0), as is the idea of a hidden screen; see `android/src/dev/sprocket/app/adb/NOTICE.md`.
 - Sprocket is not affiliated with Anthropic, Notion, GitHub, Brave or any model maker.
 - Written with Claude (Anthropic's AI) as the programmer, directed and tested by its owner.
 
 ## Licence
-MIT (see [LICENSE](LICENSE)). The optional voice server in `gateway/` uses IndexTTS, which has its own licence:
+MIT (see [LICENSE](LICENSE)), except the code ported from Mika in `android/src/dev/sprocket/app/adb/`, which keeps
+its Apache 2.0 licence (see the `NOTICE.md` and `LICENSE-Mika.txt` there). The optional voice server in `gateway/` uses IndexTTS, which has its own licence:
 see `gateway/README.md`.
