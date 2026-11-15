@@ -92,7 +92,7 @@ public class ScreenTest {
                 button("Coleslaw · $2.99"), button("Pickle Spear · $0.99"));
         eq("find: the item, by its words", Screen.findItem(menu, "pickle spear"), 3);
         eq("find: case and extra words don't matter", Screen.findItem(menu, "a Pickle"), 3);
-        eq("find: not on tthe screen", Screen.findItem(menu, "egg cream"), -1);
+        eq("find: not on this screen", Screen.findItem(menu, "egg cream"), -1);
         eq("find: the list itself never counts", Screen.findItem(menu, ""), -1);
         eq("find: more below", Screen.moreBelow(menu), true);
         eq("find: at the bottom", Screen.moreBelow(Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "at the bottom"))), false);

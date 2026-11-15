@@ -1956,6 +1956,7 @@ public class MainActivity extends Activity {
             android.os.PowerManager pm = (android.os.PowerManager) app.getSystemService(POWER_SERVICE);
             Claude.situation = Screen.situation(km != null && km.isKeyguardLocked(), pm == null || pm.isInteractive(), BgScreen.on());
         }
+        if (new SharedPreferencesLike(app).bg()) BgSetup.keepUp(app);   // helper gone (Wi-Fi was off): back for the next question
         usedHands = false;
         handsMoved = false;
         ScreenHands.startTrail();

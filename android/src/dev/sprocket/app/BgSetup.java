@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * Stage 3 of "work in the background": Sprocket starts its own hidden-screen helper, no computer. Once, it pairs with
- * tthe phone's own wireless debugging (the code read off the Settings pairing window through screen control, the port
+ * this phone's own wireless debugging (the code read off the Settings pairing window through screen control, the port
  * found by mDNS); after that it connects to 127.0.0.1, grants itself what it needs to turn wireless debugging back on
  * after a restart, and starts BgHelper from its own installed APK. The adb client is ported from Mika (adb/NOTICE.md).
  * Worker threads only.
@@ -45,7 +45,7 @@ final class BgSetup {
                 for (int port : ports) {
                     try {
                         new AdbPairing(tls).pair("127.0.0.1", port, code);
-                        android.util.Log.i("Sprocket", "background: paired with tthe phone's wireless debugging");
+                        android.util.Log.i("Sprocket", "background: paired with this phone's wireless debugging");
                         return "paired";
                     } catch (AdbPairingException e) {
                         android.util.Log.w("Sprocket", "background: pairing on " + port + " failed: " + e.reason);
@@ -105,9 +105,14 @@ final class BgSetup {
 
     private static final java.util.concurrent.atomic.AtomicBoolean starting = new java.util.concurrent.atomic.AtomicBoolean();
 
-    /** Background work is on but the helper isn't running (after a restart): bring it back quietly, once at a time. */
+    /**
+     * Background work is on but the helper isn't running (after a restart, or Wi-Fi went away and took wireless
+     * debugging with it): bring it back quietly, once at a time. Off Wi-Fi it doesn't try (wireless debugging only runs
+     * on Wi-Fi; Sprocket works on the real screen meanwhile) and comes back by itself when Wi-Fi does.
+     */
     static void keepUp(Context c) {
-        if (BgScreen.on() || !starting.compareAndSet(false, true)) return;
+        watchWifi(c);
+        if (BgScreen.on() || !onWifi(c) || !starting.compareAndSet(false, true)) return;
         new Thread(() -> {
             try {
                 if (wirelessDebuggingOn(c)) {
@@ -128,7 +133,38 @@ final class BgSetup {
         }, "sprocket-bg-keepup").start();
     }
 
-    /** Connects to tthe phone's own wireless debugging and starts the helper; "started" or why not. */
+    static boolean onWifi(Context c) {
+        try {
+            android.net.ConnectivityManager cm = c.getSystemService(android.net.ConnectivityManager.class);
+            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+        } catch (Exception e) {
+            return true;   // can't tell: try anyway
+        }
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean watching = new java.util.concurrent.atomic.AtomicBoolean();
+
+    /** Once per app run: when Wi-Fi comes back and background work is on, start the helper again. */
+    static void watchWifi(Context c) {
+        if (!watching.compareAndSet(false, true)) return;
+        Context app = c.getApplicationContext();
+        try {
+            app.getSystemService(android.net.ConnectivityManager.class).registerNetworkCallback(
+                    new android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build(),
+                    new android.net.ConnectivityManager.NetworkCallback() {
+                        @Override public void onAvailable(android.net.Network n) {
+                            if (!app.getSharedPreferences("sprocket", Context.MODE_PRIVATE).getBoolean("bg", false)) return;
+                            android.util.Log.i("Sprocket", "background: Wi-Fi is back");
+                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> keepUp(app), 3000);
+                        }
+                    });
+        } catch (Exception e) {
+            android.util.Log.w("Sprocket", "background: can't watch Wi-Fi: " + e);
+        }
+    }
+
+    /** Connects to this phone's own wireless debugging and starts the helper; "started" or why not. */
     static String startHelper(Context c) throws Exception {
         if (BgScreen.on()) return "already running";
         AdbTls tls = AndroidAdb.tls(AndroidAdb.identity(c));

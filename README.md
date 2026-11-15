@@ -143,8 +143,8 @@ cart or changes a setting. To set it up:
    Sprocket moves it onto your screen.
 
 Good to know:
-- Setting it up, and starting it again after a restart, needs Wi-Fi (wireless debugging only runs on Wi-Fi). Without
-  the hidden screen, Sprocket simply uses screen control on your own screen, as before.
+- It needs Wi-Fi, because wireless debugging only runs on Wi-Fi. Away from Wi-Fi, Sprocket simply uses screen
+  control on your own screen, as before, and the hidden screen comes back by itself when you're on Wi-Fi again.
 - After the phone restarts, Sprocket starts it again the next time you open the app.
 - Pairing gives Sprocket the same access a computer with adb would have. It uses that only to start its hidden screen
   and to give itself the permission described above under "let Sprocket switch screen control back on" (so it can

@@ -3,6 +3,7 @@
      android/build.sh. What he types goes to Anthropic's API; the chat and the key stay on the phone. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.sprocket.app">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- rough area only (town level): searches and the weather where he is; asked once, can be refused -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- phase 3, the phone tools. Each dangerous one is asked the first time a tool needs it. Texts are sent and calls

@@ -358,7 +358,7 @@ public class ScreenHands extends AccessibilityService {
             case "stay":
                 stay = true;   // on the hidden screen: moved onto the real screen when the answer is done (MainActivity)
                 if (BgScreen.on()) return Screen.STAY_HIDDEN;
-                return "Tthe screen stays up when you're done; Sprocket won't come back to its own screen.";
+                return "This screen stays up when you're done; Sprocket won't come back to its own screen.";
             case "note": return MainActivity.noteApp(lastPackage, h.appName(lastPackage), in.optString("text"));
             case "tap_point": return h.tapPoint(in.optInt("x", -1), in.optInt("y", -1), in.optString("what"));
             case "switch_off": {                       // the user asked Sprocket to turn it off
