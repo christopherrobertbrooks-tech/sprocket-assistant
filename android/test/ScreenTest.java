@@ -80,7 +80,23 @@ public class ScreenTest {
         eq("a quantity menu isn't repeated", Screen.refuseRepeat(button("1 ×")) != null, true);
         eq("DoorDash's Increment is a +", Screen.refuseRepeat(button("Increment")), null);
         eq("a bare + is a +", Screen.refuseRepeat(button("+")), null);
-        // to see the real total (delivery, tax, tip) Sprocket must open checkout; that doesn't
+        // practice: three scrolls into a 30-item menu it said "I checked every line"; the item was one more down.
+        eq("a list with more below says so", Screen.scrollState(true, true), "more below");
+        eq("a list at its end says so", Screen.scrollState(false, true), "at the bottom");
+        eq("a list that can't tell says nothing", Screen.scrollState(false, false), "");
+        eq("the screen list shows it", Screen.describe("Eats", Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "more below"))),
+                "Screen of Eats:\n[1] list (more below) (scrolls)\n");
+        // practice: with "(more below)" on every screen it still said "I went through the entire menu" after 4 of 7
+        // scrolls. find scrolls the list itself; these are its two decisions.
+        List<Screen.Item> menu = Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "more below"),
+                button("Coleslaw · $2.99"), button("Pickle Spear · $0.99"));
+        eq("find: the item, by its words", Screen.findItem(menu, "pickle spear"), 3);
+        eq("find: case and extra words don't matter", Screen.findItem(menu, "a Pickle"), 3);
+        eq("find: not on this screen", Screen.findItem(menu, "egg cream"), -1);
+        eq("find: the list itself never counts", Screen.findItem(menu, ""), -1);
+        eq("find: more below", Screen.moreBelow(menu), true);
+        eq("find: at the bottom", Screen.moreBelow(Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "at the bottom"))), false);
+        // lunch budgets: to see the real total (delivery, tax, tip) Sprocket must open checkout; that doesn't
         // charge anything, so in a food or shopping app it needs no card. Placing the order always does.
         eq("Go to checkout in a food app: no card", Screen.needsCard("dev.playground.eats", button("Go to checkout")), false);
         eq("Checkout in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Checkout")), false);
@@ -99,6 +115,25 @@ public class ScreenTest {
         eq("Complete purchase asks first", Screen.risky(button("Complete purchase")), true);
         eq("Order now asks first", Screen.risky(button("Order now")), true);
         eq("Your orders (a tab) doesn't", Screen.risky(button("Your orders")), false);
+        eq("an empty hidden screen says to open the app first", Screen.HIDDEN_EMPTY.contains("open_app") && Screen.HIDDEN_EMPTY.contains("Screen control is on"), true);
+        // working on the hidden screen, the glow mustn't light up the always-on display while the phone is locked
+        eq("hidden screen, locked: no glow", Screen.glowHidden(true, true, true), true);
+        eq("hidden screen, screen off: no glow", Screen.glowHidden(true, false, false), true);
+        eq("hidden screen, unlocked and on: glow", Screen.glowHidden(true, false, true), false);
+        eq("the real screen: always the glow", Screen.glowHidden(false, true, false), false);
+        // locked, working on the hidden screen, it once said "the screen's left up so you can see it"
+        eq("unlocked, real screen: nothing said", Screen.situation(false, true, false), "");
+        eq("locked, hidden screen: they can't see it", Screen.situation(true, false, true).contains("can't see"), true);
+        eq("unlocked, hidden screen: they can't see it either", Screen.situation(false, true, true).contains("can't see what you open"), true);
+        eq("locked, no hidden screen: screen tasks wait for them", Screen.situation(true, false, false).contains("until they unlock"), true);
+        eq("stay on the hidden screen: it moves onto the real screen when done", Screen.STAY_HIDDEN.contains("onto the real screen"), true);
+        // stage 3: reading the wireless-debugging pairing code off the Settings window
+        eq("a 6-digit code", Screen.pairingCodeIn("482915"), "482915");
+        eq("a spaced code", Screen.pairingCodeIn(" 482 915 "), "482915");
+        eq("an IP and port isn't a code", Screen.pairingCodeIn("192.168.0.23:37101"), null);
+        eq("a year isn't a code", Screen.pairingCodeIn("2026"), null);
+        eq("Samsung's Settings counts", Screen.isSettingsApp("com.android.settings"), true);
+        eq("another app doesn't", Screen.isSettingsApp("com.dd.doordash"), false);
         eq("an empty screen says so", Screen.describe("", new ArrayList<>()), "Screen of an unknown app:\n(nothing readable on this screen)\n");
 
         List<Screen.Item> many = new ArrayList<>();

@@ -281,6 +281,43 @@ public class ClaudeTest {
             }
         }
 
+        // a practice run: the cart summary came in the same step as "stay" (leave the cart on screen), so it was dropped
+        // as a step's words, and the answer that followed was just "."; nothing would have been heard.
+        {
+            Claude.Transport before6 = Claude.transport;
+            int[] n6 = {0};
+            Claude.transport = (key, body, l2, cancel) -> {
+                Claude.Reply x = new Claude.Reply();
+                x.model = "own-model";
+                n6[0]++;
+                String line = n6[0] == 1 ? "On it, boss." : n6[0] == 2 ? "Cart is loaded, boss. Two tacos and chips." : ".";
+                if (l2 != null) { l2.text(line); l2.sentence(line, ""); }
+                x.text = line;
+                x.content.put(new JSONObject().put("type", "text").put("text", line));
+                if (n6[0] < 3) {
+                    x.stop = "tool_use";
+                    JSONObject in6 = new JSONObject().put("action", n6[0] == 1 ? "read" : "stay");
+                    JSONObject t = new JSONObject().put("type", "tool_use").put("id", "toolu_k" + n6[0]).put("name", "screen").put("input", in6);
+                    x.content.put(t);
+                    x.calls.add(t);
+                } else x.stop = "end_turn";
+                return x;
+            };
+            List<String> said6 = new ArrayList<>();
+            Claude.Listener ears6 = new Claude.Listener() {
+                public void text(String soFar) { }
+                public void sentence(String x, String mood) { said6.add(x); }
+            };
+            JSONObject r6 = new JSONObject().put("model", "own-model").put("messages", new JSONArray()
+                    .put(new JSONObject().put("role", "user").put("content", "two taco orders")));
+            Claude.Reply got6 = null;
+            try { got6 = Claude.send(new Claude.Brain(Claude.base, "k", true, "own-model"), r6, ears6, null, (name, in) -> "Screen of Eats:"); }
+            catch (Exception e) { said6.add("ERROR " + e); }
+            Claude.transport = before6;
+            eq("the summary said with stay is spoken", said6.contains("Cart is loaded, boss. Two tacos and chips."), true);
+            eq("a bare '.' after it isn't the reply", got6 == null ? "" : got6.text, "Cart is loaded, boss. Two tacos and chips.");
+        }
+
         // a tool turn whose last round has no words (Claude said it before acting): the earlier words are the reply,
         // not "no answer" (the owner 2026-10-17: the lost reply joined his next message to the texting one, which re-sent)
         Claude.Transport keep = Claude.transport;

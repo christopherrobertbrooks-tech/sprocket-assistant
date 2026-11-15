@@ -622,13 +622,16 @@ public class MainActivity extends Activity {
     // return to the app"): a question asked on Sprocket's screen that used the screen tool comes back here when it's
     // answered, unless the brain chose to leave what he asked to see on screen (screen action "stay").
     private static volatile boolean resumed, startedInApp, usedHands, handsMoved;
+    /** Until when a pause is Sprocket's own doing (it moved its hidden-screen result onto the real screen, the reply went silent). */
+    private static volatile long ownMoveUntil;
     private static volatile String askedNow = "";
 
     @Override
     protected void onPause() {
         super.onPause();
         resumed = false;
-        if (PhoneTools.stopVoiceOnLeave(busy, handsMoved)) VoiceOut.get(this).stop();   // he left: stop talking (not when its own tool opened an app)
+        boolean ownMove = System.currentTimeMillis() < ownMoveUntil;   // Sprocket just moved its result onto the real screen
+        if (PhoneTools.stopVoiceOnLeave(busy || ownMove, handsMoved || ownMove)) VoiceOut.get(this).stop();   // they left: stop talking (not when Sprocket itself opened or moved an app)
         handler.removeCallbacks(stillThereTimer);
         if (listen.on()) { listen.cancel(); styleSend(); }
     }
@@ -647,6 +650,7 @@ public class MainActivity extends Activity {
         StudioService.resume(this);           // anything the studio was still making when Android ended the app
         Place.refresh(this);                  // the town, if it's older than 20 minutes (background)
         ScreenHands.check(this);              // screen control switched off since (11-13): a notice that opens the page
+        if (prefs().bg()) BgSetup.keepUp(app);   // background work on, helper gone (a restart): bring it back
     }
 
     /** This morning's brief didn't happen (the phone was off, or Android held it back): make it now that he's here. Only
@@ -680,6 +684,9 @@ public class MainActivity extends Activity {
         String ownKey() { return p.getString("qwen_key", ""); }
         void ownKey(String k) { p.edit().putString("qwen_key", k.trim()).apply(); }
         String activeKey() { return Config.own ? ownKey() : key(); }
+        /** Background work on the hidden screen (BgSetup, BgScreen): set up from the menu (Android 12 and up). */
+        boolean bg() { return p.getBoolean("bg", false); }
+        void bg(boolean on) { p.edit().putBoolean("bg", on).apply(); }
         /** Settings (Config) as saved; a phone set up before them keeps its brain: stage 2's "brain" = "qwen". */
         void loadConfig() {
             Config.reset();
@@ -1011,8 +1018,24 @@ public class MainActivity extends Activity {
         m.getMenu().add(0, 5, 2, "Memory");
         m.getMenu().add(0, 3, 3, "New chat");
         m.getMenu().add(0, 7, 4, "Settings");
+        if (android.os.Build.VERSION.SDK_INT >= 31)   // pairing with the phone's own wireless debugging needs Android 12
+            m.getMenu().add(0, 9, 5, "Background work (hidden screen)").setCheckable(true).setChecked(prefs().bg());
         m.setOnMenuItemClickListener(it -> {
-            if (it.getItemId() == 7) {
+            if (it.getItemId() == 9) {           // background work: set it up, or switch it off
+                if (prefs().bg()) {
+                    prefs().bg(false);
+                    new Thread(() -> { try { BgScreen.cmd("quit"); } catch (Exception ignored) { } }, "sprocket-bg-off").start();
+                    note("Background work is off: Sprocket works on your screen again.");
+                } else {
+                    note("Setting up background work...");
+                    new Thread(() -> {
+                        boolean ok;
+                        try { ok = BgSetup.setup(app, s -> handler.post(() -> { chat.add("error", s, System.currentTimeMillis()); saveChat(); render(); })); }
+                        catch (Exception e) { ok = false; android.util.Log.w("Sprocket", "background setup: " + e); }
+                        if (ok) prefs().bg(true);
+                    }, "sprocket-bg-setup").start();
+                }
+            } else if (it.getItemId() == 7) {
                 settingsCard();
             } else if (it.getItemId() == 1) {
                 harder = !harder;
@@ -1928,6 +1951,12 @@ public class MainActivity extends Activity {
         pending = reply;
         startedInApp = resumed;
         askedNow = said == null ? "" : said;
+        {   // can they see the screen? (locked, on the hidden screen, it said the screen was left up for them)
+            android.app.KeyguardManager km = (android.app.KeyguardManager) app.getSystemService(KEYGUARD_SERVICE);
+            android.os.PowerManager pm = (android.os.PowerManager) app.getSystemService(POWER_SERVICE);
+            Claude.situation = Screen.situation(km != null && km.isKeyguardLocked(), pm == null || pm.isInteractive(), BgScreen.on());
+        }
+        if (new SharedPreferencesLike(app).bg()) BgSetup.keepUp(app);   // helper gone (Wi-Fi was off): back for the next question
         usedHands = false;
         handsMoved = false;
         ScreenHands.startTrail();
@@ -2035,6 +2064,7 @@ public class MainActivity extends Activity {
     /** Main thread. Static work first (the chat), then the screen on show, if any. */
     private static void finish(Chat.Turn reply, Claude.Reply r, String error, SelfTest st) {
         busy = false;
+        ScreenHands.glow(false);   // answered (or stopped): the glow goes
         pending = null;
         if (r != null) {
             reply.text = r.text;
@@ -2048,7 +2078,15 @@ public class MainActivity extends Activity {
             android.util.Log.i("PA-REPLY", error != null ? "ERROR " + error   // screen (a screen dump suspends the hands)
                     : reply.text.trim().isEmpty() ? "(no words)" : reply.text.replace('\n', ' '));
         if (reply.text.trim().isEmpty()) chat.turns.remove(reply);
+        exportForPractice();
         saveChat();
+        if (handsMoved && BgScreen.on() && (ScreenHands.stay || PhoneTools.wantsToSee(askedNow))) {   // worked on the hidden screen:
+            ownMoveUntil = System.currentTimeMillis() + 5000;   // the reply keeps talking over the move
+            new Thread(() -> {   // what they asked to see (an order's cart, for their checkout tap) onto the real screen
+                try { android.util.Log.i("Sprocket", "hidden screen -> the screen: " + BgScreen.cmd("show")); }
+                catch (Exception e) { android.util.Log.w("Sprocket", "hidden screen show: " + e); }
+            }, "sprocket-show").start();
+        }
         if (startedInApp && usedHands && !ScreenHands.stay && !PhoneTools.wantsToSee(askedNow) && !resumed)   // the hands left him in another app: come back
             app.startActivity(new Intent(app, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
         if (r != null && error == null && usedHands) learnRoute(askedNow, reply.text);
@@ -2653,6 +2691,25 @@ public class MainActivity extends Activity {
         return row;
     }
 
+    /** Practice runs only (the stand-in, a made-up key): tools that fail on purpose, by name (PhoneTools.faults). */
+    static volatile java.util.Map<String, String> testFaults = new java.util.HashMap<>();
+
+    /**
+     * Sprocket Test only: its lists and notes copied where the practice checker can read them over adb (the app's own
+     * external folder), after each answer, so a test can check a list really changed, not just what Sprocket said.
+     */
+    private static void exportForPractice() {
+        if (!app.getPackageName().endsWith(".test")) return;
+        File out = app.getExternalFilesDir(null);
+        if (out == null) return;
+        for (File f : new File[]{listsFile(), memoryFile()}) {
+            try {
+                byte[] b = f.exists() ? java.nio.file.Files.readAllBytes(f.toPath()) : "{}".getBytes();
+                java.nio.file.Files.write(new File(out, f.getName()).toPath(), b);
+            } catch (Exception e) { android.util.Log.w("Sprocket", "practice export: " + e); }
+        }
+    }
+
     private static File memoryFile() { return new File(app.getFilesDir(), "memory.json"); }
 
     private static Memory loadMemory() {
@@ -2942,12 +2999,22 @@ public class MainActivity extends Activity {
     /** The app's tools for Claude: the weather, for where he is (his phone's rough location) or a town he names. */
     private static final Claude.Tools TOOLS = new Claude.Tools() {
         @Override public String run(String name, JSONObject input) throws Exception {
-            if (name.equals("screen")) usedHands = true;
+            String fault = standIn() ? testFaults.get(name) : null;   // practice only: this tool fails on purpose
+            if ("refused".equals(fault)) throw new Exception(PhoneTools.FAULT_REFUSED);
+            if ("no_confirm".equals(fault)) {   // it did happen, but the phone never said so
+                try { runTool(name, input); } catch (Exception ignored) { }   // (in the practice box a text can't really go)
+                throw new Exception(PhoneTools.FAULT_NO_CONFIRM);
+            }
+            return runTool(name, input);
+        }
+
+        private String runTool(String name, JSONObject input) throws Exception {
+            if (name.equals("screen")) { usedHands = true; ScreenHands.glow(true); }   // the glow: Sprocket is working the screen
             if (name.equals("screen") || name.equals("open_app") || name.equals("open_screen") || name.equals("go_to")
                     || name.equals("maps") || name.equals("email")) handsMoved = true;   // the next pause is its own doing
             if (name.equals("open_app")) ScreenHands.opened("open_app", input.optString("name"));
             if (name.equals("open_screen")) ScreenHands.opened("open_screen", input.optString("screen"));
-            if (name.equals("go_to")) { usedHands = true; return goTo(input.optString("place")); }
+            if (name.equals("go_to")) { usedHands = true; ScreenHands.glow(true); return goTo(input.optString("place")); }
             if (name.equals("remember") || name.equals("forget")) return remember(name, input);
             if (name.startsWith("list_")) return listTool(name, input);
             if (name.startsWith("goal")) return goalTool(name, input);
@@ -3306,6 +3373,16 @@ public class MainActivity extends Activity {
             }).start();
             return;
         }
+        String bg = test.getStringExtra("st_bg");   // stage 3 over adb: "pair" (waits for the pairing window) or "start"
+        if (bg != null) {
+            new Thread(() -> {
+                String r;
+                try { r = bg.equals("pair") ? BgSetup.pair(app, 180_000) : BgSetup.startHelper(app); }
+                catch (Exception e) { r = "error: " + e; }
+                android.util.Log.i("PA-REPLY", "BG " + bg + " -> " + r);
+            }, "sprocket-bg-setup").start();
+            return;
+        }
         String say = test.getStringExtra("st_say"), base = test.getStringExtra("st_base"), k = test.getStringExtra("st_key");
         if (test.getBooleanExtra("st_feed_now", false) && base != null && k != null
                 && k.startsWith("sk-standin")) {               // the morning brief, now, against the stand-in
@@ -3323,8 +3400,16 @@ public class MainActivity extends Activity {
             testKey = k;
             Hands.autoAnswer = test.getStringExtra("st_confirm");   // "yes" / "no": the card answers itself after 5 s
             Hands.testHeard = test.getStringExtra("st_card_heard");  // or the card "hears" these words (no mic here)
+            testFaults = PhoneTools.faults(test.getStringExtra("st_fault"));   // practice only: "send_text:refused;add_event:no_confirm"
         }
         if (test.getBooleanExtra("st_new", false)) { chat = new Chat(); saveChat(); }
+        if (test.getBooleanExtra("st_fresh", false) && standIn()) {   // practice only: nothing carried over from the last test
+            synchronized (lists) { lists = new Lists(); saveLists(); }
+            memory = new Memory(); saveMemory();
+            appNotes = new AppNotes(); saveAppNotes();
+            File cardLog = new File(getExternalFilesDir(null), "cards.txt");
+            if (cardLog.exists() && !cardLog.delete()) android.util.Log.w("Sprocket", "practice: cards.txt stayed");
+        }
         String pic = test.getStringExtra("st_photo");          // a test picture in the app's own external folder
         if (pic != null) {
             try { attached = Photo.save(app, Uri.fromFile(new File(getExternalFilesDir(null), pic))); }

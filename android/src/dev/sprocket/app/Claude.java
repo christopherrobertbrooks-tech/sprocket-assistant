@@ -167,6 +167,9 @@ final class Claude {
      * only, or it would make every request a new one. A think-harder question is a one-off on Opus (its own cache), so it marks nothing: a cache write costs
      * more than plain input and would never be read.
      */
+    /** Where Sprocket is working and whether they can see it (Screen.situation), set when a question starts; "" = normal. */
+    static volatile String situation = "";
+
     static JSONObject request(String persona, String about, String memory, String now, Where where, List<Chat.Turn> history,
                               boolean harder) throws Exception {
         String model = Config.own ? Config.model() : harder ? OPUS : SONNET;
@@ -207,7 +210,7 @@ final class Claude {
                 content.put(new JSONObject().put("type", "text").put("text", "(From the app, not the boss: it is " + now
                         + (where.town().isEmpty() ? "" : ", near " + where.town()) + "."
                         + (harder ? " The boss pressed THINK HARDER: take the time to get this one right." : "")
-                        + " " + brainNow(harder) + ")"));
+                        + " " + brainNow(harder) + (situation.isEmpty() ? "" : " " + situation) + ")"));
             }
             messages.put(new JSONObject().put("role", "user").put("content", content));
         }
@@ -662,7 +665,7 @@ final class Claude {
             }
             if (total != null) {
                 rep.add(total);
-                if (rep.text.isEmpty()) rep.text = total.text;   // said it before acting, nothing after: that's the reply
+                if (rep.text.replaceAll("[\\p{Punct}\\s]", "").isEmpty()) rep.text = total.text;   // said it before acting, nothing (or just ".") after: that's the reply
             }
             total = rep;
             for (JSONObject call : rep.calls) if ("screen".equals(call.optString("name"))) usedScreen = true;
@@ -679,7 +682,15 @@ final class Claude {
                 break;
             }
             boolean more = ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) || "pause_turn".equals(rep.stop);
-            if (quiet != null) { if (more) quiet.drop(); else quiet.flush(); }   // a step's words stay on screen only
+            // a round that only leaves the screen up or saves a note is the wrap-up: its words are the answer (a cart
+            // summary said with "stay" was dropped and the reply that followed was just ".")
+            boolean wrapUp = more && !rep.calls.isEmpty();
+            for (JSONObject call : rep.calls) {
+                JSONObject in = call.optJSONObject("input");
+                String act = in == null ? "" : in.optString("action");
+                if (!"screen".equals(call.optString("name")) || !(act.equals("stay") || act.equals("note"))) wrapUp = false;
+            }
+            if (quiet != null) { if (more && !wrapUp) quiet.drop(); else quiet.flush(); }   // a step's words stay on screen only
             if ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) {
                 acted = true;
                 JSONArray results = new JSONArray();

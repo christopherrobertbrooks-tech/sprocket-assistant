@@ -33,7 +33,7 @@ final class PhoneTools {
 
     /** His spelling is the one to look up: the phone finds the contact it sounds like if the spelling differs. */
     private static final String WHO = "A contact's name exactly as they wrote or said it (\"Mom\", \"Toni\"; never "
-            + "re-spelled), or a phone number.";
+            + "re-spelled), or a phone number. Keep a number they named with it: \"Mom at work\", \"Sam's cell\".";
 
     static final String[] DAY_NAMES = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
 
@@ -135,7 +135,7 @@ final class PhoneTools {
                 .put(tool("screen", "Use the phone's screen like a person, for apps and settings no other tool covers (use "
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read; tap with times presses the same button again and again in one step (a "
-                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. look: a screenshot, for screens the list "
+                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. find: looks through the whole list for an item with these words (it does the scrolling, top to bottom, in one step): use it to look for something in a long menu or list, and trust what it says. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
                                 + "(it asks them first only when it sounds risky). Each action returns the screen after it. Never "
                                 + "tell them something is on their screen unless you read it, or go_to returned it, in this "
@@ -151,10 +151,10 @@ final class PhoneTools {
                                 + "only they can turn it back on, in Settings or from the notice that follows.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
-                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off")))
+                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off").put("find")))
                                 .put("item", new JSONObject().put("type", "integer").put("description", "For tap and type: the item's number."))
                                 .put("times", new JSONObject().put("type", "integer").put("description", "For tap: press it this many times (default 1, at most 50)."))
-                                .put("text", str("For type: what to type. For note: the fact to save."))
+                                .put("text", str("For type: what to type. For note: the fact to save. For find: the words to look for (\"pickle spear\")."))
                                 .put("direction", new JSONObject().put("type", "string").put("enum", new JSONArray().put("up").put("down"))
                                         .put("description", "For scroll; default down."))
                                 .put("x", new JSONObject().put("type", "integer").put("description", "For tap_point: pixels from the left of the screenshot."))
@@ -184,6 +184,29 @@ final class PhoneTools {
      */
     static boolean stopVoiceOnLeave(boolean questionRunning, boolean toolOpenedAnApp) {
         return !(questionRunning && toolOpenedAnApp);
+    }
+
+    /** A practice run's tools that fail on purpose: "send_text:refused;add_event:no_confirm" -> {send_text: refused, ...}. */
+    static java.util.Map<String, String> faults(String spec) {
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        if (spec == null) return out;
+        for (String part : spec.split(";")) {
+            String[] kv = part.trim().split(":");
+            if (kv.length == 2 && (kv[1].trim().equals("refused") || kv[1].trim().equals("no_confirm"))) out.put(kv[0].trim(), kv[1].trim());
+        }
+        return out;
+    }
+
+    static final String FAULT_REFUSED = "the phone refused; it didn't go through";
+    static final String FAULT_NO_CONFIRM = unconfirmed("them");
+
+    /**
+     * A text the phone never confirmed (this said "the text did not go", though such texts often do go, and
+     * Sprocket offered to send it again: a double text). Its own answer, so the brain neither claims it nor resends it.
+     */
+    static String unconfirmed(String who) {
+        return "the phone never confirmed the text to " + who + " went out (weak signal?), but it may have gone anyway: "
+                + "don't send it again unless they say to, and tell them to check their messages";
     }
 
     /** Other names people use for an app, by its name on the phone (normalised: lowercase letters and digits). */
@@ -357,6 +380,46 @@ final class PhoneTools {
     }
 
     /** The digits of a phone number he said or typed (a leading + kept); null if it's a name. */
+    /**
+     * "Mom at work" -> {Mom, work}; "Sam's cell number" -> {Sam, mobile}; "the work number for Grandpa" -> {Grandpa,
+     * work}; plain "Mom" -> {Mom, ""}. Labels: mobile, work, home (a contact with three numbers).
+     */
+    static String[] splitLabel(String to) {
+        String t = to == null ? "" : to.trim();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "(?i)^(?:the |my )?(cell|cellphone|mobile|work|office|home|house)\\s+(?:phone |number |line )?(?:number |phone )?(?:of|for)\\s+(.+)$").matcher(t);
+        if (m.matches()) return new String[]{m.group(2).trim(), label(m.group(1))};
+        m = java.util.regex.Pattern.compile(
+                "(?i)^(.+?)(?:'s|s'|\u2019s)?\\s+(?:at\\s+|on (?:her|his|their)\\s+)?(cell|cellphone|mobile|work|office|home|house)(?:\\s+(?:phone|number|line|cell))?(?:\\s+number)?$").matcher(t);
+        if (m.matches() && (t.matches("(?i).*('s|s'|\u2019s|\\bat|\\bon (her|his|their))\\s+\\w+.*") || t.matches("(?i).*\\s(phone|number|line)$")))
+            return new String[]{m.group(1).trim(), label(m.group(2))};
+        return new String[]{t, ""};
+    }
+
+    private static String label(String w) {
+        w = w.toLowerCase(java.util.Locale.US);
+        return w.startsWith("cell") || w.equals("mobile") ? "mobile" : w.equals("work") || w.equals("office") ? "work" : "home";
+    }
+
+    /**
+     * Which of a contact's numbers ({number, label: mobile / work / home / other}, mobile first) to use. A label they
+     * said wins; a text goes only to a cell (none: say which numbers there are and ask, since a home line can't take
+     * a text); a call with no label takes the cell, else the first.
+     */
+    static String pickNumber(String name, java.util.List<String[]> nums, String wanted, boolean forText) throws Exception {
+        java.util.List<String> have = new ArrayList<>();
+        for (String[] n : nums) if (!have.contains(n[1])) have.add(n[1]);
+        String kinds = String.join(" and ", have).replace("mobile", "cell");
+        if (wanted != null && !wanted.isEmpty()) {
+            for (String[] n : nums) if (n[1].equals(wanted)) return n[0];
+            throw new Exception(name + " has no " + (wanted.equals("mobile") ? "cell" : wanted) + " number (only " + kinds + "). Ask the boss which");
+        }
+        for (String[] n : nums) if (n[1].equals("mobile")) return n[0];
+        if (forText && nums.size() > 1)
+            throw new Exception(name + " has no cell number, only " + kinds + ", and a text needs a cell. Ask the boss which to use");
+        return nums.get(0)[0];
+    }
+
     static String number(String to) {
         if (to == null || !to.trim().matches("\\+?[0-9 ().-]{3,}")) return null;
         return to.trim().replaceAll("[^0-9+]", "");
