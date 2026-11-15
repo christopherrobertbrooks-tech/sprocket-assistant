@@ -135,7 +135,7 @@ final class PhoneTools {
                 .put(tool("screen", "Use the phone's screen like a person, for apps and settings no other tool covers (use "
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read; tap with times presses the same button again and again in one step (a "
-                                + "quantity +), up to 50. scroll up/down, back, home. look: a screenshot, for screens the list "
+                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
                                 + "(it asks them first only when it sounds risky). Each action returns the screen after it. Never "
                                 + "tell them something is on their screen unless you read it, or go_to returned it, in this "
@@ -145,7 +145,7 @@ final class PhoneTools {
                                 + "health: Battery and device care > Battery > Battery information\"); only facts you saw work, never "
                                 + "personal details. Notes you saved come back with that app's screen: use them, and check they still "
                                 + "match. Banking, payment, wallet and password apps are off limits; shopping and food-delivery apps are fine "
-                                + "(fill the cart, the checkout button asks them). Pay, buy, delete, install, sign-out, "
+                                + "(fill the cart, check it against what they asked, the checkout button asks them; taking an item out of the cart needs no card). Pay, buy, delete, install, sign-out, "
                                 + "send, post, call and answer buttons show them a card first, and only go ahead if they tap it. switch_off: when "
                                 + "they ask to turn screen control off, switches Sprocket's own screen control off (their card first); "
                                 + "only they can turn it back on, in Settings or from the notice that follows.",
@@ -168,8 +168,22 @@ final class PhoneTools {
         String t = " " + (said == null ? "" : said.toLowerCase(java.util.Locale.US)) + " ";
         for (String w : new String[]{" show me ", " show my ", " pull up ", " take me to ", " let me see ", " bring up ", " go to "})
             if (t.contains(w)) return true;
+        // a food or shopping order (a food-order test: the cart was filled, then Sprocket jumped back to its own screen and
+        // the owner couldn't check out): leave them on the cart
+        String noInOrder = t.replaceAll("\\bin order to\\b", " ");
+        if (noInOrder.matches("(?s).*\\b(order|orders|ordering|doordash|door dash|uber eats|ubereats|grubhub|instacart|eats|cart|checkout)\\b.*")
+                || noInOrder.matches("(?s).*\\b(get|grab|bring) me\\b.*\\bfrom\\b.*")) return true;
         // "open" as an ask ("open Firefox", "can you open my photos"), not "how many open tabs" (Codex 041 #5)
         return t.matches("(?s)(\\s*|.*([.,!?;:]\\s*|\\b(and|then|please|pls|you|just|now|also|go|to|quickly)\\s+))open\\b.*");
+    }
+
+    /**
+     * Whether Sprocket stops talking when its screen goes to the background (11-15: its first sentence was cut off
+     * because the hands opening a delivery app looked like the owner leaving). Mid-question, after one of its own tools opened
+     * another app, it keeps talking; any other time, he left: quiet.
+     */
+    static boolean stopVoiceOnLeave(boolean questionRunning, boolean toolOpenedAnApp) {
+        return !(questionRunning && toolOpenedAnApp);
     }
 
     /** Other names people use for an app, by its name on the phone (normalised: lowercase letters and digits). */

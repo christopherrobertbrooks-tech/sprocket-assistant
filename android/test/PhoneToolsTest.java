@@ -150,6 +150,14 @@ public class PhoneToolsTest {
         eq("is Bluetooth on comes back", PhoneTools.wantsToSee("is Bluetooth on?"), false);
         eq("delete the meeting comes back", PhoneTools.wantsToSee("delete the Meeting at 3pm tomorrow"), false);
         eq("how many open tabs comes back (open isn't an ask there)", PhoneTools.wantsToSee("How many open tabs do I have in Firefox?"), false);
+        // a food-order test: Sprocket filled the cart, then jumped back to its own screen, so the owner couldn't check out
+        eq("an order stays on the cart", PhoneTools.wantsToSee("i need some food, lets order doordash, put 42 hashbrowns from mcdonalds"), true);
+        eq("put it in my cart stays", PhoneTools.wantsToSee("put a veggie burrito from Casa Verde in my Eats cart"), true);
+        eq("get me food from a place stays", PhoneTools.wantsToSee("get me a burger and fries from Rosie's"), true);
+        eq("'in order to' isn't an order", PhoneTools.wantsToSee("turn on battery saver in order to save power"), false);
+        eq("his own voice keeps going when Sprocket opens an app mid-question", PhoneTools.stopVoiceOnLeave(true, true), false);
+        eq("he left on his own: quiet", PhoneTools.stopVoiceOnLeave(true, false), true);
+        eq("he left after the answer: quiet", PhoneTools.stopVoiceOnLeave(false, true), true);
         eq("is the store open comes back", PhoneTools.wantsToSee("is the hardware store open today?"), false);
         eq("can you open my photos stays", PhoneTools.wantsToSee("can you open my photos"), true);
         eq("then open Maps stays", PhoneTools.wantsToSee("find a gas station and then open Maps"), true);

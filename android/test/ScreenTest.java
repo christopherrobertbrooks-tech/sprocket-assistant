@@ -65,6 +65,21 @@ public class ScreenTest {
         eq("a plain + is fine to repeat", Screen.refuseRepeat(button("Increase quantity")), null);
         eq("a greyed-out + isn't", Screen.refuseRepeat(new Screen.Item("button", "+", true, false, false, false, false, false)) != null, true);
         eq("Sprocket's own screen says how to get out of it", Screen.OWN_SCREEN.contains("open_app"), true);
+        // a food-order test: deleting the extra item they asked to remove asked again and again on a card.
+        // Taking an item out of a food or shopping cart is easy to undo: no card. Account, address, payment: still a card.
+        eq("Delete Item in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Delete Item")), false);
+        eq("Remove in a food app's cart: no card", Screen.needsCard("dev.playground.eats", button("Remove Onion Rings")), false);
+        eq("Delete account in DoorDash: card", Screen.needsCard("com.dd.doordash", button("Delete account")), true);
+        eq("Remove payment card in DoorDash: card", Screen.needsCard("com.dd.doordash", button("Remove card")), true);
+        eq("Place order in DoorDash: card", Screen.needsCard("com.dd.doordash", button("Place order")), true);
+        eq("Delete in Messages: card", Screen.needsCard("com.google.android.apps.messaging", button("Delete")), true);
+        eq("Remove in Settings: card", Screen.needsCard("com.android.settings", button("Remove")), true);
+        // a food-order test: "Add" pressed 4 times put in one too many (each press adds one), and "1 ×" (a
+        // quantity menu) pressed 3 times went in circles. Only a real + is pressed again and again.
+        eq("Add is pressed once, not repeated", Screen.refuseRepeat(button("Add")) != null, true);
+        eq("a quantity menu isn't repeated", Screen.refuseRepeat(button("1 ×")) != null, true);
+        eq("DoorDash's Increment is a +", Screen.refuseRepeat(button("Increment")), null);
+        eq("a bare + is a +", Screen.refuseRepeat(button("+")), null);
         eq("an empty screen says so", Screen.describe("", new ArrayList<>()), "Screen of an unknown app:\n(nothing readable on this screen)\n");
 
         List<Screen.Item> many = new ArrayList<>();

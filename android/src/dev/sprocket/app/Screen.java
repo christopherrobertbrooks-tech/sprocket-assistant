@@ -238,12 +238,44 @@ final class Screen {
 
     private static boolean same(Item a, Item b) { return a.role.equals(b.role) && a.label.equals(b.label); }
 
-    /** Null when this button may be pressed again and again, or why not. */
+    /**
+     * Null when this button may be pressed again and again, or why not. Only a real + (a food-order test: "Add"
+     * pressed 4 times put in one too many, since each press adds one; "1 ×", a quantity menu, went in circles).
+     */
     static String refuseRepeat(Item it) {
         if (risky(it)) return "a button that needs his OK is never pressed more than once in a go";
         if (!it.enabled) return "that button is greyed out";
         if (!it.clickable) return "that item isn't a button";
+        if (!PLUS.matcher(it.label.trim()).matches())
+            return "only a + button (Increment, Increase quantity) is pressed again and again; press this once, then use the "
+                    + "+ that appears, or type the number if the quantity is a box";
         return null;
+    }
+
+    private static final java.util.regex.Pattern PLUS = java.util.regex.Pattern.compile(
+            "(?i)\\+|plus|increment|increase( quantity)?|increase( the)? quantity.*|add one( more)?|one more.*|more");
+
+    /** Food and shopping apps, where taking something out of the cart is easy to undo. */
+    private static final String[] SHOP_APP_WORDS = {"doordash", "ubercab.eats", "grubhub", "instacart", "postmates",
+            "seamless", "caviar", "gopuff", "shipt", "amazon.mshop", "walmart", "target.ui", "kroger", "costco", "playground.eats"};
+
+    /** Words that keep the card even in a cart app: the account, its addresses and payment, the order itself. */
+    private static final java.util.regex.Pattern NOT_CART = java.util.regex.Pattern.compile(
+            "(?i).*\\b(account|address|card|payment|wallet|profile|history|saved|all|everything|order|orders|sign|log)\\b.*");
+
+    /**
+     * True when a tap needs their OK on a card first (risky), except taking an item out of a food or shopping cart (a food-order test:
+     * deleting the extra item they'd just asked to remove asked again and again).
+     */
+    static boolean needsCard(String packageName, Item it) {
+        if (!risky(it)) return false;
+        String p = packageName == null ? "" : packageName.toLowerCase(Locale.US);
+        boolean shop = false;
+        for (String w : SHOP_APP_WORDS) if (p.contains(w)) { shop = true; break; }
+        String l = it.label.trim();
+        boolean cartEdit = l.matches("(?i)(remove|delete)\\b.*") && !NOT_CART.matcher(l).matches()
+                && !has(it, new String[]{"pay", "buy", "purchase", "place order", "checkout", "check out", "send", "call"});
+        return !(shop && cartEdit);
     }
 
     /**

@@ -621,14 +621,14 @@ public class MainActivity extends Activity {
     // Back to Sprocket after the hands (the owner 2026-11-10: "if the actual sprocket app was open when this ran it should
     // return to the app"): a question asked on Sprocket's screen that used the screen tool comes back here when it's
     // answered, unless the brain chose to leave what he asked to see on screen (screen action "stay").
-    private static volatile boolean resumed, startedInApp, usedHands;
+    private static volatile boolean resumed, startedInApp, usedHands, handsMoved;
     private static volatile String askedNow = "";
 
     @Override
     protected void onPause() {
         super.onPause();
         resumed = false;
-        VoiceOut.get(this).stop();             // he left: stop talking, and stop listening
+        if (PhoneTools.stopVoiceOnLeave(busy, handsMoved)) VoiceOut.get(this).stop();   // he left: stop talking (not when its own tool opened an app)
         handler.removeCallbacks(stillThereTimer);
         if (listen.on()) { listen.cancel(); styleSend(); }
     }
@@ -1929,6 +1929,7 @@ public class MainActivity extends Activity {
         startedInApp = resumed;
         askedNow = said == null ? "" : said;
         usedHands = false;
+        handsMoved = false;
         ScreenHands.startTrail();
         ScreenHands.stay = false;
         boolean think = harder;
@@ -2052,6 +2053,7 @@ public class MainActivity extends Activity {
             app.startActivity(new Intent(app, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
         if (r != null && error == null && usedHands) learnRoute(askedNow, reply.text);
         usedHands = false;
+        handsMoved = false;
         if (st != null) st.write(app, r, error);
         Watch w = watch;
         if (w != null) w.done(reply.text, error == null ? null : "Couldn't get an answer: " + error + ".");
@@ -2941,6 +2943,8 @@ public class MainActivity extends Activity {
     private static final Claude.Tools TOOLS = new Claude.Tools() {
         @Override public String run(String name, JSONObject input) throws Exception {
             if (name.equals("screen")) usedHands = true;
+            if (name.equals("screen") || name.equals("open_app") || name.equals("open_screen") || name.equals("go_to")
+                    || name.equals("maps") || name.equals("email")) handsMoved = true;   // the next pause is its own doing
             if (name.equals("open_app")) ScreenHands.opened("open_app", input.optString("name"));
             if (name.equals("open_screen")) ScreenHands.opened("open_screen", input.optString("screen"));
             if (name.equals("go_to")) { usedHands = true; return goTo(input.optString("place")); }

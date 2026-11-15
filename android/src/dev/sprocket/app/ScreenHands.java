@@ -473,20 +473,34 @@ public class ScreenHands extends AccessibilityService {
         Screen.Item want = lastItems.get(item - 1);
         String no = Screen.refuseRepeat(want);
         if (no != null) throw new Exception(no);
-        int n = Math.min(times, Screen.MAX_REPEAT), done = 0, at = item;
-        String screen = "";
-        for (; done < n; done++) {
-            if (done > 0) {
-                at = Screen.repeatTarget(lastItems, want, at);
-                if (at < 0 || !lastItems.get(at - 1).enabled) break;
+        int n = Math.min(times, Screen.MAX_REPEAT), done = 0;
+        String screen = tap(item, true);   // the first press with every check (covered, the right screen...)
+        done = 1;
+        // The rest: the same button, re-found after that press, then pressed directly with a short pause, checking it's
+        // still there and pressable each time, and one read at the end (11-15: 41 presses with a full read after each
+        // took 32 s in a delivery app).
+        int at = done < n ? Screen.repeatTarget(lastItems, want, item) : -1;
+        if (at > 0 && lastItems.get(at - 1).enabled) {
+            AccessibilityNodeInfo nd = lastNodes.get(at - 1);
+            String pkg = lastPackage;
+            while (done < n) {
+                if (!nd.refresh() || !nd.isEnabled() || !nd.isVisibleToUser() || !pkg.equals(nowPackage())) break;
+                AccessibilityNodeInfo target = nd;
+                while (target != null && !target.isClickable()) target = target.getParent();
+                if (target == null || !target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) break;
+                done++;
+                Thread.sleep(REPEAT_GAP_MS);
             }
-            screen = tap(at, true);
+            screen = settleAndRead();
         }
         String head = "Tapped \u201c" + (want.label.isEmpty() ? want.role : want.label) + "\u201d " + done
                 + (done == 1 ? " time" : " times") + (done < times ? " (asked for " + times + (times > Screen.MAX_REPEAT
                 ? "; at most " + Screen.MAX_REPEAT + " in one go" : "; it went away or greyed out") + ")" : "") + ". Check the screen shows it.\n";
         return head + screen;
     }
+
+    /** The pause between repeated presses: long enough for an app to count each one. */
+    private static final long REPEAT_GAP_MS = 200;
 
     /** finger: may fall back to a finger on the spot when the button's own click fails (never for replay, 11-13). */
     private String tap(int item, boolean finger) throws Exception {
@@ -496,7 +510,7 @@ public class ScreenHands extends AccessibilityService {
         if (no != null) throw new Exception(no);
         stillThere(n, 0);
         if (!onTop(n)) throw new Exception("item " + item + Screen.COVERED);
-        if (Screen.risky(it)) {   // stage 3: pay, delete, send, call... only after his OK on a card
+        if (Screen.needsCard(lastPackage, it)) {   // stage 3: pay, delete, send, call... only after his OK on a card
             Boolean yes = askOnScreen(Screen.tapCard(appName(lastPackage), it, Screen.sends(it) ? typedNow() : null), "Tap it");
             if (yes == null) return "Not tapped: the boss didn't answer the card.";
             if (!yes) return "Not tapped: the boss cancelled.";
