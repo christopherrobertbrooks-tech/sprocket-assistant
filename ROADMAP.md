@@ -32,8 +32,8 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 
 - **Work in the background.** Let Sprocket tap through apps on a hidden second screen, so it can fill a cart or change
   a setting while you keep using your phone, the way the open-source [Mika](https://github.com/wangzan101/Mika) app
-  does. It needs a one-time pairing with your phone's own wireless debugging (Android 12 or later). Whether it can
-  also work with the screen off or the phone locked is still being checked.
+  does. It needs a one-time pairing with your phone's own wireless debugging (Android 12 or later). The phone still
+  has to be unlocked with the screen on (it can stay dim): Android ignores taps once the screen is off.
 
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
