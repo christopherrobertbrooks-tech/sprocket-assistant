@@ -80,6 +80,25 @@ public class ScreenTest {
         eq("a quantity menu isn't repeated", Screen.refuseRepeat(button("1 ×")) != null, true);
         eq("DoorDash's Increment is a +", Screen.refuseRepeat(button("Increment")), null);
         eq("a bare + is a +", Screen.refuseRepeat(button("+")), null);
+        // to see the real total (delivery, tax, tip) Sprocket must open checkout; that doesn't
+        // charge anything, so in a food or shopping app it needs no card. Placing the order always does.
+        eq("Go to checkout in a food app: no card", Screen.needsCard("dev.playground.eats", button("Go to checkout")), false);
+        eq("Checkout in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Checkout")), false);
+        eq("Place order in DoorDash: card", Screen.needsCard("com.dd.doordash", button("Place order")), true);
+        eq("Place Order · $23.96: card", Screen.needsCard("com.dd.doordash", button("Place Order · $23.96")), true);
+        eq("Checkout in Messages-like apps: still a card", Screen.needsCard("com.example.store", button("Checkout")), true);
+        // restaurants' own apps (McDonald's, Taco Bell, Hardee's...) count as food apps too.
+        eq("McDonald's checkout: no card", Screen.needsCard("com.mcdonalds.app", button("Checkout")), false);
+        eq("Hardee's remove: no card", Screen.needsCard("com.hardees.ordering", button("Remove")), false);
+        eq("Pizza Hut remove: no card", Screen.needsCard("com.yum.pizzahut", button("Remove item")), false);
+        eq("Domino's place order: card", Screen.needsCard("com.dominospizza", button("Place Your Order")), true);
+        eq("Taco Bell checkout: no card", Screen.needsCard("com.tacobell.ordering", button("Checkout")), false);
+        // 11-15: Domino's "Place Your Order" wasn't a money button anywhere ("place order" missed the extra word)
+        eq("Place Your Order asks first", Screen.risky(button("Place Your Order")), true);
+        eq("Confirm order asks first", Screen.risky(button("Confirm order")), true);
+        eq("Complete purchase asks first", Screen.risky(button("Complete purchase")), true);
+        eq("Order now asks first", Screen.risky(button("Order now")), true);
+        eq("Your orders (a tab) doesn't", Screen.risky(button("Your orders")), false);
         eq("an empty screen says so", Screen.describe("", new ArrayList<>()), "Screen of an unknown app:\n(nothing readable on this screen)\n");
 
         List<Screen.Item> many = new ArrayList<>();

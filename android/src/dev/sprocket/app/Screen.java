@@ -102,7 +102,9 @@ final class Screen {
      * or send, post, call or answer for him. Sprocket's own Send and Call cards don't cover a tap in another app, so
      * those buttons get this card too (Codex 040 #1).
      */
-    private static final String[] RISKY_WORDS = {"pay", "buy", "purchase", "place order", "checkout", "check out",
+    private static final String[] RISKY_WORDS = {"pay", "buy", "purchase", "place order", "place your order", "place my order",
+            "confirm order", "confirm your order", "complete order", "complete purchase", "submit order", "order now",
+            "checkout", "check out",
             "subscribe", "transfer", "send money", "delete", "uninstall", "install", "remove", "erase", "factory reset",
             "reset phone", "sign out", "log out", "logout", "clear data", "clear storage", "format",
             "send", "post", "publish", "submit", "call", "dial", "answer"};
@@ -257,7 +259,11 @@ final class Screen {
 
     /** Food and shopping apps, where taking something out of the cart is easy to undo. */
     private static final String[] SHOP_APP_WORDS = {"doordash", "ubercab.eats", "grubhub", "instacart", "postmates",
-            "seamless", "caviar", "gopuff", "shipt", "amazon.mshop", "walmart", "target.ui", "kroger", "costco", "playground.eats"};
+            "seamless", "caviar", "gopuff", "shipt", "amazon.mshop", "walmart", "target.ui", "kroger", "costco", "playground.eats",
+            // restaurants' own apps (McDonald's, Taco Bell, Hardee's...)
+            "mcdonalds", "tacobell", "hardees", "carlsjr", "dominospizza", "dominos", "pizzahut", "papajohns", "wendys",
+            "chickfila", "starbucks", "chipotle", "burgerking", "subway", "kfc", "sonic", "dunkin", "panera", "popeyes",
+            "jackinthebox", "whataburger", "arbys", "dairyqueen", "littlecaesars"};
 
     /** Words that keep the card even in a cart app: the account, its addresses and payment, the order itself. */
     private static final java.util.regex.Pattern NOT_CART = java.util.regex.Pattern.compile(
@@ -273,6 +279,9 @@ final class Screen {
         boolean shop = false;
         for (String w : SHOP_APP_WORDS) if (p.contains(w)) { shop = true; break; }
         String l = it.label.trim();
+        // opening checkout only shows the total (the fees are only on that page); paying is the Place order button, which
+        // keeps its card
+        if (shop && l.matches("(?i)(go to |continue to |proceed to )?check ?out( now)?")) return false;
         boolean cartEdit = l.matches("(?i)(remove|delete)\\b.*") && !NOT_CART.matcher(l).matches()
                 && !has(it, new String[]{"pay", "buy", "purchase", "place order", "checkout", "check out", "send", "call"});
         return !(shop && cartEdit);
