@@ -25,6 +25,11 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   as it answers, so you can tell at a glance when it's in control and when it's done. Taps go straight through the
   glow, and it never shows up in what Sprocket reads.
 
+- **Home devices.** Control the smart-home and TV apps already on your phone by voice, and check in on cameras: "how
+  are the snakes doing?" opens your pet or reptile camera app, looks at the live view, and tells you what it sees (the
+  light on, an animal out and about, the water dish full). The picture goes only to the brain you've set up, nowhere
+  else. Remote and camera apps are often all picture buttons, so this needs testing app by app.
+
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
   Disturb and dims the screen. Anything risky in a routine still asks first, like it does today.
