@@ -28,6 +28,10 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **Correct it mid-task.** Talk to Sprocket while it's working to change the plan ("make that a large", "skip the
   fries") without starting over, and after you stop it, "keep going" picks up where it left off. Also an idea from Mika.
 
+- **Smaller models tested.** Sprocket is tested on Qwen 3.8 27B, which needs a big graphics card. Planned: run the
+  practice tests on smaller models that fit everyday graphics cards (8 to 16 GB) through the go-between, and list
+  which ones handle Sprocket's tools well, with their scores and speed, so you can pick one for the computer you have.
+
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
 - **More cloud brains.** Today the cloud choice is Claude Sonnet (Opus for "think harder"). Planned: pick other
@@ -61,8 +65,6 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **What did I miss?** A spoken run-through of the notifications that came in since you last looked, leaving out the
   noise.
 - Other languages for talking and listening.
-- More brains tested through the go-between (it should already work with any OpenAI-style server that handles
-  tool calls well).
 
 ## Not planned
 - **Google Play.** Play's rules don't allow an app to use Android's Accessibility service to carry out actions on
