@@ -37,7 +37,7 @@ public class PhoneToolsTest {
         eq("screen: food and shopping apps are allowed", screenTool.contains("shopping and food-delivery apps are fine"), true);
         eq("screen: not 'money apps' (it covered food apps)", screenTool.contains("Money and password apps"), false);
         String persona = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/assets/persona.md")), "UTF-8");
-        eq("persona: food orders fill the cart and stop for his tap", persona.contains("Food and shopping orders: you can do them")
+        eq("persona: food orders fill the cart and stop for their tap", persona.contains("Food and shopping orders: you can do them")
                 && persona.contains("the order is placed only when they tap it"), true);
         eq("an alarm needs a time", req(defs, "set_alarm"), "[\"time\"]");
 

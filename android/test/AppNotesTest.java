@@ -164,7 +164,7 @@ public class AppNotesTest {
                 java.util.Arrays.asList(AppNotes.Step.open("open_app", "Gmail"), AppNotes.Step.tap("Gmail", "Spam")), 22).contains("replacing the old way"), true);
 
         // 2026-11-15, the practice ground: a saved "way to Rosie's Burgers" held "Add 1 to cart" twice, so go_to put a
-        // burger and fries in his cart every time. A saved way only goes somewhere.
+        // burger and fries in the cart every time. A saved way only goes somewhere.
         java.util.List<AppNotes.Step> order = java.util.Arrays.asList(AppNotes.Step.open("open_app", "Eats"),
                 AppNotes.Step.tap("Eats", "Rosie's Burgers"), AppNotes.Step.tap("Eats", "Double Cheeseburger"),
                 AppNotes.Step.tap("Eats", "Add 1 to cart \u00b7 $11.99"), AppNotes.Step.tap("Eats", "View cart \u00b7 1 item \u00b7 $11.99"));
