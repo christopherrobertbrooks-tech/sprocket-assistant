@@ -547,7 +547,22 @@ public class ClaudeTest {
         eq("his own server's requests name its model", Claude.request("PERSONA", null, null, "Friday, October 17, 2026, 3:10 AM", HERE,
                 c.window(24), false).getString("model"), "qwen");
         eq("they go to his server", Claude.base, "https://box.example:8448");
-        eq("it's free", java.util.Arrays.toString(Claude.price("qwen")), "[0.0, 0.0, 0.0, 0.0]");
+        eq("it's free", java.util.Arrays.toString(Claude.price("qwen")), "[0.0, 0.0, 0.0, 0.0, 0.0]");
+        eq("so it isn't paid", Claude.paid("qwen"), false);
+        // DeepSeek through its Claude-style address (11-15: the tablet said "DeepSeek, your server · free")
+        java.util.Calendar cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        cal.clear(); cal.set(2026, java.util.Calendar.NOVEMBER, 16, 7, 0);   // a Monday, 7 am UTC: peak
+        long peak = cal.getTimeInMillis();
+        cal.set(2026, java.util.Calendar.NOVEMBER, 16, 12, 0);               // Monday noon UTC: off-peak
+        long offWeekday = cal.getTimeInMillis();
+        cal.set(2026, java.util.Calendar.NOVEMBER, 15, 7, 0);                // Sunday 7 am UTC: weekends are off-peak
+        long sunday = cal.getTimeInMillis();
+        eq("DeepSeek at peak", java.util.Arrays.toString(Claude.price("deepseek-flash", peak)), "[0.3, 1.2, 0.3, 0.006, 7.5E-4]");
+        eq("DeepSeek off-peak on a weekday is half", Claude.price("deepseek-flash", offWeekday)[1], 0.6);
+        eq("DeepSeek on a Sunday morning is half", Claude.price("deepseek-flash", sunday)[0], 0.15);
+        eq("DeepSeek is paid", Claude.paid("deepseek-flash"), true);
+        eq("whatever case the name is in", Claude.paid("DeepSeek-Flash"), true);
+        eq("Claude still costs a cent a search", Claude.price("claude-sonnet-5-5", peak)[4], 0.01);
         Claude.useBrain(false);
         eq("Claude again goes to Anthropic", Claude.base, Claude.ANTHROPIC);
         eq("Claude again = Sonnet", Claude.request("PERSONA", null, null, "Friday, October 17, 2026, 3:10 AM", HERE,

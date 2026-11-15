@@ -77,11 +77,33 @@ final class Claude {
     static final String EFFORT = "low", HARD_EFFORT = "high";
     static final int MAX_TOKENS = 2000, HARD_MAX_TOKENS = 8000;
 
-    /** $ per million tokens: input, output, cache write (5 min), cache read; plus $0.01 per web search. */
-    static double[] price(String model) {
-        if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0};   // his own server is free
-        return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20} : new double[]{2, 10, 2.50, 0.10};
+    /**
+     * $ per million tokens: input, output, cache write (5 min), cache read; then $ per web search. Claude: its pricing
+     * page; DeepSeek (deepseek-flash, through its Claude-style address): api-docs.deepseek.com pricing, 2026-11-15,
+     * half price off-peak. Any other model is the owner's own server: no charge counted.
+     */
+    static double[] price(String model) { return price(model, System.currentTimeMillis()); }
+
+    static double[] price(String model, long when) {
+        if (model != null && model.toLowerCase(java.util.Locale.ROOT).startsWith("deepseek")) {
+            double h = deepSeekOffPeak(when) ? 0.5 : 1;
+            return new double[]{0.30 * h, 1.20 * h, 0.30 * h, 0.006 * h, 0.00075};
+        }
+        if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0, 0};
+        return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20, 0.01} : new double[]{2, 10, 2.50, 0.10, 0.01};
     }
+
+    /** DeepSeek's peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday; everything else is half price. */
+    static boolean deepSeekOffPeak(long when) {
+        java.util.Calendar c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        c.setTimeInMillis(when);
+        int d = c.get(java.util.Calendar.DAY_OF_WEEK), h = c.get(java.util.Calendar.HOUR_OF_DAY);
+        boolean weekday = d != java.util.Calendar.SATURDAY && d != java.util.Calendar.SUNDAY;
+        return !(weekday && ((h >= 1 && h < 4) || (h >= 6 && h < 10)));
+    }
+
+    /** True when answers from this model cost money (Claude, DeepSeek); false for the owner's own server. */
+    static boolean paid(String model) { return price(model)[1] > 0; }
 
     static final class Reply {
         String text = "", stop = "", model = "";
@@ -99,7 +121,7 @@ final class Claude {
 
         double cost() {
             double[] p = price(model);
-            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3]) / 1e6 + (p[0] == 0 ? 0 : searches * 0.01);
+            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3]) / 1e6 + searches * p[4];
         }
     }
 

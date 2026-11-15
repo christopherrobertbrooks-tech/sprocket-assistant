@@ -1135,7 +1135,7 @@ public class MainActivity extends Activity {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.VERTICAL);
             row.addView(feedCard(fb));
-            TextView meta = text("Morning brief  \u00b7  " + (ownModel(t.model) ? Claude.ownName() + "  \u00b7  free"
+            TextView meta = text("Morning brief  \u00b7  " + (ownModel(t.model) ? Claude.ownName() + (Claude.paid(t.model) ? String.format(Locale.US, "  \u00b7  $%.2f", t.cost) : "  \u00b7  free")
                     : "Sonnet  \u00b7  " + String.format(Locale.US, "$%.2f", t.cost)), 11, FAINT);
             meta.setPadding(dp(8), dp(3), 0, 0);
             row.addView(meta);
@@ -1220,6 +1220,7 @@ public class MainActivity extends Activity {
     }
 
     private static String meta(Chat.Turn t) {
+        if (ownModel(t.model) && Claude.paid(t.model)) return Claude.ownName() + String.format(Locale.US, "  ·  $%.4f", t.cost);
         if (ownModel(t.model)) return Claude.ownName() + ", your server  ·  free";
         String who = Claude.OPUS.equals(t.model) ? "Opus, thinking harder" : "Sonnet";
         return who + String.format(Locale.US, "  ·  $%.4f", t.cost);
