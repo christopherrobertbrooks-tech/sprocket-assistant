@@ -163,6 +163,28 @@ public class AppNotesTest {
         eq("a different way still replaces it", keep.learnRoute("com.google.android.gm", "Gmail", "Gmail spam folder",
                 java.util.Arrays.asList(AppNotes.Step.open("open_app", "Gmail"), AppNotes.Step.tap("Gmail", "Spam")), 22).contains("replacing the old way"), true);
 
+        // 2026-11-15, the practice ground: a saved "way to Rosie's Burgers" held "Add 1 to cart" twice, so go_to put a
+        // burger and fries in his cart every time. A saved way only goes somewhere.
+        java.util.List<AppNotes.Step> order = java.util.Arrays.asList(AppNotes.Step.open("open_app", "Eats"),
+                AppNotes.Step.tap("Eats", "Rosie's Burgers"), AppNotes.Step.tap("Eats", "Double Cheeseburger"),
+                AppNotes.Step.tap("Eats", "Add 1 to cart \u00b7 $11.99"), AppNotes.Step.tap("Eats", "View cart \u00b7 1 item \u00b7 $11.99"));
+        AppNotes food = new AppNotes();
+        eq("a way with 'Add to cart' isn't saved", food.learnRoute("dev.playground.eats", "Eats", "Rosie's Burgers", order, 30)
+                .startsWith("Not noted: a saved way only goes somewhere"), true);
+        eq("nothing was saved", food.apps.size(), 0);
+        eq("the same way up to the restaurant is saved", food.learnRoute("dev.playground.eats", "Eats", "Rosie's Burgers",
+                order.subList(0, 2), 31).startsWith("Noted for Eats"), true);
+        eq("a size choice changes something", AppNotes.Step.set("Eats", "Large \u00b7 $4.99").changes(), true);
+        eq("a '+' changes something", AppNotes.Step.tap("Eats", "+").changes(), true);
+        eq("Remove changes something", AppNotes.Step.tap("Eats", "Remove").changes(), true);
+        eq("a risky button changes something", AppNotes.Step.tap("Eats", "Go to checkout").changes(), true);
+        eq("a note typed in changes something", AppNotes.Step.type("Eats", "Add a note", "extra crispy").changes(), true);
+        eq("typing a search doesn't", AppNotes.Step.type("Eats", "Search restaurants or dishes", "tacos").changes(), false);
+        eq("going into a menu doesn't", AppNotes.Step.tap("Eats", "Napoli Pizza Co.").changes(), false);
+        eq("a Settings page doesn't", AppNotes.Step.tap("Settings", "Display & touch").changes(), false);
+        eq("the route question says a way only goes somewhere",
+                AppNotes.routePrompt("x", order, "", "").contains("A way only goes somewhere"), true);
+
         System.out.println(fails == 0 ? "appnotes: all " + n + " checks pass" : "appnotes: " + fails + " of " + n + " FAILED");
         if (fails > 0) System.exit(1);
     }

@@ -160,12 +160,15 @@ public class ScreenHands extends AccessibilityService {
     static String run(JSONObject in) throws Exception {
         String step = in.optString("action", "read") + (in.has("item") ? " " + in.optInt("item") : "")
                 + (in.has("x") ? " " + in.optInt("x") + "," + in.optInt("y") : "");
-        String action = in.optString("action", "read"), before = lastPackage, label = "";
+        String action = in.optString("action", "read"), before = lastPackage, label = "", role = "";
         int item = in.optInt("item", 0);
-        synchronized (ScreenHands.class) { if (item >= 1 && item <= lastItems.size()) label = lastItems.get(item - 1).label; }
+        synchronized (ScreenHands.class) {
+            if (item >= 1 && item <= lastItems.size()) { label = lastItems.get(item - 1).label; role = lastItems.get(item - 1).role; }
+        }
         try {
             String out = act(in);
-            remember(action, before, label, in, out);
+            // a switch, checkbox, option or slider sets something: recorded as such, so a saved way never replays it
+            remember(action.equals("tap") && role.matches("switch|checkbox|choice|slider") ? "set" : action, before, label, in, out);
             int nl = out.indexOf('\n');   // just the first line ("Screen of Messages:"): the screen's words stay off the log
             android.util.Log.i("Sprocket", "screen " + step + " -> " + (nl < 0 ? out : out.substring(0, nl)));
             return out;
@@ -182,6 +185,7 @@ public class ScreenHands extends AccessibilityService {
         AppNotes.Step st = null;
         switch (action) {
             case "tap": st = AppNotes.Step.tap(app, label); break;
+            case "set": st = AppNotes.Step.set(app, label); break;
             case "type": st = AppNotes.Step.type(app, label, in.optString("text")); break;
             case "scroll": st = AppNotes.Step.scroll(app, in.optString("direction", "down")); break;
             case "back": st = AppNotes.Step.back(); break;
@@ -194,7 +198,7 @@ public class ScreenHands extends AccessibilityService {
 
     private static void track(AppNotes.Step st, String before, String out) {
         if (st != null && trail.steps.size() < 40) { trail.steps.add(st); trail.replayed = false; }
-        if (st != null && ("tap".equals(st.kind) || "type".equals(st.kind) || "tap_point".equals(st.kind)) && !before.isEmpty() && !mine(before)) {
+        if (st != null && ("tap".equals(st.kind) || "set".equals(st.kind) || "type".equals(st.kind) || "tap_point".equals(st.kind)) && !before.isEmpty() && !mine(before)) {
             trail.tapped = true;
             trail.pkg = before;
             trail.app = st.app;
@@ -212,6 +216,9 @@ public class ScreenHands extends AccessibilityService {
     static String replay(AppNotes.Route r, String appName) throws Exception {
         ScreenHands h = live;
         if (h == null) throw new Exception(OFF);
+        for (AppNotes.Step st : r.steps)   // a way saved before 11-15 can hold "Add to cart": never replay a change
+            if (st.changes()) throw new Exception("the saved way to " + r.goal + " includes \"" + st.said()
+                    + "\", which changes something; go there with the screen tool instead");
         String out = "";
         int n = 0;
         for (AppNotes.Step st : r.steps) {

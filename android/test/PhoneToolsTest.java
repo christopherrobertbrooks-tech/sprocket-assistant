@@ -29,6 +29,16 @@ public class PhoneToolsTest {
                     !d.getString("description").isEmpty() && d.getJSONObject("input_schema").getString("type").equals("object"), true);
         }
         eq("a text needs who and what", req(defs, "send_text"), "[\"to\",\"message\"]");
+
+        // 2026-11-15, the practice ground: "money apps are off limits" made Sprocket refuse every food order ("I don't
+        // have a food-ordering tool"). Only banking, payment, wallet and password apps are; food apps fill a cart and
+        // the checkout button asks him.
+        String screenTool = desc(defs, "screen");
+        eq("screen: food and shopping apps are allowed", screenTool.contains("shopping and food-delivery apps are fine"), true);
+        eq("screen: not 'money apps' (it covered food apps)", screenTool.contains("Money and password apps"), false);
+        String persona = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/assets/persona.md")), "UTF-8");
+        eq("persona: food orders fill the cart and stop for his tap", persona.contains("Food and shopping orders: you can do them")
+                && persona.contains("the order is placed only when they tap it"), true);
         eq("an alarm needs a time", req(defs, "set_alarm"), "[\"time\"]");
 
         // repeat days: Claude names them, the Clock wants Calendar's numbers (Sunday = 1)
@@ -156,6 +166,12 @@ public class PhoneToolsTest {
 
     static String pick(PhoneTools.Pick p) {
         return p.name != null ? p.name : p.choices.isEmpty() ? "none" : "ask " + p.choices;
+    }
+
+    static String desc(JSONArray defs, String name) throws Exception {
+        for (int i = 0; i < defs.length(); i++)
+            if (defs.getJSONObject(i).getString("name").equals(name)) return defs.getJSONObject(i).getString("description");
+        return "";
     }
 
     static String req(JSONArray defs, String name) throws Exception {

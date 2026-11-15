@@ -143,7 +143,8 @@ final class PhoneTools {
                                 + "asked for in an app, save ONE short fact for next time about where it was, as a route (\"Battery "
                                 + "health: Battery and device care > Battery > Battery information\"); only facts you saw work, never "
                                 + "personal details. Notes you saved come back with that app's screen: use them, and check they still "
-                                + "match. Money and password apps are off limits. Pay, buy, delete, install, sign-out, "
+                                + "match. Banking, payment, wallet and password apps are off limits; shopping and food-delivery apps are fine "
+                                + "(fill the cart, the checkout button asks them). Pay, buy, delete, install, sign-out, "
                                 + "send, post, call and answer buttons show them a card first, and only go ahead if they tap it. switch_off: when "
                                 + "they ask to turn screen control off, switches Sprocket's own screen control off (their card first); "
                                 + "only they can turn it back on, in Settings or from the notice that follows.",

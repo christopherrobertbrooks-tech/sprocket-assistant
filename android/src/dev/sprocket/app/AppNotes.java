@@ -26,6 +26,12 @@ final class AppNotes {
     }
 
     /** One step on the phone, as Sprocket took it: what replay does again, by name, not by number. */
+    /** Buttons that do something rather than go somewhere ("Add 1 to cart", "+", "Remove"); see Step.changes. */
+    static final java.util.regex.Pattern DOING = java.util.regex.Pattern.compile(
+            "(?i)^\\s*(add\\b|\\+|\u2212|-|remove\\b|increase|decrease|reorder|order\\b|clear\\b|save\\b|apply\\b|confirm\\b|done\\b|ok\\b|turn (on|off)\\b|enable|disable)"
+            + "|add to (cart|bag|basket|order)|\\badd \\d+ to\\b");
+    static final java.util.regex.Pattern SEARCH_BOX = java.util.regex.Pattern.compile("(?i)search|find");
+
     static final class Step {
         final String kind, app, label, text;          // kind: open_app, open_screen, tap, type, scroll, back
 
@@ -38,6 +44,20 @@ final class AppNotes {
         static Step type(String app, String label, String text) { return new Step("type", app, label, text); }
         static Step scroll(String app, String direction) { return new Step("scroll", app, direction, ""); }
         static Step back() { return new Step("back", "", "", ""); }
+        /** A tap that set something rather than went somewhere: a switch, a checkbox, an option (a size). */
+        static Step set(String app, String label) { return new Step("set", app, label, ""); }
+
+        /**
+         * True when this step changes something instead of going somewhere (2026-11-15, the practice ground: a saved
+         * "way to Rosie's Burgers" replayed "Add 1 to cart" twice, so every later visit put a burger and fries in his
+         * cart unasked): a switch or option, typing anywhere but a search box, or a button that adds, removes, counts
+         * up or down, or is risky (pay, send, delete...).
+         */
+        boolean changes() {
+            if (kind.equals("set") || kind.equals("tap_point")) return true;
+            if (kind.equals("type")) return !SEARCH_BOX.matcher(label).find();
+            return kind.equals("tap") && (DOING.matcher(label).find() || Screen.risky(new Screen.Item("button", label, true, false, false, false, false)));
+        }
 
         /** As the brain reads it in the route question. */
         @Override public String toString() {
@@ -46,6 +66,7 @@ final class AppNotes {
                 case "open_screen": return "opened " + label;
                 case "tap": return "In " + app + ": tapped \"" + label + "\"";
                 case "type": return "In " + app + ": typed \"" + text + "\" into \"" + label + "\"";
+                case "set": return "In " + app + ": set \"" + label + "\" (a switch or option: changes something)";
                 case "scroll": return "In " + app + ": scrolled " + label;
                 case "back": return "went back";
                 default: return kind;
@@ -59,6 +80,7 @@ final class AppNotes {
                 case "open_screen": return "open " + label;
                 case "tap": return "tap \"" + label + "\"";
                 case "type": return "type \"" + text + "\" into \"" + label + "\"";
+                case "set": return "set \"" + label + "\"";
                 case "scroll": return "scroll " + label;
                 case "back": return "go back";
                 default: return kind;
@@ -167,7 +189,9 @@ final class AppNotes {
         b.append("Where it ended:\n").append(endScreen == null ? "(not read)" : endScreen.trim()).append('\n')
                 .append("Its answer: ").append(reply == null ? "" : reply.trim()).append("\n\n")
                 .append("If these steps reached what they asked for, answer on ONE line: a short name for the place, then |, then ")
-                .append("the numbers of the steps that make the shortest way there, in order, leaving out wrong turns. For ")
+                .append("the numbers of the steps that make the shortest way there, in order, leaving out wrong turns. A way ")
+                .append("only goes somewhere: stop before the first step that adds, removes, types (except a search), picks an ")
+                .append("option or size, flips a switch or presses a button that does something. For ")
                 .append("example: Gmail spam folder | 1, 4, 5, 6. If they didn't reach it, answer NONE. Nothing else.");
         return b.toString();
     }
@@ -218,6 +242,8 @@ final class AppNotes {
     String learnRoute(String pkg, String appName, String goal, List<Step> steps, long at) {
         if (pkg == null || pkg.isEmpty() || goal == null || goal.trim().isEmpty() || steps.isEmpty()) return "There was nothing to note.";
         if (Screen.blockedApp(pkg)) return "Not noted: that app is off limits to screen control.";
+        for (Step st : steps)
+            if (st.changes()) return "Not noted: a saved way only goes somewhere, and \"" + st.said() + "\" changes something.";
         Route r = new Route(0, goal.trim());
         r.steps.addAll(steps);
         if (PRIVATE.matcher(r.text()).find())
