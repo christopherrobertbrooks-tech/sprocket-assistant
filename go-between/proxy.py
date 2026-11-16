@@ -100,8 +100,33 @@ SEARCH_TOOL = {
 usage_lock = threading.Lock()
 
 
+def scrub(text, secrets=None):
+    """The text with any key or access code in it blanked out, whole or in pieces of 10+ characters (Codex 049 #3: a
+    server's error reply can repeat the key it was sent)."""
+    import re
+    if secrets is None:
+        secrets = []
+        if UPSTREAM_KEY_FILE:
+            try:
+                secrets.append(read_file(UPSTREAM_KEY_FILE))
+            except OSError:
+                pass
+        try:
+            secrets.append(read_file(TOKEN_FILE))
+        except OSError:
+            pass
+    out = str(text)
+    for s in secrets:
+        s = (s or "").strip()
+        if len(s) < 8:
+            continue
+        out = out.replace(s, "[key]")
+        out = re.sub(r"[A-Za-z0-9_\-]{10,}", lambda m: "[part of a key]" if m.group(0) in s else m.group(0), out)
+    return out
+
+
 def log(msg):
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), msg, flush=True)
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), scrub(msg), flush=True)
 
 
 def read_file(path):
@@ -244,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send_json(self, code, obj):
-        raw = json.dumps(obj).encode()
+        raw = (json.dumps(obj) if code == 200 else scrub(json.dumps(obj))).encode()   # errors: no key in them
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
@@ -347,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
             if not sent[0]:
                 return self.send_json(502, {"type": "error", "error": {"type": "api_error", "message": f"Your model didn't answer: {e}"}})
             try:
-                emit(messages._sse("error", {"type": "error", "error": {"type": "api_error", "message": f"your model stopped: {e}"}}))
+                emit(messages._sse("error", {"type": "error", "error": {"type": "api_error", "message": scrub(f"your model stopped: {e}")}}))
             except OSError:
                 pass
         self.close_connection = True

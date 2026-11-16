@@ -286,3 +286,28 @@ class KeyStaysPutTest(unittest.TestCase):
             os.unlink(f.name)
             first.shutdown()
             other.shutdown()
+
+
+class ScrubTest(unittest.TestCase):
+    """Codex 049 #3: a key an upstream repeats back never reaches the log or an error sent to Sprocket."""
+
+    def test_whole_and_pieces(self):
+        key = "sk-proj-AbCdEfGhIjKlMnOpQrSt1234"
+        self.assertNotIn(key, proxy.scrub(f"Incorrect API key provided: {key}", [key]))
+        self.assertNotIn("AbCdEfGhIjKlMnOp", proxy.scrub("echo: AbCdEfGhIjKlMnOp", [key]))
+        self.assertEqual(proxy.scrub("model server error: HTTP Error 400", [key]), "model server error: HTTP Error 400")
+
+    def test_log_scrubs(self):
+        import io, contextlib
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-test-secret-0123456789\n")
+        saved = proxy.UPSTREAM_KEY_FILE
+        proxy.UPSTREAM_KEY_FILE = f.name
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                proxy.log("upstream said: bad key sk-test-secret-0123456789")
+            self.assertNotIn("sk-test-secret-0123456789", out.getvalue())
+        finally:
+            proxy.UPSTREAM_KEY_FILE = saved
+            os.unlink(f.name)
