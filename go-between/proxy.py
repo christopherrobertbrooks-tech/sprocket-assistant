@@ -83,6 +83,9 @@ def key_destination_problem(upstream):
     return f"UPSTREAM_KEY_FILE needs an https:// UPSTREAM (or this computer itself), not {upstream}"
 
 
+_REQUEST = threading.local()   # the key this request (thread) sent upstream, for blanking its own errors (Codex 051 #1)
+
+
 def upstream_headers():
     h = {"Content-Type": "application/json"}
     if UPSTREAM_KEY_FILE:
@@ -90,6 +93,7 @@ def upstream_headers():
             k = f.read().strip()
         if k:
             h["Authorization"] = "Bearer " + k
+            _REQUEST.key = k
     return h
 
 SEARCH_TOOL = {
@@ -123,15 +127,15 @@ def scrub(text, secrets=None):
             secrets.append(read_file(TOKEN_FILE))
         except OSError:
             pass
+        secrets.append(getattr(_REQUEST, "key", None))   # even after the key file was replaced mid-request
     out = str(text)
     for s in secrets:
         s = (s or "").strip()
         if not s:
             continue
-        if len(s) < 8:   # a short access code: blanked as a whole word (Codex 050 #3)
-            out = re.sub(r"(?<![A-Za-z0-9_\-])" + re.escape(s) + r"(?![A-Za-z0-9_\-])", "[key]", out)
+        out = out.replace(s, "[key]")   # the whole key, wherever it is, however short (Codex 051 #3)
+        if len(s) < 8:
             continue
-        out = out.replace(s, "[key]")
         out = re.sub(r"[A-Za-z0-9_\-]{10,}", lambda m: "[part of a key]" if m.group(0) in s else m.group(0), out)
     return out
 

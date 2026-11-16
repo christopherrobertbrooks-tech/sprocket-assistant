@@ -298,7 +298,7 @@ class ScrubTest(unittest.TestCase):
         self.assertNotIn("AbCdEfGhIjKlMnOp", proxy.scrub("echo: AbCdEfGhIjKlMnOp", [key]))
         self.assertEqual(proxy.scrub("model server error: HTTP Error 400", [key]), "model server error: HTTP Error 400")
         self.assertEqual(proxy.scrub("bad access code secret7", ["secret7"]), "bad access code [key]")   # Codex 050 #3
-        self.assertEqual(proxy.scrub("secret7x stays", ["secret7"]), "secret7x stays")
+        self.assertNotIn("secret7", proxy.scrub("invalid_access_code_secret7", ["secret7"]))   # Codex 051 #3
 
     def test_log_scrubs(self):
         import io, contextlib
@@ -336,3 +336,23 @@ class NoProxyForThisComputerTest(unittest.TestCase):
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+
+
+
+class InFlightKeyTest(unittest.TestCase):
+    """Codex 051 #1: an error from a request that sent key A is blanked of A, even after the file now says B."""
+
+    def test_request_key_kept(self):
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-old-key-AAAAAAAAAAAA\n")
+        saved = proxy.UPSTREAM_KEY_FILE
+        proxy.UPSTREAM_KEY_FILE = f.name
+        try:
+            proxy.upstream_headers()                      # the request reads A
+            with open(f.name, "w") as g:
+                g.write("sk-new-key-BBBBBBBBBBBB\n")     # replaced mid-request
+            self.assertNotIn("sk-old-key-AAAAAAAAAAAA", proxy.scrub("upstream said: bad key sk-old-key-AAAAAAAAAAAA"))
+        finally:
+            proxy.UPSTREAM_KEY_FILE = saved
+            proxy._REQUEST.key = None
+            os.unlink(f.name)

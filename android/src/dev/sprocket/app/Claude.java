@@ -636,11 +636,8 @@ final class Claude {
         for (String k : keys) {
             if (k == null || k.trim().isEmpty()) continue;
             String key = k.trim();
-            if (key.length() < 8) {   // a short access code: blanked as a whole word (Codex 050 #3), never inside other words
-                out = out.replaceAll("(?<![A-Za-z0-9_\\-])" + Pattern.quote(key) + "(?![A-Za-z0-9_\\-])", "[your key]");
-                continue;
-            }
-            out = out.replace(key, "[your key]");
+            out = out.replace(key, "[your key]");   // the whole key, wherever it is, however short (Codex 051 #3)
+            if (key.length() < 8) continue;          // pieces only for long keys
             java.util.regex.Matcher m = Pattern.compile("[A-Za-z0-9_\\-]{10,}").matcher(out);
             StringBuffer b = new StringBuffer();
             while (m.find()) m.appendReplacement(b, java.util.regex.Matcher.quoteReplacement(key.contains(m.group()) ? "[part of your key]" : m.group()));
