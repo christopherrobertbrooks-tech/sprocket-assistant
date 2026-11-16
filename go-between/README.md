@@ -26,6 +26,9 @@ Then it runs the go-between until you press Ctrl+C. The steps below are the same
 3. Put your Brave key in `~/.config/brave-search/api-key` (or set `BRAVE_KEY_FILE`). Without it, web search says
    it's unavailable and everything else works.
 4. Start it: `UPSTREAM=http://127.0.0.1:8080 MODEL=your-model python3 proxy.py` (or use `go-between.service`).
+   For a cloud model server that needs a key, put the key in a file and add `UPSTREAM_KEY_FILE=/path/to/that/file`,
+   for example `UPSTREAM=https://api.deepseek.com MODEL=deepseek-flash UPSTREAM_KEY_FILE=~/deepseek-key.txt`. The key
+   goes only to that server, and is never logged.
 5. Let the phone reach it. It listens on 127.0.0.1 (this computer only) by default, so pick one:
    - **Tailscale:** `tailscale serve --bg --https=8448 http://127.0.0.1:8048`, then the address is
      `https://<machine>.<tailnet>.ts.net:8448`.
