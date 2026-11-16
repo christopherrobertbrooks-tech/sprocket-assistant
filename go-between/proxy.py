@@ -61,7 +61,15 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
                                      headers, fp)
 
 
-UPSTREAM_OPENER = urllib.request.build_opener(_NoRedirect)
+def _opener(upstream):
+    """No redirects; and a model server on this computer is reached directly, never through a proxy set in the
+    environment (Codex 050 #1: http_proxy would carry the key, unencrypted, to the proxy)."""
+    host = urllib.parse.urlsplit(upstream).hostname
+    direct = host in ("127.0.0.1", "localhost", "::1")
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}) if direct else urllib.request.ProxyHandler(), _NoRedirect)
+
+
+UPSTREAM_OPENER = _opener(UPSTREAM)
 
 
 def key_destination_problem(upstream):
@@ -118,7 +126,10 @@ def scrub(text, secrets=None):
     out = str(text)
     for s in secrets:
         s = (s or "").strip()
-        if len(s) < 8:
+        if not s:
+            continue
+        if len(s) < 8:   # a short access code: blanked as a whole word (Codex 050 #3)
+            out = re.sub(r"(?<![A-Za-z0-9_\-])" + re.escape(s) + r"(?![A-Za-z0-9_\-])", "[key]", out)
             continue
         out = out.replace(s, "[key]")
         out = re.sub(r"[A-Za-z0-9_\-]{10,}", lambda m: "[part of a key]" if m.group(0) in s else m.group(0), out)
@@ -193,7 +204,7 @@ def brave_search(query):
 
 def call_upstream(body):
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
-    with UPSTREAM_OPENER.open(req, timeout=900) as r:
+    with _opener(UPSTREAM).open(req, timeout=900) as r:
         return json.load(r)
 
 
@@ -218,7 +229,7 @@ def brain_on_trial():
 def call_upstream_stream(body):
     """The model's streamed reply as OpenAI chunks; the connection opens now, so a failure shows before any reply."""
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
-    r = UPSTREAM_OPENER.open(req, timeout=900)
+    r = _opener(UPSTREAM).open(req, timeout=900)
 
     def chunks():
         with r:

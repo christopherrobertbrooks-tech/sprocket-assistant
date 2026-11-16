@@ -104,6 +104,20 @@ public class OpenAiWireTest {
         eq("cache writes counted as writes", wr.cacheWrite + " " + wr.input, "1000000 0");
         eq("a million written tokens cost $2.50", Math.round(wr.cost() * 100) / 100.0, 2.5);
 
+        // Codex 050 #4: 12-hour cache writes cost twice the 30-minute ones
+        Claude.Stream ls = new Claude.Stream("gpt-6.1-sol", null);
+        OpenAiWire.Events lev = new OpenAiWire.Events();
+        for (String e : lev.feed("data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":1000000,"
+                + "\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":1000000,\"cache_write_tokens_details\":{\"ttl_30m_tokens\":0,\"ttl_12h_tokens\":1000000}},\"output_tokens\":0}}}")) ls.line(e);
+        eq("a million 12-hour writes cost $5.00", Math.round(ls.finish().cost() * 100) / 100.0, 5.0);
+        // Codex 050 #2: a failure mid-answer is blanked of the key that request carried
+        Exception leaky = new Exception("OpenAI: Incorrect API key provided: sk-proj-OldKeyThatWasReplaced123");
+        eq("a request's error is blanked of its own key", Claude.scrubbed(leaky, "sk-proj-OldKeyThatWasReplaced123").getMessage(), "OpenAI: Incorrect API key provided: [your key]");
+        Claude.Busy busy = new Claude.Busy("busy sk-proj-OldKeyThatWasReplaced123", "3", false);
+        Exception b2 = Claude.scrubbed(busy, "sk-proj-OldKeyThatWasReplaced123");
+        eq("a busy answer stays busy (retries still work)", b2 instanceof Claude.Busy && ((Claude.Busy) b2).retryAfter.equals("3"), true);
+        eq("no key in it: the same failure, untouched", Claude.scrubbed(leaky, "something-else-entirely") == leaky, true);
+
         System.out.println("openai wire: " + (fails == 0 ? "all " + n + " checks pass" : fails + " of " + n + " failed"));
         System.exit(fails == 0 ? 0 : 1);
     }

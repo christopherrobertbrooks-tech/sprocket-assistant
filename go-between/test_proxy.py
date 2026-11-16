@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+import urllib.request
 
 import proxy
 
@@ -296,6 +297,8 @@ class ScrubTest(unittest.TestCase):
         self.assertNotIn(key, proxy.scrub(f"Incorrect API key provided: {key}", [key]))
         self.assertNotIn("AbCdEfGhIjKlMnOp", proxy.scrub("echo: AbCdEfGhIjKlMnOp", [key]))
         self.assertEqual(proxy.scrub("model server error: HTTP Error 400", [key]), "model server error: HTTP Error 400")
+        self.assertEqual(proxy.scrub("bad access code secret7", ["secret7"]), "bad access code [key]")   # Codex 050 #3
+        self.assertEqual(proxy.scrub("secret7x stays", ["secret7"]), "secret7x stays")
 
     def test_log_scrubs(self):
         import io, contextlib
@@ -311,3 +314,25 @@ class ScrubTest(unittest.TestCase):
         finally:
             proxy.UPSTREAM_KEY_FILE = saved
             os.unlink(f.name)
+
+
+class NoProxyForThisComputerTest(unittest.TestCase):
+    """Codex 050 #1: with http_proxy set, a model server on this computer is still reached directly (the key never
+    goes to the proxy)."""
+
+    def test_loopback_skips_the_environment_proxy(self):
+        saved = {k: os.environ.get(k) for k in ("http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY")}
+        try:
+            os.environ["http_proxy"] = os.environ["HTTP_PROXY"] = "http://relay.example:3128"
+            os.environ["no_proxy"] = os.environ["NO_PROXY"] = ""
+            handlers = proxy._opener("http://127.0.0.1:8080").handlers
+            self.assertFalse(any(isinstance(h, urllib.request.ProxyHandler) and h.proxies for h in handlers),
+                             "a proxy would carry the key")
+            remote = proxy._opener("https://api.deepseek.com").handlers
+            self.assertTrue(any(isinstance(h, urllib.request.ProxyHandler) and h.proxies for h in remote))   # https may use one
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v

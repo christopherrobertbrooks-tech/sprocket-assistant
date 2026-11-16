@@ -572,6 +572,8 @@ public class ClaudeTest {
         eq("a piece of it too", Claude.scrub("echo AbCdEfGhIjKlMnOp", sk), "echo [part of your key]");
         eq("other words stay", Claude.scrub("OpenAI answered 400: Unsupported parameter max_tokens", sk), "OpenAI answered 400: Unsupported parameter max_tokens");
         eq("no key: unchanged", Claude.scrub("Your server answered 500", "", null), "Your server answered 500");
+        eq("a short access code, whole word (Codex 050 #3)", Claude.scrub("Your server answered 400: bad code secret7", "secret7"), "Your server answered 400: bad code [your key]");
+        eq("a short code isn't blanked inside other words", Claude.scrub("secret7x stays", "secret7"), "secret7x stays");
         eq("several keys at once", Claude.scrub("a=" + sk + " b=deepseek-secret-9876543210", sk, "deepseek-secret-9876543210"), "a=[your key] b=[your key]");
         // DeepSeek as a setup choice (11-15): its own plain words, not the go-between's
         eq("DeepSeek: a wrong key", Claude.checkProblem(true, 401, "{}", Claude.DEEPSEEK_BASE).startsWith("DeepSeek says that key isn't valid"), true);

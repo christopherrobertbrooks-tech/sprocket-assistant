@@ -176,6 +176,13 @@ final class Claude {
         return !(weekday && ((h >= 1 && h < 4) || (h >= 6 && h < 10)));
     }
 
+    /** $ per million for the longer-lived cache writes: OpenAI's 12 hours $5.00; Anthropic's 1 hour, twice input. */
+    static double longWriteRate(String model) {
+        if (model != null && model.startsWith("gpt-6.1-sol")) return 5.00;
+        double[] p = price(model);
+        return model != null && model.startsWith("claude") ? 2 * p[0] : p[2];
+    }
+
     /** True when answers from this model cost money (Claude, DeepSeek); false for the owner's own server. */
     static boolean paid(String model) { return price(model)[1] > 0; }
 
@@ -183,19 +190,22 @@ final class Claude {
         String text = "", stop = "", model = "";
         final List<String> sources = new ArrayList<>();
         int input, output, cacheWrite, cacheRead, searches;
+        int cacheWriteLong;   // the longer-lived cache writes (Anthropic's 1 hour, OpenAI's 12 hours), dearer (Codex 050 #4)
         final JSONArray content = new JSONArray();          // everything he said this round, to send back with a tool's answer
         final List<JSONObject> calls = new ArrayList<>();   // the app's tools he asked for (tool_use blocks)
 
         /** An earlier round of the same turn: its usage and sources count too. */
         void add(Reply earlier) {
             input += earlier.input; output += earlier.output; cacheWrite += earlier.cacheWrite; cacheRead += earlier.cacheRead;
+            cacheWriteLong += earlier.cacheWriteLong;
             searches += earlier.searches;
             for (String x : earlier.sources) if (!sources.contains(x) && sources.size() < 3) sources.add(x);
         }
 
         double cost() {
             double[] p = price(model);
-            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3]) / 1e6 + searches * p[4];
+            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3] + cacheWriteLong * longWriteRate(model)) / 1e6
+                    + searches * p[4];
         }
     }
 
@@ -396,7 +406,10 @@ final class Claude {
                     JSONObject u = e.optJSONObject("message") == null ? null : e.getJSONObject("message").optJSONObject("usage");
                     if (u != null) {
                         r.input += u.optInt("input_tokens");
-                        r.cacheWrite += u.optInt("cache_creation_input_tokens");
+                        JSONObject cc = u.optJSONObject("cache_creation");
+                        int longer = cc == null ? 0 : cc.optInt("ephemeral_1h_input_tokens");
+                        r.cacheWrite += Math.max(0, u.optInt("cache_creation_input_tokens") - longer);
+                        r.cacheWriteLong += longer;
                         r.cacheRead += u.optInt("cache_read_input_tokens");
                     }
                     break;
@@ -621,8 +634,12 @@ final class Claude {
         if (text == null) return null;
         String out = text;
         for (String k : keys) {
-            if (k == null || k.trim().length() < 8) continue;
+            if (k == null || k.trim().isEmpty()) continue;
             String key = k.trim();
+            if (key.length() < 8) {   // a short access code: blanked as a whole word (Codex 050 #3), never inside other words
+                out = out.replaceAll("(?<![A-Za-z0-9_\\-])" + Pattern.quote(key) + "(?![A-Za-z0-9_\\-])", "[your key]");
+                continue;
+            }
             out = out.replace(key, "[your key]");
             java.util.regex.Matcher m = Pattern.compile("[A-Za-z0-9_\\-]{10,}").matcher(out);
             StringBuffer b = new StringBuffer();
@@ -631,6 +648,19 @@ final class Claude {
             out = b.toString();
         }
         return out;
+    }
+
+    /**
+     * The same failure, its message blanked of the key this request carried (Codex 050 #2: a background job that
+     * started with a key since replaced would otherwise only be blanked of the new one). Busy and Down keep their
+     * meaning for retries and the backup; a message with no key in it is passed on untouched, cause and all.
+     */
+    static Exception scrubbed(Exception e, String key) {
+        String m = e.getMessage(), s = scrub(m, key);
+        if (m == null || m.equals(s)) return e;
+        if (e instanceof Busy) return new Busy(s, ((Busy) e).retryAfter, ((Busy) e).said);
+        if (e instanceof Down) return new Down(s);
+        return new Exception(s);
     }
 
     static boolean openAi(String base) { return base != null && base.toLowerCase(Locale.US).contains("api.openai.com"); }
@@ -937,6 +967,8 @@ final class Claude {
         Stream st = new Stream(req.optString("model"), l);
         try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
             for (String line; (line = r.readLine()) != null; ) st.line(line);
+        } catch (Exception e) {
+            throw scrubbed(e, b.key);
         }
         return st.finish();
     }
@@ -969,6 +1001,8 @@ final class Claude {
         OpenAiWire.Events ev = new OpenAiWire.Events();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
             for (String line; (line = r.readLine()) != null; ) for (String e : ev.feed(line)) st.line(e);
+        } catch (Exception e) {
+            throw scrubbed(e, b.key);
         }
         return st.finish();
     }
