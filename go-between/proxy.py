@@ -8,6 +8,7 @@ plain chat requests get a web_search tool backed by Brave; requests that already
 pass through untouched.
 
 Settings (environment): UPSTREAM (your model server, default http://127.0.0.1:8080), MODEL (its model name),
+UPSTREAM_KEY_FILE (a file with the server's key, for cloud servers like https://api.deepseek.com; blank for one at home),
 BIND / PORT (default 127.0.0.1:8048), MONTHLY_CAP (Brave searches a month, default 1000), BRAVE_KEY_FILE (default
 ~/.config/brave-search/api-key), LOG_TOOL_RESULTS=1 to log the first words of each phone tool's answer (off by
 default: they can be private), SLOT=1 to keep a llama.cpp server slot for Sprocket (with the server on -np 2 and without -kvu, so
@@ -47,6 +48,19 @@ SLOT = int(os.environ["SLOT"]) if os.environ.get("SLOT", "").strip() else None
 # switching); read on every question, so a trial starts and ends without a restart. Missing or
 # empty = MODEL. A trial model gets no id_slot: it has its own single slot, not Sprocket's.
 MODEL_FILE = os.environ.get("MODEL_FILE", "").strip() or None
+# A cloud model server that wants a key (DeepSeek, OpenAI and others): a file holding it, sent as a bearer token to
+# UPSTREAM only, never logged. Blank = a server at home that needs none.
+UPSTREAM_KEY_FILE = os.path.expanduser(os.environ.get("UPSTREAM_KEY_FILE", "").strip()) or None
+
+
+def upstream_headers():
+    h = {"Content-Type": "application/json"}
+    if UPSTREAM_KEY_FILE:
+        with open(UPSTREAM_KEY_FILE) as f:
+            k = f.read().strip()
+        if k:
+            h["Authorization"] = "Bearer " + k
+    return h
 
 SEARCH_TOOL = {
     "type": "function",
@@ -131,7 +145,7 @@ def brave_search(query):
 
 
 def call_upstream(body):
-    req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
     with urllib.request.urlopen(req, timeout=900) as r:
         return json.load(r)
 
@@ -156,7 +170,7 @@ def brain_on_trial():
 
 def call_upstream_stream(body):
     """The model's streamed reply as OpenAI chunks; the connection opens now, so a failure shows before any reply."""
-    req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
     r = urllib.request.urlopen(req, timeout=900)
 
     def chunks():

@@ -204,3 +204,25 @@ class StreamedOverHttp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UpstreamKeyTest(unittest.TestCase):
+    """UPSTREAM_KEY_FILE (11-15: DeepSeek through the go-between): the key goes to the model server as a bearer token."""
+
+    def setUp(self):
+        self.saved = proxy.UPSTREAM_KEY_FILE
+
+    def tearDown(self):
+        proxy.UPSTREAM_KEY_FILE = self.saved
+
+    def test_no_key_file_sends_no_key(self):
+        proxy.UPSTREAM_KEY_FILE = None
+        self.assertEqual(proxy.upstream_headers(), {"Content-Type": "application/json"})
+
+    def test_key_file_sends_a_bearer_token(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-test-key\n")
+        proxy.UPSTREAM_KEY_FILE = f.name
+        self.assertEqual(proxy.upstream_headers()["Authorization"], "Bearer sk-test-key")
+        os.unlink(f.name)
