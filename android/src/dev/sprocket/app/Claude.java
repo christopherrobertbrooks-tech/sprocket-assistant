@@ -98,11 +98,50 @@ final class Claude {
 
         Brain(String base, String key, boolean own, String model) { this.base = base; this.key = key; this.own = own; this.model = model; }
 
-        /** The brain switched on right now; keyFor gets true for the own server's key, false for Claude's. */
-        static Brain now(java.util.function.Function<Boolean, String> keyFor) {
-            synchronized (Claude.class) { return new Brain(Claude.base, keyFor.apply(Config.own), Config.own, Config.model()); }   // keyFor knows Config.deep
+        /**
+         * The brain switched on right now. Which one is chosen is read ONCE, and its address, model and key all come
+         * from that one reading (Codex 049 #1: Settings switching DeepSeek -> OpenAI could pair the old address with
+         * the new key, sending an OpenAI key to DeepSeek). keyFor gets "claude", "deepseek", "openai" or "own".
+         * standIn: the practice stand-in's address (only with its made-up key), or null.
+         */
+        static Brain now(java.util.function.Function<String, String> keyFor, String standIn) {
+            synchronized (Claude.class) {
+                String id = chosen();
+                String base = standIn != null ? standIn : baseOf(id);
+                return new Brain(base, keyFor.apply(id), !id.equals("claude"), modelOf(id));
+            }
         }
     }
+
+    /** Which brain is switched on: "claude", "deepseek", "openai" or "own" (their own server). */
+    static synchronized String chosen() { return !Config.own ? "claude" : Config.deep ? "deepseek" : Config.oa ? "openai" : "own"; }
+
+    static String baseOf(String id) {
+        switch (id) {
+            case "claude": return ANTHROPIC;
+            case "deepseek": return DEEPSEEK_BASE;
+            case "openai": return OPENAI_BASE;
+            default: return Config.ownBase.trim().replaceAll("/+$", "");
+        }
+    }
+
+    static String modelOf(String id) {
+        switch (id) {
+            case "claude": return "";
+            case "deepseek": return DEEPSEEK_MODEL;
+            case "openai": return OPENAI_MODEL;
+            default: return Config.ownModel.trim().isEmpty() ? "own" : Config.ownModel.trim();
+        }
+    }
+
+    /** Switch brains in one step, so nothing reading the choice sees half of a switch (Codex 049 #1). */
+    static synchronized void choose(boolean own, boolean deep, boolean oa) {
+        Config.own = own;
+        Config.deep = own && deep;
+        Config.oa = own && oa && !deep;
+        base = Config.base();
+    }
+
     static final int HISTORY_TURNS = 24;                    // the last 24 to 35 messages go with each question (Chat.window)
     // Effort (2026-10-17 docs): Sonnet 5.5 defaults to "high", and Anthropic suggests "medium" or "low" for chat; a
     // phone assistant lives on speed, so plain questions run "low". Think harder = Opus at "high". Thinking counts

@@ -379,14 +379,31 @@ public class ClaudeTest {
         Config.ownBase = "https://box.example:8448";
         Config.ownModel = "qwen";
         Claude.useBrain(true);
-        Claude.Brain started = Claude.Brain.now(q -> q ? "QWEN-KEY" : "CLAUDE-KEY");
+        java.util.function.Function<String, String> keys = id -> id.equals("own") ? "QWEN-KEY" : id.equals("claude") ? "CLAUDE-KEY"
+                : id.equals("deepseek") ? "DEEPSEEK-KEY" : "OPENAI-KEY";
+        Claude.Brain started = Claude.Brain.now(keys, null);
         try {
             Claude.send(started, Claude.request("PERSONA", null, null, "Friday, October 17, 2026, 3:10 AM", HERE, c.window(24), false),
                     null, null, (name, in) -> { Claude.useBrain(false); return "On."; });
         } catch (Exception e) { went.add("ERROR " + e.getMessage()); }
         eq("switching brains mid-answer: both rounds stay on his server with its key", went,
                 "[https://box.example:8448 QWEN-KEY qwen, https://box.example:8448 QWEN-KEY qwen]");
-        eq("a question started on Claude takes Claude's key", Claude.Brain.now(q -> q ? "QWEN-KEY" : "CLAUDE-KEY").key, "CLAUDE-KEY");
+        eq("a question started on Claude takes Claude's key", Claude.Brain.now(keys, null).key, "CLAUDE-KEY");
+        // Codex 049 #1: Settings switching DeepSeek -> OpenAI set the flags before the address, and a question taken in
+        // between paired DeepSeek's address with the OpenAI key. Each key must only ever go with its own company.
+        Claude.choose(true, true, false);                       // DeepSeek is on; its address is published
+        Config.deep = false; Config.oa = true;                  // halfway through a switch to OpenAI: base not updated yet
+        Claude.Brain half = Claude.Brain.now(keys, null);
+        eq("halfway through a switch: the address and the key are the same company's",
+                half.base + " " + half.key, Claude.OPENAI_BASE + " OPENAI-KEY");
+        Claude.choose(true, false, true);
+        Claude.Brain oaNow = Claude.Brain.now(keys, null);
+        eq("OpenAI: its address, its key, its model", oaNow.base + " " + oaNow.key + " " + oaNow.model, Claude.OPENAI_BASE + " OPENAI-KEY " + Claude.OPENAI_MODEL);
+        Claude.choose(true, true, false);
+        eq("DeepSeek: its address with its key", Claude.Brain.now(keys, null).base + " " + Claude.Brain.now(keys, null).key, Claude.DEEPSEEK_BASE + " DEEPSEEK-KEY");
+        Claude.choose(false, false, false);
+        eq("Claude: Anthropic with Claude's key", Claude.Brain.now(keys, null).base + " " + Claude.Brain.now(keys, null).key, Claude.ANTHROPIC + " CLAUDE-KEY");
+        eq("the practice stand-in keeps its own address", Claude.Brain.now(keys, "http://127.0.0.1:9").base, "http://127.0.0.1:9");
         Claude.Brain mixed = new Claude.Brain(Claude.ANTHROPIC, "k", false, "");
         JSONObject wrong = new JSONObject().put("model", "qwen").put("messages", new JSONArray());
         went.clear();
@@ -604,7 +621,7 @@ public class ClaudeTest {
             return x;
         };
         try {
-            Claude.send(Claude.Brain.now(q -> "K"), noScreen, null, null, (name, in) -> { hiddenRan[0]++; return "read the screen"; });
+            Claude.send(Claude.Brain.now(id -> "K", null), noScreen, null, null, (name, in) -> { hiddenRan[0]++; return "read the screen"; });
         } catch (Exception e) { fed.add("ERROR " + e.getMessage()); }
         eq("the model asks for it anyway: it doesn't run", hiddenRan[0], 0);
         eq("and the model is told so", fed.size() == 1 && fed.get(0).contains("isn't available right now"), true);
@@ -623,7 +640,7 @@ public class ClaudeTest {
             x.calls.add(call);
             return x;
         };
-        try { Claude.send(Claude.Brain.now(q -> "K"), withScreen, null, null, (name, in) -> { lateRan[0]++; return "read"; }); } catch (Exception e) { }
+        try { Claude.send(Claude.Brain.now(id -> "K", null), withScreen, null, null, (name, in) -> { lateRan[0]++; return "read"; }); } catch (Exception e) { }
         eq("offered, then switched off before it ran: it doesn't run", Claude.offered(withScreen).contains("screen") + " " + lateRan[0], "true 0");
         JSONObject setupTurn = new JSONObject(noScreen.toString());
         setupTurn.remove("tools");
