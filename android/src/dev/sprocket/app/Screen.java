@@ -449,6 +449,20 @@ final class Screen {
     }
 
     /**
+     * Whether the hidden-screen check may ask the helper now: never from the main thread (Android refuses a socket
+     * there; 11-16 the glow's check failed that way, read as "no hidden screen", and the hands worked on his real
+     * screen: pressed Home, scrolled his apps), and only when the last answer is 4 seconds old.
+     */
+    static boolean bgMayAsk(boolean mainThread, long now, long checked) {
+        return !mainThread && now - checked >= 4000;
+    }
+
+    /** Gone after a ping? A failed ping while it was up is asked once more first (one hiccup must not move the hands). */
+    static boolean bgDownAfter(boolean wasUp, boolean pingOk, boolean againOk) {
+        return !pingOk && !(wasUp && againOk);
+    }
+
+    /**
      * Null when the screen is still the one the brain was shown, or why the hands must look again first (Codex 040
      * #3: a number or a picture spot from an old screen must never land on a new one). readApp: the app when it was
      * read; nowApp: the app on screen now; stillShown: the item is still there (null for a picture spot).

@@ -33,21 +33,45 @@ final class BgScreen {
         android.content.Context c = MainActivity.appContext();
         if (c == null) return false;
         long now = System.currentTimeMillis();
-        if (now - checked < 4000) return up;
-        checked = now;
+        boolean main = android.os.Looper.myLooper() == android.os.Looper.getMainLooper();
+        if (!Screen.bgMayAsk(main, now, checked)) {
+            if (main && now - checked >= 4000 && !refreshing) {   // the main thread reads the last answer; a worker refreshes it
+                refreshing = true;
+                new Thread(() -> { try { on(); } finally { refreshing = false; } }, "sprocket-bg-check").start();
+            }
+            return up;
+        }
+        synchronized (BgScreen.class) {
+            if (!Screen.bgMayAsk(false, System.currentTimeMillis(), checked)) return up;
+            boolean was = up, ok = check(c);
+            boolean now2 = !Screen.bgDownAfter(was, ok, !ok && was && check(c));   // a hiccup is asked once more
+            if (now2 != was) android.util.Log.i("Sprocket", "background: hidden screen " + (now2 ? "up" : "gone (" + why + ")"));
+            up = now2;
+            checked = System.currentTimeMillis();
+            return up;
+        }
+    }
+
+    private static volatile boolean refreshing;
+    private static volatile String why = "";
+
+    /** One look: bg.json there and the helper answering a ping. Worker threads only. */
+    private static boolean check(android.content.Context c) {
         File dir = c.getExternalFilesDir(null), f = dir == null ? null : new File(dir, "bg.json");
-        if (f == null || !f.exists()) { up = false; return false; }
+        if (f == null || !f.exists()) { why = "no bg.json"; return false; }
         try {
             if (f.lastModified() != fileTime) {
                 JSONObject o = new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
                 port = o.getInt("port"); token = o.getString("token"); display = o.getInt("display");
                 fileTime = f.lastModified();
             }
-            up = cmd("ping").startsWith("display ");
+            String r = cmd("ping");
+            why = r;
+            return r.startsWith("display ");
         } catch (Exception e) {
-            up = false;
+            why = e.getClass().getSimpleName();
+            return false;
         }
-        return up;
     }
 
     static int display() { return display; }
