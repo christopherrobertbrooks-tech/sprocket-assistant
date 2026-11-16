@@ -1139,7 +1139,9 @@ public class ScreenHands extends AccessibilityService {
             AccessibilityNodeInfo hit = topAt(n.getChild(i), x, y, depth + 1);
             if (hit != null) return hit;
         }
-        boolean seen = n.isClickable() || n.isEditable() || !text(n).isEmpty() || role(n).equals("image");
+        // a switch or checkbox counts even with no words and no tap of its own (11-15, the tablet: Settings' dark-mode
+        // switch looked "covered" by its own row, and the brain was told something blocked it)
+        boolean seen = n.isClickable() || n.isEditable() || n.isCheckable() || !text(n).isEmpty() || role(n).equals("image");
         return seen ? n : null;
     }
 
