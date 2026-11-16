@@ -282,6 +282,9 @@ public class ScreenTest {
             String persona = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/assets/persona.md")), "UTF-8");
             eq("persona: stuck in an app, search with this phone's details", persona.contains("Stuck in an app") && persona.contains("This phone"), true);
             eq("persona: one conversation's look is in its own menu", persona.contains("that conversation's own menu"), true);
+            // 11-16 "Send my grocery list to Walmart" copied it into Walmart's own list instead of the cart
+            eq("persona: any wording of list-to-store means the cart", persona.contains("Send my grocery list to Walmart"), true);
+            eq("persona: never the store app's own list unless named", persona.contains("never copy it into a list inside the store's app"), true);
         } catch (java.io.IOException e) { eq("persona readable", e, ""); }
 
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");
