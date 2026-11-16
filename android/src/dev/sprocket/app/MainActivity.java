@@ -259,7 +259,7 @@ public class MainActivity extends Activity {
      * question so every round of it goes to the same place (Codex 040 #6). */
     static Claude.Brain brain() {
         SharedPreferencesLike p = new SharedPreferencesLike(app);
-        return Claude.Brain.now(q -> testKey != null ? testKey : q ? (Config.deep ? p.deepKey() : p.ownKey()) : p.key());
+        return Claude.Brain.now(q -> testKey != null ? testKey : q ? (Config.deep ? p.deepKey() : Config.oa ? p.openAiKey() : p.ownKey()) : p.key());
     }
 
     /** Main thread: this morning's brief into the chat (a card) and the Feed screen's week. */
@@ -684,7 +684,10 @@ public class MainActivity extends Activity {
         /** His own server's key, if it needs one (named qwen_key from stage 2, when that server was always Qwen). */
         String ownKey() { return p.getString("qwen_key", ""); }
         void ownKey(String k) { p.edit().putString("qwen_key", k.trim()).apply(); }
-        String activeKey() { return Config.own ? (Config.deep ? deepKey() : ownKey()) : key(); }
+        String activeKey() { return Config.own ? (Config.deep ? deepKey() : Config.oa ? openAiKey() : ownKey()) : key(); }
+        /** Their OpenAI API key (11-15: OpenAI as a brain of its own). */
+        String openAiKey() { return p.getString("openai_key", ""); }
+        void openAiKey(String k) { p.edit().putString("openai_key", k.trim()).apply(); }
         /** Their DeepSeek key (11-15: DeepSeek is a brain of its own, beside Claude and their own server). */
         String deepKey() { return p.getString("deepseek_key", ""); }
         void deepKey(String k) { p.edit().putString("deepseek_key", k.trim()).apply(); }
@@ -1304,6 +1307,9 @@ public class MainActivity extends Activity {
             + "monthly limit under Limits, if you like). 3. Under API keys, create a key, copy it and paste it here. It stays "
             + "on this phone.";
     static final String CONSOLE_KEYS = "https://console.anthropic.com/settings/keys";
+    static final String OPENAI_KEY_HOW = "How to get one: 1. Sign in at platform.openai.com. A ChatGPT subscription doesn't cover "
+            + "this: the API is paid separately, for what you use. 2. Under Billing, add a little credit. 3. Under API keys, "
+            + "create a key, copy it and paste it here. It stays on this phone. What you ask goes to OpenAI.";
     static final String DEEPSEEK_KEY_HOW = "How to get one: 1. Sign in at platform.deepseek.com. 2. Add a little credit (a few "
             + "dollars goes a long way: most questions cost well under a cent). 3. Under API keys, create a key, copy it and "
             + "paste it here. It stays on this phone. What you ask goes to DeepSeek, a company in China.";
@@ -1323,10 +1329,12 @@ public class MainActivity extends Activity {
 
         final boolean[] own = {Config.own};
         // which card: Claude, DeepSeek (a preset of "your own server": its Claude-style address, no go-between) or own
-        final boolean[] ds = {Config.own && Config.deep};
+        final boolean[] ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};
         LinearLayout claude = option("Claude", "Anthropic's AI. Needs a Claude key; you pay Anthropic for what you use.");
         LinearLayout deep = option("DeepSeek", "DeepSeek's AI. Needs a DeepSeek key; you pay DeepSeek for what you use, usually "
                 + "well under a cent a question. Tested with Sprocket's practice set: 59 of 62.");
+        LinearLayout openai = option("OpenAI", "OpenAI's API (not a ChatGPT subscription). Needs an OpenAI API key; you pay "
+                + "OpenAI for what you use. Tested with Sprocket's practice set: 53 of 62.");
         LinearLayout mine = option("Your own server", "A model you run yourself, through the included go-between or anything "
                 + "that speaks Anthropic's Messages API. Tested with Qwen.");
         LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(-1, -2);
@@ -1337,7 +1345,10 @@ public class MainActivity extends Activity {
         c.addView(deep, second);
         LinearLayout.LayoutParams third = new LinearLayout.LayoutParams(-1, -2);
         third.setMargins(0, dp(10), 0, 0);
-        c.addView(mine, third);
+        c.addView(openai, third);
+        LinearLayout.LayoutParams fourth = new LinearLayout.LayoutParams(-1, -2);
+        fourth.setMargins(0, dp(10), 0, 0);
+        c.addView(mine, fourth);
 
         LinearLayout claudeBox = new LinearLayout(this);
         claudeBox.setOrientation(LinearLayout.VERTICAL);
@@ -1361,6 +1372,17 @@ public class MainActivity extends Activity {
         });
         deepBox.addView(deepSite);
         c.addView(deepBox);
+        LinearLayout oaBox = new LinearLayout(this);
+        oaBox.setOrientation(LinearLayout.VERTICAL);
+        EditText oaKey = field(oaBox, "Your OpenAI API key", "", "sk-...", true);
+        oaBox.addView(text(OPENAI_KEY_HOW, 12, FAINT));
+        TextView oaSite = text("Open OpenAI's API keys page", 13, TEXT);
+        oaSite.setPadding(0, dp(8), 0, dp(4));
+        oaSite.setOnClickListener(v -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Claude.OPENAI_KEYS))); } catch (Exception ignored) { }
+        });
+        oaBox.addView(oaSite);
+        c.addView(oaBox);
         LinearLayout ownBox = new LinearLayout(this);
         ownBox.setOrientation(LinearLayout.VERTICAL);
         EditText name = field(ownBox, "Its name (what I call it)", Config.ownName, "Qwen", false);
@@ -1376,12 +1398,15 @@ public class MainActivity extends Activity {
         anyway.setVisibility(View.GONE);
         final int[] asked = {0};                              // which check is current: switching brains drops the last one
         Runnable show = () -> {
+            boolean onMine = own[0] && !ds[0] && !oa[0];
             pick(claude, !own[0]);
             pick(deep, own[0] && ds[0]);
-            pick(mine, own[0] && !ds[0]);
+            pick(openai, own[0] && oa[0]);
+            pick(mine, onMine);
             claudeBox.setVisibility(own[0] ? View.GONE : View.VISIBLE);
             deepBox.setVisibility(own[0] && ds[0] ? View.VISIBLE : View.GONE);
-            ownBox.setVisibility(own[0] && !ds[0] ? View.VISIBLE : View.GONE);
+            oaBox.setVisibility(own[0] && oa[0] ? View.VISIBLE : View.GONE);
+            ownBox.setVisibility(onMine ? View.VISIBLE : View.GONE);
         };
         Runnable switched = () -> {   // the other brain's message would read as this one's (the owner's phone test, 2026-11-12)
             asked[0]++;
@@ -1390,30 +1415,33 @@ public class MainActivity extends Activity {
             show.run();
         };
         claude.setOnClickListener(v -> { if (own[0]) { own[0] = false; switched.run(); } });
-        deep.setOnClickListener(v -> { if (!own[0] || !ds[0]) { own[0] = true; ds[0] = true; switched.run(); } });
-        mine.setOnClickListener(v -> { if (!own[0] || ds[0]) { own[0] = true; ds[0] = false; switched.run(); } });
+        deep.setOnClickListener(v -> { if (!own[0] || !ds[0]) { own[0] = true; ds[0] = true; oa[0] = false; switched.run(); } });
+        openai.setOnClickListener(v -> { if (!own[0] || !oa[0]) { own[0] = true; oa[0] = true; ds[0] = false; switched.run(); } });
+        mine.setOnClickListener(v -> { if (!own[0] || ds[0] || oa[0]) { own[0] = true; ds[0] = false; oa[0] = false; switched.run(); } });
         show.run();
 
         c.addView(note);
         Button start = button("Start", true);
         start.setOnClickListener(v -> {
-            final boolean useOwn = own[0], useDeep = own[0] && ds[0];
+            final boolean useOwn = own[0], useDeep = own[0] && ds[0], useOa = own[0] && oa[0];
             final String k = key.getText().toString().trim();
-            final String b = useDeep ? Claude.DEEPSEEK_BASE : base.getText().toString().trim();
-            final String n = useDeep ? "DeepSeek" : name.getText().toString().trim();
-            final String m = useDeep ? Claude.DEEPSEEK_MODEL : model.getText().toString().trim();
-            final String typed = (useDeep ? deepKey : ownKey).getText().toString().trim();
+            final String b = useDeep ? Claude.DEEPSEEK_BASE : useOa ? Claude.OPENAI_BASE : base.getText().toString().trim();
+            final String n = useDeep ? "DeepSeek" : useOa ? "OpenAI" : name.getText().toString().trim();
+            final String m = useDeep ? Claude.DEEPSEEK_MODEL : useOa ? Claude.OPENAI_MODEL : model.getText().toString().trim();
+            final String typed = (useDeep ? deepKey : useOa ? oaKey : ownKey).getText().toString().trim();
             note.setTextColor(ERR);
-            if (useDeep) {
-                if (typed.isEmpty()) { note.setText("Paste your DeepSeek key first."); return; }
-                if (typed.startsWith("sk-ant-")) { note.setText("That's a Claude key. Pick Claude above, or paste a DeepSeek key."); return; }
+            if (useDeep || useOa) {
+                String who = useDeep ? "DeepSeek" : "OpenAI";
+                if (typed.isEmpty()) { note.setText("Paste your " + who + " key first."); return; }
+                if (typed.startsWith("sk-ant-")) { note.setText("That's a Claude key. Pick Claude above, or paste a " + who + " key."); return; }
             } else if (useOwn) {
                 if (b.isEmpty()) { note.setText("Your own server needs its address."); return; }
                 String bad = Config.addressProblem(b);
                 if (bad != null) { note.setText(bad); return; }
             } else if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
             Runnable go = () -> {
-                if (useDeep) prefs().deepKey(typed);       // DeepSeek has its own slot: their own server stays as it was
+                if (useDeep) prefs().deepKey(typed);       // DeepSeek and OpenAI have their own slots: their server stays as it was
+                else if (useOa) prefs().openAiKey(typed);
                 else if (useOwn) {
                     Config.ownName = n;
                     Config.ownBase = b;
@@ -1422,6 +1450,7 @@ public class MainActivity extends Activity {
                 } else prefs().key(k);
                 Config.own = useOwn;
                 Config.deep = useDeep;
+                Config.oa = useOa;
                 prefs().saveConfig();
                 Claude.useBrain(Config.own);
                 startSetup();
@@ -1431,7 +1460,7 @@ public class MainActivity extends Activity {
             Claude.Brain test = useOwn ? new Claude.Brain(b.replaceAll("/+$", ""), typed.isEmpty() ? prefs().ownKey() : typed, true,
                     m.isEmpty() ? "own" : m) : new Claude.Brain(Claude.ANTHROPIC, k, false, "");
             note.setTextColor(MUTED);
-            note.setText(useDeep ? "Checking the key with DeepSeek..." : useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
+            note.setText(useDeep ? "Checking the key with DeepSeek..." : useOa ? "Checking the key with OpenAI..." : useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
             start.setEnabled(false);
             anyway.setVisibility(View.GONE);
             final int ticket = ++asked[0];
@@ -1693,19 +1722,24 @@ public class MainActivity extends Activity {
         c.addView(h);
 
         heading(c, "Brain");
-        final boolean[] own = {Config.own}, ds = {Config.own && Config.deep};   // which one answers first
+        final boolean[] own = {Config.own}, ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};   // which answers first
         LinearLayout pick = new LinearLayout(this);
-        Button claude = button("Claude", !own[0]), deep = button("DeepSeek", ds[0]), mine = button("Your own server", own[0] && !ds[0]);
+        Button claude = button("Claude", !own[0]), deep = button("DeepSeek", ds[0]), openai = button("OpenAI", oa[0]),
+                mine = button("Your own server", own[0] && !ds[0] && !oa[0]);
         pick.addView(claude, new LinearLayout.LayoutParams(-2, dp(38)));
         LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(38));
         gap.setMargins(dp(10), 0, 0, 0);
         pick.addView(deep, gap);
         LinearLayout.LayoutParams gap2 = new LinearLayout.LayoutParams(-2, dp(38));
         gap2.setMargins(dp(10), 0, 0, 0);
-        pick.addView(mine, gap2);
+        pick.addView(openai, gap2);
         c.addView(pick);
+        LinearLayout pick2 = new LinearLayout(this);   // a second row: four don't fit across a phone
+        pick2.setPadding(0, dp(8), 0, 0);
+        pick2.addView(mine, new LinearLayout.LayoutParams(-2, dp(38)));
+        c.addView(pick2);
         TextView backupHow = text("The one you pick answers. Set up the others too, and when it doesn't answer, Sprocket asks "
-                + "on a card whether the next one may take that question: your own server first, then DeepSeek, then Claude.", 12, FAINT);
+                + "on a card whether the next one may take that question: your own server first, then DeepSeek, OpenAI, Claude.", 12, FAINT);
         backupHow.setPadding(0, dp(6), 0, 0);
         c.addView(backupHow);
         TextView deepLabel = text("", 14, MUTED);
@@ -1713,6 +1747,11 @@ public class MainActivity extends Activity {
         c.addView(deepLabel);
         EditText deepKey = field(c, "Its key", "", prefs().deepKey().isEmpty() ? "sk-..." : "saved", true);
         c.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
+        TextView oaLabel = text("", 14, MUTED);
+        oaLabel.setPadding(0, dp(10), 0, 0);
+        c.addView(oaLabel);
+        EditText oaKey = field(c, "Its key", "", prefs().openAiKey().isEmpty() ? "sk-..." : "saved", true);
+        c.addView(text(OPENAI_KEY_HOW, 12, FAINT));
         TextView ownLabel = text("", 14, MUTED);
         ownLabel.setPadding(0, dp(10), 0, 0);
         c.addView(ownLabel);
@@ -1731,22 +1770,24 @@ public class MainActivity extends Activity {
         top.setMargins(0, dp(8), 0, 0);
         c.addView(claudeKey, top);
         Runnable showBrain = () -> {                       // all stay on show: the others are the backups (11-13, 11-15)
-            boolean onClaude = !own[0], onDeep = own[0] && ds[0], onMine = own[0] && !ds[0];
+            boolean onClaude = !own[0], onDeep = own[0] && ds[0], onOa = own[0] && oa[0], onMine = own[0] && !ds[0] && !oa[0];
             deepLabel.setText(onDeep ? "DeepSeek" : "DeepSeek, as a backup (optional)");
+            oaLabel.setText(onOa ? "OpenAI" : "OpenAI, as a backup (optional)");
             ownLabel.setText(onMine ? "Your own server" : "Your own server, as a backup (optional)");
             boolean noKey = prefs().key().isEmpty();
             claudeKey.setText(!onClaude ? (noKey ? "Add a Claude key, as a backup (optional)" : "Claude key (backup)")
                     : (noKey ? "Add Claude key" : "Claude key"));
-            for (Object[] b : new Object[][]{{claude, onClaude}, {deep, onDeep}, {mine, onMine}}) {
+            for (Object[] b : new Object[][]{{claude, onClaude}, {deep, onDeep}, {openai, onOa}, {mine, onMine}}) {
                 ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
                 ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
             }
         };
         claude.setOnClickListener(v -> { own[0] = false; showBrain.run(); });
-        deep.setOnClickListener(v -> { own[0] = true; ds[0] = true; showBrain.run(); });
-        mine.setOnClickListener(v -> { own[0] = true; ds[0] = false; showBrain.run(); });
+        deep.setOnClickListener(v -> { own[0] = true; ds[0] = true; oa[0] = false; showBrain.run(); });
+        openai.setOnClickListener(v -> { own[0] = true; oa[0] = true; ds[0] = false; showBrain.run(); });
+        mine.setOnClickListener(v -> { own[0] = true; ds[0] = false; oa[0] = false; showBrain.run(); });
         showBrain.run();
-        c.addView(text("Tested with Claude, DeepSeek, and Qwen through the included go-between. Other models may work if they speak "
+        c.addView(text("Tested with Claude, DeepSeek, OpenAI, and Qwen through the included go-between. Other models may work if they speak "
                 + "Anthropic's Messages API, or sit behind the go-between (any OpenAI-compatible server).", 12, FAINT));
 
         heading(c, "Voices");
@@ -1796,7 +1837,8 @@ public class MainActivity extends Activity {
         LinearLayout btns = new LinearLayout(this);
         Button save = button("Save", true), back = button("Cancel", false);
         save.setOnClickListener(v -> {
-            if (own[0] && !ds[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
+            if (own[0] && !ds[0] && !oa[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
+            if (own[0] && oa[0] && oaKey.getText().toString().trim().isEmpty() && prefs().openAiKey().isEmpty()) { note.setText("OpenAI needs its key."); return; }
             if (own[0] && ds[0] && deepKey.getText().toString().trim().isEmpty() && prefs().deepKey().isEmpty()) { note.setText("DeepSeek needs its key."); return; }
             for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) {
                 String bad = Config.addressProblem(f.getText().toString());
@@ -1806,7 +1848,9 @@ public class MainActivity extends Activity {
             for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) home |= Config.unencrypted(f.getText().toString());
             Config.own = own[0];
             Config.deep = own[0] && ds[0];
+            Config.oa = own[0] && oa[0];
             if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
+            if (!oaKey.getText().toString().trim().isEmpty()) prefs().openAiKey(oaKey.getText().toString());
             Config.ownName = name.getText().toString().trim();
             Config.ownBase = base.getText().toString().trim();
             Config.ownModel = model.getText().toString().trim();
@@ -1970,12 +2014,13 @@ public class MainActivity extends Activity {
     /** A brain is set up (without the self-test's stand-in): what the morning brief's alarm waits for. */
     static boolean brainSetUp() {
         SharedPreferencesLike sp = new SharedPreferencesLike(app);
-        return Config.own ? (Config.deep ? !sp.deepKey().isEmpty() : !Config.ownBase.trim().isEmpty()) : !sp.key().isEmpty();
+        return Config.own ? (Config.deep ? !sp.deepKey().isEmpty() : Config.oa ? !sp.openAiKey().isEmpty() : !Config.ownBase.trim().isEmpty()) : !sp.key().isEmpty();
     }
 
     /** A brain he can ask: Claude with its key, or his own server with its address (a key only if it wants one). */
     private boolean ready() {
-        return testKey != null || (Config.own ? (Config.deep ? !prefs().deepKey().isEmpty() : !Config.ownBase.trim().isEmpty()) : !prefs().key().isEmpty());
+        return testKey != null || (Config.own ? (Config.deep ? !prefs().deepKey().isEmpty() : Config.oa ? !prefs().openAiKey().isEmpty()
+                : !Config.ownBase.trim().isEmpty()) : !prefs().key().isEmpty());
     }
 
     /** A reply from his own server's model (not Claude's): free. */
@@ -2093,12 +2138,13 @@ public class MainActivity extends Activity {
     private static Claude.Reply askBackup(Claude.Brain failed, Exception e, JSONObject req, Claude.Listener l) throws Exception {
         if (req == null || !Claude.backupOk(e) || standIn()) return null;
         SharedPreferencesLike p = new SharedPreferencesLike(app);
-        // the others they set up, cheapest first: their own server, DeepSeek, Claude (11-15, Chris: "fall back to
+        // the others they set up, cheapest first: their own server, DeepSeek, OpenAI, Claude (11-15, Chris: "fall back to
         // whichever models they chose to set up"); each one asks first, and a "no" stops there
         List<Claude.Brain> others = new ArrayList<>();
         if (!Config.ownBase.trim().isEmpty())
             others.add(new Claude.Brain(Config.ownBase.trim().replaceAll("/+$", ""), p.ownKey(), true, Config.ownModel.trim().isEmpty() ? "own" : Config.ownModel.trim()));
         if (!p.deepKey().isEmpty()) others.add(new Claude.Brain(Claude.DEEPSEEK_BASE, p.deepKey(), true, Claude.DEEPSEEK_MODEL));
+        if (!p.openAiKey().isEmpty()) others.add(new Claude.Brain(Claude.OPENAI_BASE, p.openAiKey(), true, Claude.OPENAI_MODEL));
         if (!p.key().isEmpty()) others.add(new Claude.Brain(Claude.ANTHROPIC, p.key(), false, ""));
         Exception last = e;
         Claude.Brain down = failed;
@@ -3420,7 +3466,7 @@ public class MainActivity extends Activity {
             return;
         }
         String qk = test.getStringExtra("st_qwen_key");   // stage 2: Qwen's access code, only ever over adb
-        if (qk != null) { prefs().ownKey(qk); Config.own = true; Config.deep = false; prefs().saveConfig(); Claude.useBrain(true); render(); return; }
+        if (qk != null) { prefs().ownKey(qk); Config.own = true; Config.deep = Config.oa = false; prefs().saveConfig(); Claude.useBrain(true); render(); return; }
         String cfg = test.getStringExtra("st_config");   // his settings (Config JSON, plus own_key), only ever over adb
         if (cfg != null) {
             Config.fromJson(cfg);
@@ -3428,6 +3474,7 @@ public class MainActivity extends Activity {
                 JSONObject o = new JSONObject(cfg);
                 if (!o.optString("own_key", "").isEmpty()) prefs().ownKey(o.optString("own_key"));
                 if (!o.optString("deepseek_key", "").isEmpty()) prefs().deepKey(o.optString("deepseek_key"));
+                if (!o.optString("openai_key", "").isEmpty()) prefs().openAiKey(o.optString("openai_key"));
                 if (o.has("persona")) { prefs().persona(o.optString("persona")); persona = o.optString("persona").trim().isEmpty() ? defaultPersona() : o.optString("persona"); }
             } catch (Exception ignored) { }
             prefs().saveConfig();

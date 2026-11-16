@@ -42,12 +42,17 @@ final class Claude {
     static String brainNow(boolean harder) { return brainNow(Config.own, harder); }
 
     static String brainNow(boolean onOwn, boolean harder) {
-        return onOwn ? (Config.deep ? brainNowDeep() : brainNowOwn()) : brainNowClaude(harder);
+        return onOwn ? (Config.deep ? brainNowDeep() : Config.oa ? brainNowOpenAi() : brainNowOwn()) : brainNowClaude(harder);
     }
 
     static String brainNowOwn() {
         String m = Config.ownModel.trim().isEmpty() ? "own" : Config.ownModel.trim();
         return "Your brain right now is " + ownName() + " (" + m + "), on the boss's own server, not Claude; "
+                + "older replies in this chat may have come from another brain.";
+    }
+
+    static String brainNowOpenAi() {
+        return "Your brain right now is OpenAI (" + OPENAI_MODEL + ", OpenAI's API, from their credits), not Claude; "
                 + "older replies in this chat may have come from another brain.";
     }
 
@@ -61,15 +66,18 @@ final class Claude {
     }
 
     /** The line for the brain that's really answering (the backup took over from another one). */
-    static String brainNow(Brain b) { return !b.own ? brainNowClaude(false) : deepSeek(b.base) ? brainNowDeep() : brainNowOwn(); }
+    static String brainNow(Brain b) {
+        return !b.own ? brainNowClaude(false) : deepSeek(b.base) ? brainNowDeep() : openAi(b.base) ? brainNowOpenAi() : brainNowOwn();
+    }
 
     /** What to call a brain: Claude, DeepSeek, or the name they gave their own server. */
-    static String brainName(Brain b) { return !b.own ? "Claude" : deepSeek(b.base) ? "DeepSeek" : ownName(); }
+    static String brainName(Brain b) { return !b.own ? "Claude" : deepSeek(b.base) ? "DeepSeek" : openAi(b.base) ? "OpenAI" : ownName(); }
 
     /** The name for an answer's label, from the model that gave it (not whichever brain is switched on now). */
     static String nameFor(String model) {
         if (model == null || model.isEmpty() || model.startsWith("claude")) return "Claude";
-        return model.toLowerCase(Locale.US).startsWith("deepseek") ? "DeepSeek" : ownName();
+        String m = model.toLowerCase(Locale.US);
+        return m.startsWith("deepseek") ? "DeepSeek" : m.startsWith("gpt-") ? "OpenAI" : ownName();
     }
 
     /** The own brain's name as the owner gave it ("Qwen"), or a plain one. */
@@ -114,6 +122,8 @@ final class Claude {
             double h = deepSeekOffPeak(when) ? 0.5 : 1;
             return new double[]{0.30 * h, 1.20 * h, 0.30 * h, 0.006 * h, 0.00075};
         }
+        if (model != null && model.startsWith("gpt-6.1-sol"))   // OpenAI's pricing page, 2026-11-15 (Standard, short context)
+            return new double[]{2.00, 10.00, 2.00, 0.10, 0.01};
         if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0, 0};
         return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20, 0.01} : new double[]{2, 10, 2.50, 0.10, 0.01};
     }
@@ -526,15 +536,21 @@ final class Claude {
         String bad = Config.destinationProblem(b.base);
         if (bad != null) return bad;
         try {
-            HttpURLConnection h = (HttpURLConnection) new URL(b.base + "/v1/messages").openConnection();
+            boolean oa = b.own && openAi(b.base);
+            HttpURLConnection h = (HttpURLConnection) new URL(b.base + (oa ? "/v1/responses" : "/v1/messages")).openConnection();
             h.setInstanceFollowRedirects(false);
             h.setConnectTimeout(10000);
             h.setReadTimeout(b.own ? CHECK_WAIT_OWN : 30000);
             h.setDoOutput(true);
-            h.setRequestProperty("x-api-key", b.key);
-            h.setRequestProperty("anthropic-version", "2023-06-01");
+            if (oa) h.setRequestProperty("Authorization", "Bearer " + b.key);
+            else {
+                h.setRequestProperty("x-api-key", b.key);
+                h.setRequestProperty("anthropic-version", "2023-06-01");
+            }
             h.setRequestProperty("content-type", "application/json");
-            JSONObject req = new JSONObject().put("model", b.own ? b.model : SONNET).put("max_tokens", 1)
+            JSONObject req = oa ? new JSONObject().put("model", b.model).put("input", "Hi").put("max_output_tokens", 16).put("store", false)
+                    .put("reasoning", new JSONObject().put("effort", "low"))
+                    : new JSONObject().put("model", b.own ? b.model : SONNET).put("max_tokens", 1)
                     .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", "Hi")));
             try (OutputStream o = h.getOutputStream()) { o.write(req.toString().getBytes(StandardCharsets.UTF_8)); }
             int code = h.getResponseCode();
@@ -554,11 +570,25 @@ final class Claude {
 
     static boolean deepSeek(String base) { return base != null && base.toLowerCase(Locale.US).contains("api.deepseek.com"); }
 
+    /** OpenAI as a brain (11-15): its Responses API, through OpenAiWire; their own key. */
+    static final String OPENAI_BASE = "https://api.openai.com", OPENAI_MODEL = "gpt-6.1-sol",
+            OPENAI_KEYS = "https://platform.openai.com/api-keys";
+
+    static boolean openAi(String base) { return base != null && base.toLowerCase(Locale.US).contains("api.openai.com"); }
+
     static String checkProblem(boolean own, int code, String body) { return checkProblem(own, code, body, null); }
 
     static String checkProblem(boolean own, int code, String body, String base) {
         if (code == 200) return null;
         String msg = errorMessage(body);
+        if (own && openAi(base)) {
+            if (code == 401 || code == 403) return "OpenAI says that key isn't valid. Copy it again from OpenAI's API keys page.";
+            if (body != null && (body.contains("insufficient_quota") || body.contains("billing")))
+                return "Your OpenAI account has no API credit yet (a ChatGPT subscription doesn't include it). Add some under "
+                        + "Billing on platform.openai.com, then tap Start again.";
+            if (code == 429) return "OpenAI is busy or limiting this key right now. Try again in a minute.";
+            return "OpenAI answered " + code + (msg.isEmpty() ? "" : ": " + msg);
+        }
         if (own && deepSeek(base)) {
             if (code == 401 || code == 403) return "DeepSeek says that key isn't valid. Copy it again from DeepSeek's API keys page.";
             if (code == 402 || (body != null && body.toLowerCase(Locale.US).contains("insufficient balance")))
@@ -585,8 +615,8 @@ final class Claude {
 
     /** What a failed connection means, for the test. */
     static String checkFailed(boolean own, Exception e, String base) {
-        if (own && deepSeek(base) && !(e instanceof java.net.SocketTimeoutException && !String.valueOf(e.getMessage()).toLowerCase(Locale.US).contains("connect")))
-            return "This phone couldn't reach DeepSeek (" + e.getClass().getSimpleName() + "). Is it online?";
+        if (own && (deepSeek(base) || openAi(base)) && !(e instanceof java.net.SocketTimeoutException && !String.valueOf(e.getMessage()).toLowerCase(Locale.US).contains("connect")))
+            return "This phone couldn't reach " + (openAi(base) ? "OpenAI" : "DeepSeek") + " (" + e.getClass().getSimpleName() + "). Is it online?";
         String where = Config.host(base);
         String m = String.valueOf(e.getMessage()).toLowerCase(Locale.US);
         if (e instanceof java.net.UnknownHostException)
@@ -661,8 +691,10 @@ final class Claude {
 
     /** The same card between any two of their brains (11-15: the public app falls back to whichever ones they set up). */
     static String backupCard(Brain failed, Brain next) {
-        String from = !failed.own ? "Claude isn't answering." : deepSeek(failed.base) ? "DeepSeek isn't answering." : "Your server didn't answer.";
-        String cost = !next.own ? " It uses your Claude credit." : deepSeek(next.base) ? " It uses your DeepSeek credit." : "";
+        String from = !failed.own ? "Claude isn't answering." : deepSeek(failed.base) ? "DeepSeek isn't answering."
+                : openAi(failed.base) ? "OpenAI isn't answering." : "Your server didn't answer.";
+        String cost = !next.own ? " It uses your Claude credit." : deepSeek(next.base) ? " It uses your DeepSeek credit."
+                : openAi(next.base) ? " It uses your OpenAI credit." : "";
         return from + " Ask " + brainName(next) + " this one instead?" + cost;
     }
 
@@ -675,7 +707,7 @@ final class Claude {
         for (int i = 0; content != null && i < content.length(); i++) {
             JSONObject blk = content.getJSONObject(i);
             String t = blk.optString("text");
-            for (String was : new String[]{brainNowClaude(false), brainNowClaude(true), brainNowOwn(), brainNowDeep()})
+            for (String was : new String[]{brainNowClaude(false), brainNowClaude(true), brainNowOwn(), brainNowDeep(), brainNowOpenAi()})
                 if (!was.equals(now)) t = t.replace(was, now);
             if (blk.has("text")) blk.put("text", t);
         }
@@ -819,6 +851,7 @@ final class Claude {
     static Reply once(Brain b, JSONObject req, Listener l, HttpURLConnection[] cancel) throws Exception {
         String bad = Config.destinationProblem(b.base);   // the app allows plain http, so the check is here too
         if (bad != null) throw new Exception(bad);
+        if (b.own && openAi(b.base)) return onceOpenAi(b, req, l, cancel);
         HttpURLConnection h = (HttpURLConnection) new URL(b.base + "/v1/messages").openConnection();
         h.setInstanceFollowRedirects(false);    // a redirect would skip the address check (Codex 043 #1)
         if (cancel != null) cancel[0] = h;
@@ -845,6 +878,38 @@ final class Claude {
         Stream st = new Stream(req.optString("model"), l);
         try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
             for (String line; (line = r.readLine()) != null; ) st.line(line);
+        }
+        return st.finish();
+    }
+
+    /** One request to OpenAI: its Responses API, its stream turned into Messages events for Stream (OpenAiWire). */
+    static Reply onceOpenAi(Brain b, JSONObject req, Listener l, HttpURLConnection[] cancel) throws Exception {
+        HttpURLConnection h = (HttpURLConnection) new URL(b.base + "/v1/responses").openConnection();
+        h.setInstanceFollowRedirects(false);
+        if (cancel != null) cancel[0] = h;
+        h.setConnectTimeout(10000);
+        h.setReadTimeout(120000);
+        h.setDoOutput(true);
+        h.setRequestProperty("Authorization", "Bearer " + b.key);
+        h.setRequestProperty("content-type", "application/json");
+        int code;
+        try {
+            try (OutputStream o = h.getOutputStream()) { o.write(OpenAiWire.request(req, b.model).toString().getBytes(StandardCharsets.UTF_8)); }
+            code = h.getResponseCode();
+        } catch (java.io.IOException e) {
+            throw new Down("OpenAI couldn't be reached (" + e.getMessage() + ")", e);
+        }
+        if (code != 200) {
+            InputStream in = h.getErrorStream();
+            String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            if (code == 429 && !body.contains("insufficient_quota")) throw new Busy("OpenAI is busy right now", h.getHeaderField("retry-after"), false);
+            if (downCode(code)) throw new Down("OpenAI isn't answering (" + code + ")");
+            throw new Exception(checkProblem(true, code, body, b.base));
+        }
+        Stream st = new Stream(b.model, l);
+        OpenAiWire.Events ev = new OpenAiWire.Events();
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
+            for (String line; (line = r.readLine()) != null; ) for (String e : ev.feed(line)) st.line(e);
         }
         return st.finish();
     }
