@@ -226,3 +226,63 @@ class UpstreamKeyTest(unittest.TestCase):
         proxy.UPSTREAM_KEY_FILE = f.name
         self.assertEqual(proxy.upstream_headers()["Authorization"], "Bearer sk-test-key")
         os.unlink(f.name)
+
+
+class KeyStaysPutTest(unittest.TestCase):
+    """Codex 049 #2: with a key, the go-between never follows a redirect and never sends it over plain http."""
+
+    def test_key_only_over_https_or_to_this_computer(self):
+        self.assertIsNone(proxy.key_destination_problem("https://api.deepseek.com"))
+        self.assertIsNone(proxy.key_destination_problem("http://127.0.0.1:8080"))
+        self.assertIsNone(proxy.key_destination_problem("http://localhost:11434"))
+        self.assertIsNotNone(proxy.key_destination_problem("http://api.deepseek.com"))
+        self.assertIsNotNone(proxy.key_destination_problem("http://192.168.1.50:8080"))
+        self.assertIsNotNone(proxy.key_destination_problem("ftp://example.com"))
+
+    def test_a_redirect_is_not_followed_and_the_key_never_reaches_it(self):
+        import http.server
+        import threading
+        got_elsewhere = []
+
+        class Elsewhere(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                got_elsewhere.append(self.headers.get("Authorization"))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            do_GET = do_POST   # a 302 turns the POST into a GET
+
+            def log_message(self, *a):
+                pass
+
+        other = http.server.HTTPServer(("127.0.0.1", 0), Elsewhere)
+        where = f"http://127.0.0.1:{other.server_port}/v1/chat/completions"
+
+        class Redirects(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(302)   # the common redirect, which Python follows by default
+                self.send_header("Location", where)
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        first = http.server.HTTPServer(("127.0.0.1", 0), Redirects)
+        for s in (first, other):
+            threading.Thread(target=s.serve_forever, daemon=True).start()
+        saved = (proxy.UPSTREAM, proxy.UPSTREAM_KEY_FILE)
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-test-key\n")
+        try:
+            proxy.UPSTREAM, proxy.UPSTREAM_KEY_FILE = f"http://127.0.0.1:{first.server_port}", f.name
+            with self.assertRaises(Exception):
+                proxy.call_upstream({"messages": []})
+            with self.assertRaises(Exception):
+                proxy.call_upstream_stream({"messages": []})
+            self.assertEqual(got_elsewhere, [])   # the key never reached the redirect's target
+        finally:
+            proxy.UPSTREAM, proxy.UPSTREAM_KEY_FILE = saved
+            os.unlink(f.name)
+            first.shutdown()
+            other.shutdown()

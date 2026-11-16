@@ -53,6 +53,28 @@ MODEL_FILE = os.environ.get("MODEL_FILE", "").strip() or None
 UPSTREAM_KEY_FILE = os.path.expanduser(os.environ.get("UPSTREAM_KEY_FILE", "").strip()) or None
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """The model server never redirects (Codex 049 #2): following one would carry the key to whoever it points at."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "the model server redirected; not followed (the key stays put)",
+                                     headers, fp)
+
+
+UPSTREAM_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def key_destination_problem(upstream):
+    """Why a key mustn't go to this model server, or None. A key goes only over https, except to this computer
+    itself (Codex 049 #2: plain http would carry it unencrypted)."""
+    p = urllib.parse.urlsplit(upstream)
+    if p.scheme == "https" and p.hostname:
+        return None
+    if p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost", "::1"):
+        return None
+    return f"UPSTREAM_KEY_FILE needs an https:// UPSTREAM (or this computer itself), not {upstream}"
+
+
 def upstream_headers():
     h = {"Content-Type": "application/json"}
     if UPSTREAM_KEY_FILE:
@@ -146,7 +168,7 @@ def brave_search(query):
 
 def call_upstream(body):
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
-    with urllib.request.urlopen(req, timeout=900) as r:
+    with UPSTREAM_OPENER.open(req, timeout=900) as r:
         return json.load(r)
 
 
@@ -171,7 +193,7 @@ def brain_on_trial():
 def call_upstream_stream(body):
     """The model's streamed reply as OpenAI chunks; the connection opens now, so a failure shows before any reply."""
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
-    r = urllib.request.urlopen(req, timeout=900)
+    r = UPSTREAM_OPENER.open(req, timeout=900)
 
     def chunks():
         with r:
@@ -360,6 +382,8 @@ def missing():
 def main():
     for path in missing():
         sys.exit(f"missing {path}")
+    if UPSTREAM_KEY_FILE and key_destination_problem(UPSTREAM):
+        sys.exit(key_destination_problem(UPSTREAM))
     if not brave_key():
         log(f"no Brave Search key at {BRAVE_KEY_FILE}: web search will say it's unavailable")
     server = ThreadingHTTPServer((BIND, PORT), Handler)
