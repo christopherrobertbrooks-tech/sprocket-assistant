@@ -95,6 +95,15 @@ public class OpenAiWireTest {
         eq("text: spoken in sentences", sentences.size() >= 2, true);
         eq("text: it costs something", words.cost() > 0, true);
 
+        // Codex 049 #4: text OpenAI saves to its cache is billed at its own rate, not dropped into plain input
+        Claude.Stream ws = new Claude.Stream("gpt-6.1-sol", null);
+        OpenAiWire.Events wev = new OpenAiWire.Events();
+        for (String e : wev.feed("data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":1000000,"
+                + "\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":1000000},\"output_tokens\":0}}}")) ws.line(e);
+        Claude.Reply wr = ws.finish();
+        eq("cache writes counted as writes", wr.cacheWrite + " " + wr.input, "1000000 0");
+        eq("a million written tokens cost $2.50", Math.round(wr.cost() * 100) / 100.0, 2.5);
+
         System.out.println("openai wire: " + (fails == 0 ? "all " + n + " checks pass" : fails + " of " + n + " failed"));
         System.exit(fails == 0 ? 0 : 1);
     }

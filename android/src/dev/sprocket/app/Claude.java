@@ -162,7 +162,7 @@ final class Claude {
             return new double[]{0.30 * h, 1.20 * h, 0.30 * h, 0.006 * h, 0.00075};
         }
         if (model != null && model.startsWith("gpt-6.1-sol"))   // OpenAI's pricing page, 2026-11-15 (Standard, short context)
-            return new double[]{2.00, 10.00, 2.00, 0.10, 0.01};
+            return new double[]{2.00, 10.00, 2.50, 0.10, 0.01};   // cache write: the 30-minute rate (Codex 049 #4)
         if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0, 0};
         return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20, 0.01} : new double[]{2, 10, 2.50, 0.10, 0.01};
     }
@@ -596,9 +596,9 @@ final class Claude {
             InputStream in = code == 200 ? h.getInputStream() : h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
             h.disconnect();
-            return checkProblem(b.own, code, body, b.base);
+            return scrub(checkProblem(b.own, code, body, b.base), b.key);
         } catch (Exception e) {
-            return checkFailed(b.own, e, b.base);
+            return scrub(checkFailed(b.own, e, b.base), b.key);
         }
     }
 
@@ -612,6 +612,26 @@ final class Claude {
     /** OpenAI as a brain (11-15): its Responses API, through OpenAiWire; their own key. */
     static final String OPENAI_BASE = "https://api.openai.com", OPENAI_MODEL = "gpt-6.1-sol",
             OPENAI_KEYS = "https://platform.openai.com/api-keys";
+
+    /**
+     * Text with these keys blanked out, whole or in pieces of 10+ characters (Codex 049 #3: a provider's error reply
+     * can repeat the key it was sent, and that text reaches setup notes and the chat). Plain Java, for the tests.
+     */
+    static String scrub(String text, String... keys) {
+        if (text == null) return null;
+        String out = text;
+        for (String k : keys) {
+            if (k == null || k.trim().length() < 8) continue;
+            String key = k.trim();
+            out = out.replace(key, "[your key]");
+            java.util.regex.Matcher m = Pattern.compile("[A-Za-z0-9_\\-]{10,}").matcher(out);
+            StringBuffer b = new StringBuffer();
+            while (m.find()) m.appendReplacement(b, java.util.regex.Matcher.quoteReplacement(key.contains(m.group()) ? "[part of your key]" : m.group()));
+            m.appendTail(b);
+            out = b.toString();
+        }
+        return out;
+    }
 
     static boolean openAi(String base) { return base != null && base.toLowerCase(Locale.US).contains("api.openai.com"); }
 
@@ -910,9 +930,9 @@ final class Claude {
         if (code != 200) {
             InputStream in = h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            if (code == 429 || code == 529) throw new Busy(why(code, body), h.getHeaderField("retry-after"), false);
-            if (downCode(code)) throw new Down(b.own ? serverDown(code) : why(code, body));
-            throw new Exception(why(code, body));
+            if (code == 429 || code == 529) throw new Busy(scrub(why(code, body), b.key), h.getHeaderField("retry-after"), false);
+            if (downCode(code)) throw new Down(b.own ? serverDown(code) : scrub(why(code, body), b.key));
+            throw new Exception(scrub(why(code, body), b.key));
         }
         Stream st = new Stream(req.optString("model"), l);
         try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
@@ -943,7 +963,7 @@ final class Claude {
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
             if (code == 429 && !body.contains("insufficient_quota")) throw new Busy("OpenAI is busy right now", h.getHeaderField("retry-after"), false);
             if (downCode(code)) throw new Down("OpenAI isn't answering (" + code + ")");
-            throw new Exception(checkProblem(true, code, body, b.base));
+            throw new Exception(scrub(checkProblem(true, code, body, b.base), b.key));
         }
         Stream st = new Stream(b.model, l);
         OpenAiWire.Events ev = new OpenAiWire.Events();

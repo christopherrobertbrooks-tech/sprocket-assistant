@@ -90,7 +90,7 @@ public final class FeedService extends Service {
             new Handler(Looper.getMainLooper()).post(() -> MainActivity.addFeed(b));
             nm.notify(READY_ID, ResearchService.note(app, READY, "Morning brief", b.bottomLine, false));
         } catch (Exception e) {
-            String why = Net.offline(e) ? "no internet" : e.getMessage();
+            String why = Net.offline(e) ? "no internet" : Claude.scrub(e.getMessage(), MainActivity.allKeys(null));   // Codex 049 #3
             android.util.Log.w("Sprocket", "morning brief: " + why);
             nm.notify(READY_ID, ResearchService.note(app, READY, "No morning brief today", why, false));
         } finally {

@@ -75,7 +75,7 @@ public final class ResearchService extends Service {
             new Handler(Looper.getMainLooper()).post(() -> MainActivity.addBrief(b, r, title));
             nm.notify(NEXT_ID.getAndIncrement(), note(app, DONE, "Brief ready", b.title, false));
         } catch (Exception e) {
-            String why = Net.offline(e) ? "no internet" : e.getMessage();
+            String why = Net.offline(e) ? "no internet" : Claude.scrub(e.getMessage(), MainActivity.allKeys(null));   // Codex 049 #3
             new Handler(Looper.getMainLooper()).post(() -> MainActivity.addResearchError(title, why));
             nm.notify(NEXT_ID.getAndIncrement(), note(app, DONE, "Research didn't finish", shorter(title) + ": " + why, false));
         } finally {

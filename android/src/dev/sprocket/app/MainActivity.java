@@ -272,7 +272,7 @@ public class MainActivity extends Activity {
             t.cost = b.cost;
             synchronized (feed) { feed.keep(b); saveFeed(); }
         } catch (Exception e) {
-            android.util.Log.w("Sprocket", "brief not kept: " + e);
+            android.util.Log.w("Sprocket", "brief not kept: " + Claude.scrub(String.valueOf(e), allKeys(null)));
         }
         saveChat();
         if (current != null) current.render();
@@ -2126,7 +2126,8 @@ public class MainActivity extends Activity {
                 try { backup = stopped ? null : askBackup(k, e, req[0], listener[0]); }
                 catch (Exception e2) { e = e2; }
                 if (backup != null) r = backup;
-                else error = stopped ? null : (Net.offline(e) ? (k.own ? "your server didn't answer: check it's running and the phone can reach it" : "no internet: Sprocket's brain lives in the cloud") : e.getMessage());
+                else error = stopped ? null : (Net.offline(e) ? (k.own ? "your server didn't answer: check it's running and the phone can reach it" : "no internet: Sprocket's brain lives in the cloud")
+                        : Claude.scrub(e.getMessage(), allKeys(k.key)));   // Codex 049 #3
             }
             Claude.Reply done = r;
             String err = error;
@@ -2140,6 +2141,12 @@ public class MainActivity extends Activity {
      * saying or doing anything, and the other one is set up, a card asks whether the other one may answer it. Returns
      * its reply, or null (not offered, or he said no: the first error stands). Worker thread.
      */
+    /** Every key this phone holds (and the one in use), for blanking out of error text (Codex 049 #3). */
+    static String[] allKeys(String inUse) {
+        SharedPreferencesLike p = new SharedPreferencesLike(app);
+        return new String[]{inUse, p.key(), p.deepKey(), p.openAiKey(), p.ownKey()};
+    }
+
     private static Claude.Reply askBackup(Claude.Brain failed, Exception e, JSONObject req, Claude.Listener l) throws Exception {
         if (req == null || !Claude.backupOk(e) || standIn()) return null;
         SharedPreferencesLike p = new SharedPreferencesLike(app);
@@ -2340,7 +2347,7 @@ public class MainActivity extends Activity {
                 }
                 android.util.Log.i("Sprocket", "app memory: " + saved);
             } catch (Exception e) {
-                android.util.Log.w("Sprocket", "app memory: couldn't learn the route: " + e.getMessage());
+                android.util.Log.w("Sprocket", "app memory: couldn't learn the route: " + Claude.scrub(e.getMessage(), allKeys(null)));
             }
         }, "sprocket-route").start();
     }

@@ -209,12 +209,13 @@ final class OpenAiWire {
                     callBlock.clear();
                     JSONObject r = d.optJSONObject("response") == null ? new JSONObject() : d.getJSONObject("response");
                     JSONObject u = r.optJSONObject("usage") == null ? new JSONObject() : r.getJSONObject("usage");
-                    int in = u.optInt("input_tokens"), cached = u.optJSONObject("input_tokens_details") == null ? 0
-                            : u.getJSONObject("input_tokens_details").optInt("cached_tokens");
+                    JSONObject det = u.optJSONObject("input_tokens_details") == null ? new JSONObject() : u.getJSONObject("input_tokens_details");
+                    int in = u.optInt("input_tokens"), cached = det.optInt("cached_tokens"), written = det.optInt("cache_write_tokens");   // Codex 049 #4
                     boolean cut = r.optString("status").equals("incomplete") && r.optJSONObject("incomplete_details") != null
                             && r.getJSONObject("incomplete_details").optString("reason").equals("max_output_tokens");
                     out.add(ev(new JSONObject().put("type", "message_start").put("message", new JSONObject().put("usage",
-                            new JSONObject().put("input_tokens", Math.max(0, in - cached)).put("cache_read_input_tokens", cached)))));
+                            new JSONObject().put("input_tokens", Math.max(0, in - cached - written)).put("cache_read_input_tokens", cached)
+                                    .put("cache_creation_input_tokens", written)))));
                     out.add(ev(new JSONObject().put("type", "message_delta")
                             .put("delta", new JSONObject().put("stop_reason", cut ? "max_tokens" : calls ? "tool_use" : "end_turn"))
                             .put("usage", new JSONObject().put("output_tokens", u.optInt("output_tokens")))));

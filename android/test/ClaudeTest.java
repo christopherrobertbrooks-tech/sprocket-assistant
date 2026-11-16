@@ -566,6 +566,13 @@ public class ClaudeTest {
         eq("they go to his server", Claude.base, "https://box.example:8448");
         eq("it's free", java.util.Arrays.toString(Claude.price("qwen")), "[0.0, 0.0, 0.0, 0.0, 0.0]");
         eq("so it isn't paid", Claude.paid("qwen"), false);
+        // Codex 049 #3: a key a provider repeats back is blanked out, whole or in pieces; ordinary words stay
+        String sk = "sk-proj-AbCdEfGhIjKlMnOpQrSt1234";
+        eq("a repeated key is blanked", Claude.scrub("Incorrect API key provided: " + sk + ".", sk), "Incorrect API key provided: [your key].");
+        eq("a piece of it too", Claude.scrub("echo AbCdEfGhIjKlMnOp", sk), "echo [part of your key]");
+        eq("other words stay", Claude.scrub("OpenAI answered 400: Unsupported parameter max_tokens", sk), "OpenAI answered 400: Unsupported parameter max_tokens");
+        eq("no key: unchanged", Claude.scrub("Your server answered 500", "", null), "Your server answered 500");
+        eq("several keys at once", Claude.scrub("a=" + sk + " b=deepseek-secret-9876543210", sk, "deepseek-secret-9876543210"), "a=[your key] b=[your key]");
         // DeepSeek as a setup choice (11-15): its own plain words, not the go-between's
         eq("DeepSeek: a wrong key", Claude.checkProblem(true, 401, "{}", Claude.DEEPSEEK_BASE).startsWith("DeepSeek says that key isn't valid"), true);
         eq("DeepSeek: no credit", Claude.checkProblem(true, 402, "{\"error\":{\"message\":\"Insufficient Balance\"}}", Claude.DEEPSEEK_BASE).contains("no credit"), true);
