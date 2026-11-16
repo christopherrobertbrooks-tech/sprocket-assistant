@@ -16,6 +16,15 @@ public class ScreenTest {
     static Screen.Item button(String label) { return new Screen.Item("button", label, true, false, false, false, false); }
 
     public static void main(String[] a) {
+        // 11-16: the glow asked "is the hidden screen there?" from the main thread, where Android refuses sockets; the
+        // failure read as "no hidden screen" and the hands worked on his real screen (pressed Home, scrolled his apps).
+        eq("main thread never asks the helper", Screen.bgMayAsk(true, 100_000, 0), false);
+        eq("a worker asks when the answer is old", Screen.bgMayAsk(false, 100_000, 95_000), true);
+        eq("a worker uses a fresh answer", Screen.bgMayAsk(false, 100_000, 98_000), false);
+        eq("one failed ping right after a good one is asked again", Screen.bgDownAfter(true, false, true), false);
+        eq("two failed pings: gone", Screen.bgDownAfter(true, false, false), true);
+        eq("a good ping: up", Screen.bgDownAfter(false, true, false), false);
+        eq("never up and no answer: gone", Screen.bgDownAfter(false, false, true), true);
         List<Screen.Item> items = Arrays.asList(
                 new Screen.Item("text", "Wi-Fi", false, false, false, false, false),
                 new Screen.Item("switch", "Wi-Fi", true, false, false, true, false),
