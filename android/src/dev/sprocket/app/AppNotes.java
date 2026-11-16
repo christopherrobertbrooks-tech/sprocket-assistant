@@ -299,6 +299,9 @@ final class AppNotes {
      * already on your screen" without a look, and no go_to). Looser than find(): his own words, and half of the place's
      * words once the app's name is left out ("spam folder" for "Gmail spam folder").
      */
+    /** Words too common to point at a saved way on their own (his own lists are Sprocket's, not an app's). */
+    private static final List<String> COMMON = java.util.Arrays.asList("list", "lists", "page", "screen", "app", "open", "go");
+
     String hint(String asked) {
         List<String> have = words(asked == null ? "" : asked);
         Route best = null;
@@ -307,6 +310,7 @@ final class AppNotes {
             for (Route r : a.routes) {
                 List<String> want = words(r.goal);
                 want.removeAll(words(a.name));
+                want.removeAll(COMMON);   // 11-16: "list" alone matched every "my grocery list" request
                 if (want.isEmpty()) continue;
                 int hit = 0;
                 for (String w : want) if (have.contains(w)) hit++;
