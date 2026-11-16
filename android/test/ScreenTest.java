@@ -286,6 +286,8 @@ public class ScreenTest {
             eq("persona: any wording of list-to-store means the cart", persona.contains("Send my grocery list to Walmart"), true);
             eq("persona: never the store app's own list unless named", persona.contains("never copy it into a list inside the store's app"), true);
             // 11-16 "add ... to a list" right after Walmart talk went to go_to "Walmart Lists" and typed into Walmart's list
+            // 11-16 his design: Amazon asks first, one item at a time
+            eq("persona: Amazon finds, tells, then asks before each add", persona.contains("At Amazon, ask before each item goes in"), true);
             eq("persona: adding to his list never opens an app", persona.contains("never open an app or go_to a saved way to add to his list"), true);
         } catch (java.io.IOException e) { eq("persona readable", e, ""); }
 
