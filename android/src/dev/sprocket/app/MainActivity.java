@@ -217,6 +217,7 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
+        if (backSaves != null) { backSaves.run(); return; }                                              // Back: save
         if (editingAbout) { editingAbout = false; render(); return; }                                    // Back: no changes
         if (showingMemory || showingLists || showingFeed || showingGoals) {                                // Back: the chat
             showingMemory = showingLists = showingFeed = showingGoals = false;
@@ -1071,8 +1072,18 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ the conversation on screen
+    /**
+     * What the phone's Back does on a page with a Save button: save, the way Android's own Settings keep what you
+     * changed (11-15: Back left Settings without a word, so a ticked "Screen control" and a new address were thrown
+     * away, and Sprocket then said it couldn't use the screen). A save that fails (a bad address) keeps the page open
+     * with the reason. Cancel is the way out without saving. Null on every other page.
+     */
+    private Runnable backSaves;
+
     private void render() {
+        backSaves = null;
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         bottomBar.setVisibility(ready() ? View.VISIBLE : View.GONE);
         for (View b : topButtons) b.setVisibility(ready() ? View.VISIBLE : View.GONE);
         if (!ready()) { welcomeScreen(); return; }
@@ -1230,6 +1241,7 @@ public class MainActivity extends Activity {
 
     private void keyCard(boolean replacing) {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(round(PANEL, 16));
@@ -1637,6 +1649,7 @@ public class MainActivity extends Activity {
     /** ⋯ Settings (the open-source cleanup, 2026-11-11): the brain, voices, features, optional servers, personality. */
     private void settingsCard() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(round(PANEL, 16));
@@ -1736,7 +1749,7 @@ public class MainActivity extends Activity {
         TextView note = text("", 13, ERR);
         c.addView(note);
         LinearLayout btns = new LinearLayout(this);
-        Button save = button("Save", true), back = button("Back", false);
+        Button save = button("Save", true), back = button("Cancel", false);
         save.setOnClickListener(v -> {
             if (own[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
             for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) {
@@ -1768,6 +1781,7 @@ public class MainActivity extends Activity {
             render();
         });
         back.setOnClickListener(v -> render());
+        backSaves = save::performClick;
         btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
         btns.addView(back, gap);
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
@@ -1781,6 +1795,7 @@ public class MainActivity extends Activity {
     /** ⋯ Settings > Personality: his own wording of who Sprocket is, or back to the one the app comes with. */
     private void personaCard() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(round(PANEL, 16));
@@ -1807,7 +1822,7 @@ public class MainActivity extends Activity {
         lp0.setMargins(0, dp(6), 0, 0);
         c.addView(load, lp0);
         LinearLayout btns = new LinearLayout(this);
-        Button save = button("Save", true), reset = button("Use the original", false), back = button("Back", false);
+        Button save = button("Save", true), reset = button("Use the original", false), back = button("Cancel", false);
         save.setOnClickListener(v -> {
             String t = e.getText().toString();
             if (t.trim().isEmpty()) return;
@@ -1817,6 +1832,7 @@ public class MainActivity extends Activity {
         });
         reset.setOnClickListener(v -> { prefs().persona(""); persona = defaultPersona(); personaCard(); });
         back.setOnClickListener(v -> settingsCard());
+        backSaves = save::performClick;
         LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(40));
         gap.setMargins(dp(10), 0, 0, 0);
         btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
@@ -1833,6 +1849,7 @@ public class MainActivity extends Activity {
     /** ⋯ Notion key: his "Sprocket" Notion connection's key, so his lists live in Notion (it stays on this phone). */
     private void notionCard() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(round(PANEL, 16));
@@ -2438,6 +2455,7 @@ public class MainActivity extends Activity {
     /** The Feed screen (the feed icon): when it comes and what's in it, the news topics it follows, the last week. */
     private void feedScreen() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = panelCard("Every morning at 6:00", "About 5\u201315\u00a2 a day. A notification when it's ready; nothing is "
                 + "said out loud until you press Play.");
         if (!FeedAlarm.exact(this)) {
@@ -2542,6 +2560,7 @@ public class MainActivity extends Activity {
     /** The Goals screen (the goals icon): open goals to tick off or talk over, then the done ones. */
     private void goalsScreen() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = panelCard("Goals", "Say \u201cadd a goal\u2026\u201d or type one. Tap a goal to talk it over; hold one to remove it.");
         List<Goals.Goal> all;
         synchronized (goals) { all = new ArrayList<>(goals.goals); }
@@ -2583,6 +2602,7 @@ public class MainActivity extends Activity {
     /** ⋯ Lists: every list; tap an item to tick it off (or back on), x to take it off, add items or a new list. */
     private void listsCard() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setBackground(round(PANEL, 16));
@@ -2766,6 +2786,7 @@ public class MainActivity extends Activity {
     /** ⋯ Memory: his About-you page (Edit), then every note, each with Delete. */
     private void memoryCard() {
         list.removeAllViews();
+        backSaves = null;   // only Settings and Personality set it again
         list.addView(aboutCard());
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
