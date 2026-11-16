@@ -549,6 +549,12 @@ public class ClaudeTest {
         eq("they go to his server", Claude.base, "https://box.example:8448");
         eq("it's free", java.util.Arrays.toString(Claude.price("qwen")), "[0.0, 0.0, 0.0, 0.0, 0.0]");
         eq("so it isn't paid", Claude.paid("qwen"), false);
+        // DeepSeek as a setup choice (11-15): its own plain words, not the go-between's
+        eq("DeepSeek: a wrong key", Claude.checkProblem(true, 401, "{}", Claude.DEEPSEEK_BASE).startsWith("DeepSeek says that key isn't valid"), true);
+        eq("DeepSeek: no credit", Claude.checkProblem(true, 402, "{\"error\":{\"message\":\"Insufficient Balance\"}}", Claude.DEEPSEEK_BASE).contains("no credit"), true);
+        eq("DeepSeek: fine", Claude.checkProblem(true, 200, "{}", Claude.DEEPSEEK_BASE), null);
+        eq("the go-between keeps its words", Claude.checkProblem(true, 401, "{}", "https://box.example:8448").contains("access code"), true);
+        eq("DeepSeek: offline", Claude.checkFailed(true, new java.net.UnknownHostException("api.deepseek.com"), Claude.DEEPSEEK_BASE).startsWith("This phone couldn't reach DeepSeek"), true);
         // DeepSeek through its Claude-style address (11-15: the tablet said "DeepSeek, your server · free")
         java.util.Calendar cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         cal.clear(); cal.set(2026, java.util.Calendar.NOVEMBER, 16, 7, 0);   // a Monday, 7 am UTC: peak
