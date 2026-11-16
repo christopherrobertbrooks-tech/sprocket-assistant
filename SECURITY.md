@@ -1,8 +1,5 @@
 # Security
 
-Found a problem that could expose someone's keys, messages or phone? Please open an issue without the details and ask
-for a private way to report it, or use GitHub's "Report a vulnerability" button on this repository's Security tab.
-
 ## Security fixes, November 15, 2026
 
 An independent code review of the new cloud brains (DeepSeek, OpenAI), done in three passes, found problems before
