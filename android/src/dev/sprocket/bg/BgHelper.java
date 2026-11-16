@@ -215,6 +215,14 @@ public final class BgHelper {
         return out;
     }
 
+    /** An app's windows to close before Sprocket opens it fresh: his out of sight, then all on the hidden screen. Plain Java. */
+    public static List<String> leftovers(String stackList, String pkg, int hidden) {
+        List<String> out = new ArrayList<>(tasksOf(stackList, pkg, 0, false));
+        out.addAll(tasksOf(stackList, pkg, hidden, false));
+        out.addAll(tasksOf(stackList, pkg, hidden, true));
+        return out;
+    }
+
     /** The app an "am start" names ("-n pkg/cls" or "-p pkg"), "" for none. Plain Java. */
     public static String pkgOf(String amArgs) {
         String[] w = amArgs.trim().split("\\s+");
@@ -234,11 +242,12 @@ public final class BgHelper {
             case "start": {   // a fresh task on the hidden screen (never moves one of theirs off the real screen)
                 workPkg = pkgOf(rest);
                 if (!workPkg.isEmpty()) {
-                    // 11-16: Walmart pulled its old, out-of-sight window up on the real screen mid-run. Its windows they
-                    // aren't looking at come over to the hidden screen first; one they have in front of them stays.
+                    // 11-16: Walmart pulled its old, out-of-sight window up on the real screen mid-run, and each start
+                    // left another window (7 piled up in his recent apps). The app's leftovers close first: the hidden
+                    // screen's, and his he isn't looking at; one they have in front of them stays. One fresh window follows.
                     String list = sh(Arrays.asList("am", "stack", "list"));
                     hisOwn = !tasksOf(list, workPkg, 0, true).isEmpty();
-                    for (String t : tasksOf(list, workPkg, 0, false)) sh(Arrays.asList("am", "display", "move-stack", t, String.valueOf(display)));
+                    for (String t : leftovers(list, workPkg, display)) sh(Arrays.asList("am", "stack", "remove", t));
                 }
                 List<String> c = new ArrayList<>(Arrays.asList("am", "start", "--display", String.valueOf(display), "-f", "0x18000000"));
                 c.addAll(Arrays.asList(rest.split(" ")));

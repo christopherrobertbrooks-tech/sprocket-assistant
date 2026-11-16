@@ -25,6 +25,13 @@ public class BgHelperTest {
         eq("none of them in front of the owner", BgHelper.tasksOf(list, "com.walmart.android", 0, true), Arrays.asList());
         eq("the hidden screen's own aren't counted", BgHelper.tasksOf(list, "com.walmart.android", 7, true), Arrays.asList("2267"));
         eq("another app's window is never touched", BgHelper.tasksOf(list, "com.anthropic.claude", 0, false), Arrays.asList());
+        // 11-16: each start made a new Walmart window and none were closed: 7 piled up in his recent apps
+        eq("leftovers to close: hidden-screen ones and his out-of-sight ones", BgHelper.leftovers(list, "com.walmart.android", 7),
+                Arrays.asList("2243", "2241", "2267"));
+        String his = list.replace("taskId=2243: com.walmart.android/w.Splash bounds=[0,0][1080,2340] userId=0 visible=false",
+                "taskId=2243: com.walmart.android/w.Splash bounds=[0,0][1080,2340] userId=0 visible=true");
+        eq("the one in front of them is never closed", BgHelper.leftovers(his, "com.walmart.android", 7).contains("2243"), false);
+        eq("other apps' windows are never closed", BgHelper.leftovers(list, "com.anthropic.claude", 7), Arrays.asList());
         eq("the app, from a component", BgHelper.pkgOf("-a android.intent.action.MAIN -n com.walmart.android/w.Splash"), "com.walmart.android");
         eq("the app, from a package", BgHelper.pkgOf("-a android.intent.action.VIEW -d https://x.com -p com.target.ui"), "com.target.ui");
         eq("no app named", BgHelper.pkgOf("-a android.settings.WIFI_SETTINGS"), "");
