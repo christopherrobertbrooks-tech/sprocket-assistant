@@ -18,6 +18,7 @@ final class Config {
 
     static boolean own;                                  // not Claude: DeepSeek or their own server
     static boolean deep;                                 // with own: the brain is DeepSeek (its own key), not their server
+    static boolean oa;                                   // with own: the brain is OpenAI (its own key)
     static String ownName = "", ownBase = "", ownModel = "";
     static String voiceOut = "", voiceIn = "";           // POST /speak {text, mood} -> audio; OpenAI-style /v1/audio/transcriptions
     static String homeDash = "", homeStats = "", homeHands = "", studio = "", github = "";
@@ -41,7 +42,7 @@ final class Config {
     static boolean on(String feature) { return !off.contains(feature); }
 
     static void reset() {
-        own = deep = false;
+        own = deep = oa = false;
         ownName = ownBase = ownModel = voiceOut = voiceIn = homeDash = homeStats = homeHands = studio = github = callHours = "";
         off.clear();
     }
@@ -128,9 +129,13 @@ final class Config {
         return ip;
     }
 
-    static String base() { return own ? (deep ? Claude.DEEPSEEK_BASE : ownBase.trim().replaceAll("/+$", "")) : Claude.ANTHROPIC; }
+    static String base() {
+        return own ? (deep ? Claude.DEEPSEEK_BASE : oa ? Claude.OPENAI_BASE : ownBase.trim().replaceAll("/+$", "")) : Claude.ANTHROPIC;
+    }
 
-    static String model() { return own && deep ? Claude.DEEPSEEK_MODEL : ownModel.trim().isEmpty() ? "own" : ownModel.trim(); }
+    static String model() {
+        return own && deep ? Claude.DEEPSEEK_MODEL : own && oa ? Claude.OPENAI_MODEL : ownModel.trim().isEmpty() ? "own" : ownModel.trim();
+    }
 
     /** Whether a tool may run right now: its feature still on and its server still set up (Codex 043 #2: switching a
      * feature off stops a tool even in an answer already on its way). */
@@ -166,7 +171,7 @@ final class Config {
 
     static String toJson() {
         try {
-            return new JSONObject().put("own", own).put("deep", deep).put("own_name", ownName).put("own_base", ownBase).put("own_model", ownModel)
+            return new JSONObject().put("own", own).put("deep", deep).put("oa", oa).put("own_name", ownName).put("own_base", ownBase).put("own_model", ownModel)
                     .put("voice_out", voiceOut).put("voice_in", voiceIn).put("home_dash", homeDash).put("home_stats", homeStats)
                     .put("home_hands", homeHands).put("studio", studio).put("github", github).put("call_hours", callHours).put("off", new JSONArray(new java.util.ArrayList<>(off)))
                     .toString();
@@ -186,6 +191,7 @@ final class Config {
         try { o = new JSONObject(s); } catch (Exception e) { return; }
         own = o.optBoolean("own", own);
         deep = o.optBoolean("deep", deep);
+        oa = o.optBoolean("oa", oa);
         ownName = o.optString("own_name", ownName);
         ownBase = server(o, "own_base", ownBase);
         ownModel = o.optString("own_model", ownModel);
