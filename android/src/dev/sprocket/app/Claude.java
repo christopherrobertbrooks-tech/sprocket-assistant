@@ -42,9 +42,34 @@ final class Claude {
     static String brainNow(boolean harder) { return brainNow(Config.own, harder); }
 
     static String brainNow(boolean onOwn, boolean harder) {
-        return onOwn ? "Your brain right now is " + ownName() + " (" + Config.model() + "), on the boss's own server, not Claude; "
-                + "older replies in this chat may have come from another brain."
-                : "Your brain right now is Claude " + (harder ? "Opus" : "Sonnet") + " (Anthropic's API, from their credits).";
+        return onOwn ? (Config.deep ? brainNowDeep() : brainNowOwn()) : brainNowClaude(harder);
+    }
+
+    static String brainNowOwn() {
+        String m = Config.ownModel.trim().isEmpty() ? "own" : Config.ownModel.trim();
+        return "Your brain right now is " + ownName() + " (" + m + "), on the boss's own server, not Claude; "
+                + "older replies in this chat may have come from another brain.";
+    }
+
+    static String brainNowDeep() {
+        return "Your brain right now is DeepSeek (" + DEEPSEEK_MODEL + ", DeepSeek's API, from their credits), not Claude; "
+                + "older replies in this chat may have come from another brain.";
+    }
+
+    static String brainNowClaude(boolean harder) {
+        return "Your brain right now is Claude " + (harder ? "Opus" : "Sonnet") + " (Anthropic's API, from their credits).";
+    }
+
+    /** The line for the brain that's really answering (the backup took over from another one). */
+    static String brainNow(Brain b) { return !b.own ? brainNowClaude(false) : deepSeek(b.base) ? brainNowDeep() : brainNowOwn(); }
+
+    /** What to call a brain: Claude, DeepSeek, or the name they gave their own server. */
+    static String brainName(Brain b) { return !b.own ? "Claude" : deepSeek(b.base) ? "DeepSeek" : ownName(); }
+
+    /** The name for an answer's label, from the model that gave it (not whichever brain is switched on now). */
+    static String nameFor(String model) {
+        if (model == null || model.isEmpty() || model.startsWith("claude")) return "Claude";
+        return model.toLowerCase(Locale.US).startsWith("deepseek") ? "DeepSeek" : ownName();
     }
 
     /** The own brain's name as the owner gave it ("Qwen"), or a plain one. */
@@ -67,7 +92,7 @@ final class Claude {
 
         /** The brain switched on right now; keyFor gets true for the own server's key, false for Claude's. */
         static Brain now(java.util.function.Function<Boolean, String> keyFor) {
-            synchronized (Claude.class) { return new Brain(Claude.base, keyFor.apply(Config.own), Config.own, Config.model()); }
+            synchronized (Claude.class) { return new Brain(Claude.base, keyFor.apply(Config.own), Config.own, Config.model()); }   // keyFor knows Config.deep
         }
     }
     static final int HISTORY_TURNS = 24;                    // the last 24 to 35 messages go with each question (Chat.window)
@@ -516,16 +541,30 @@ final class Claude {
             InputStream in = code == 200 ? h.getInputStream() : h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
             h.disconnect();
-            return checkProblem(b.own, code, body);
+            return checkProblem(b.own, code, body, b.base);
         } catch (Exception e) {
             return checkFailed(b.own, e, b.base);
         }
     }
 
     /** What an answer to the test means: null when it worked. */
-    static String checkProblem(boolean own, int code, String body) {
+    /** DeepSeek as a brain (11-15, Chris: "add deepseek as a setup choice"): its Claude-style address, so no go-between. */
+    static final String DEEPSEEK_BASE = "https://api.deepseek.com/anthropic", DEEPSEEK_MODEL = "deepseek-flash",
+            DEEPSEEK_KEYS = "https://platform.deepseek.com/api_keys";
+
+    static boolean deepSeek(String base) { return base != null && base.toLowerCase(Locale.US).contains("api.deepseek.com"); }
+
+    static String checkProblem(boolean own, int code, String body) { return checkProblem(own, code, body, null); }
+
+    static String checkProblem(boolean own, int code, String body, String base) {
         if (code == 200) return null;
         String msg = errorMessage(body);
+        if (own && deepSeek(base)) {
+            if (code == 401 || code == 403) return "DeepSeek says that key isn't valid. Copy it again from DeepSeek's API keys page.";
+            if (code == 402 || (body != null && body.toLowerCase(Locale.US).contains("insufficient balance")))
+                return "Your DeepSeek account has no credit yet. Top it up on platform.deepseek.com, then tap Start again.";
+            return "DeepSeek answered " + code + (msg.isEmpty() ? "" : ": " + msg);
+        }
         if (own) {
             if (code == 401 || code == 403)
                 return "Your server answered, but turned the access code down. Copy it again: for the go-between, it's the "
@@ -546,6 +585,8 @@ final class Claude {
 
     /** What a failed connection means, for the test. */
     static String checkFailed(boolean own, Exception e, String base) {
+        if (own && deepSeek(base) && !(e instanceof java.net.SocketTimeoutException && !String.valueOf(e.getMessage()).toLowerCase(Locale.US).contains("connect")))
+            return "This phone couldn't reach DeepSeek (" + e.getClass().getSimpleName() + "). Is it online?";
         String where = Config.host(base);
         String m = String.valueOf(e.getMessage()).toLowerCase(Locale.US);
         if (e instanceof java.net.UnknownHostException)
@@ -618,15 +659,24 @@ final class Claude {
                 : "Claude isn't answering. Ask " + ownName() + " this one instead?";
     }
 
+    /** The same card between any two of their brains (11-15: the public app falls back to whichever ones they set up). */
+    static String backupCard(Brain failed, Brain next) {
+        String from = !failed.own ? "Claude isn't answering." : deepSeek(failed.base) ? "DeepSeek isn't answering." : "Your server didn't answer.";
+        String cost = !next.own ? " It uses your Claude credit." : deepSeek(next.base) ? " It uses your DeepSeek credit." : "";
+        return from + " Ask " + brainName(next) + " this one instead?" + cost;
+    }
+
     /** The app's note in his newest message says which brain answers: put right when the backup takes it. */
-    private static void retarget(JSONObject req, boolean onOwn) throws Exception {
+    private static void retarget(JSONObject req, Brain to) throws Exception {
         JSONArray m = req.optJSONArray("messages");
         if (m == null || m.length() == 0) return;
         JSONArray content = m.getJSONObject(m.length() - 1).optJSONArray("content");
+        String now = brainNow(to);
         for (int i = 0; content != null && i < content.length(); i++) {
             JSONObject blk = content.getJSONObject(i);
             String t = blk.optString("text");
-            for (boolean h : new boolean[]{false, true}) t = t.replace(brainNow(!onOwn, h), brainNow(onOwn, false));
+            for (String was : new String[]{brainNowClaude(false), brainNowClaude(true), brainNowOwn(), brainNowDeep()})
+                if (!was.equals(now)) t = t.replace(was, now);
             if (blk.has("text")) blk.put("text", t);
         }
     }
@@ -673,8 +723,8 @@ final class Claude {
 
     static Reply send(Brain b, JSONObject req, Listener l, HttpURLConnection[] cancel, Tools tools) throws Exception {
         String model = req.optString("model");   // the model goes with the brain the question started on
-        if (b.own && !b.model.equals(model)) { req.put("model", b.model); retarget(req, true); }
-        else if (!b.own && !model.startsWith("claude")) { req.put("model", SONNET); retarget(req, false); }
+        if (b.own && !b.model.equals(model)) { req.put("model", b.model); retarget(req, b); }
+        else if (!b.own && !model.startsWith("claude")) { req.put("model", SONNET); retarget(req, b); }
         Reply total = null;
         boolean acted = false, usedScreen = false;
         QuietSteps quiet = l == null ? null : new QuietSteps(l);

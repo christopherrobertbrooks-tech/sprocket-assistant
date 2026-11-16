@@ -259,7 +259,7 @@ public class MainActivity extends Activity {
      * question so every round of it goes to the same place (Codex 040 #6). */
     static Claude.Brain brain() {
         SharedPreferencesLike p = new SharedPreferencesLike(app);
-        return Claude.Brain.now(q -> testKey != null ? testKey : q ? p.ownKey() : p.key());
+        return Claude.Brain.now(q -> testKey != null ? testKey : q ? (Config.deep ? p.deepKey() : p.ownKey()) : p.key());
     }
 
     /** Main thread: this morning's brief into the chat (a card) and the Feed screen's week. */
@@ -684,7 +684,10 @@ public class MainActivity extends Activity {
         /** His own server's key, if it needs one (named qwen_key from stage 2, when that server was always Qwen). */
         String ownKey() { return p.getString("qwen_key", ""); }
         void ownKey(String k) { p.edit().putString("qwen_key", k.trim()).apply(); }
-        String activeKey() { return Config.own ? ownKey() : key(); }
+        String activeKey() { return Config.own ? (Config.deep ? deepKey() : ownKey()) : key(); }
+        /** Their DeepSeek key (11-15: DeepSeek is a brain of its own, beside Claude and their own server). */
+        String deepKey() { return p.getString("deepseek_key", ""); }
+        void deepKey(String k) { p.edit().putString("deepseek_key", k.trim()).apply(); }
         /** Background work on the hidden screen (BgSetup, BgScreen): set up from the menu (Android 12 and up). */
         boolean bg() { return p.getBoolean("bg", false); }
         void bg(boolean on) { p.edit().putBoolean("bg", on).apply(); }
@@ -1231,8 +1234,8 @@ public class MainActivity extends Activity {
     }
 
     private static String meta(Chat.Turn t) {
-        if (ownModel(t.model) && Claude.paid(t.model)) return Claude.ownName() + String.format(Locale.US, "  ·  $%.4f", t.cost);
-        if (ownModel(t.model)) return Claude.ownName() + ", your server  ·  free";
+        if (ownModel(t.model) && Claude.paid(t.model)) return Claude.nameFor(t.model) + String.format(Locale.US, "  ·  $%.4f", t.cost);
+        if (ownModel(t.model)) return Claude.nameFor(t.model) + ", your server  ·  free";
         String who = Claude.OPUS.equals(t.model) ? "Opus, thinking harder" : "Sonnet";
         return who + String.format(Locale.US, "  ·  $%.4f", t.cost);
     }
@@ -1301,6 +1304,9 @@ public class MainActivity extends Activity {
             + "monthly limit under Limits, if you like). 3. Under API keys, create a key, copy it and paste it here. It stays "
             + "on this phone.";
     static final String CONSOLE_KEYS = "https://console.anthropic.com/settings/keys";
+    static final String DEEPSEEK_KEY_HOW = "How to get one: 1. Sign in at platform.deepseek.com. 2. Add a little credit (a few "
+            + "dollars goes a long way: most questions cost well under a cent). 3. Under API keys, create a key, copy it and "
+            + "paste it here. It stays on this phone. What you ask goes to DeepSeek, a company in China.";
 
     /** A new install's first screen, and what shows whenever there's no brain: pick one, full screen (the owner,
      * 2026-11-11). Sprocket walks them through everything else in the chat (Setup). */
@@ -1316,7 +1322,11 @@ public class MainActivity extends Activity {
         c.addView(sub);
 
         final boolean[] own = {Config.own};
+        // which card: Claude, DeepSeek (a preset of "your own server": its Claude-style address, no go-between) or own
+        final boolean[] ds = {Config.own && Config.deep};
         LinearLayout claude = option("Claude", "Anthropic's AI. Needs a Claude key; you pay Anthropic for what you use.");
+        LinearLayout deep = option("DeepSeek", "DeepSeek's AI. Needs a DeepSeek key; you pay DeepSeek for what you use, usually "
+                + "well under a cent a question. Tested with Sprocket's practice set: 59 of 62.");
         LinearLayout mine = option("Your own server", "A model you run yourself, through the included go-between or anything "
                 + "that speaks Anthropic's Messages API. Tested with Qwen.");
         LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(-1, -2);
@@ -1324,7 +1334,10 @@ public class MainActivity extends Activity {
         c.addView(claude, first);
         LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(-1, -2);
         second.setMargins(0, dp(10), 0, 0);
-        c.addView(mine, second);
+        c.addView(deep, second);
+        LinearLayout.LayoutParams third = new LinearLayout.LayoutParams(-1, -2);
+        third.setMargins(0, dp(10), 0, 0);
+        c.addView(mine, third);
 
         LinearLayout claudeBox = new LinearLayout(this);
         claudeBox.setOrientation(LinearLayout.VERTICAL);
@@ -1337,6 +1350,17 @@ public class MainActivity extends Activity {
         });
         claudeBox.addView(console);
         c.addView(claudeBox);
+        LinearLayout deepBox = new LinearLayout(this);
+        deepBox.setOrientation(LinearLayout.VERTICAL);
+        EditText deepKey = field(deepBox, "Your DeepSeek key", "", "sk-...", true);
+        deepBox.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
+        TextView deepSite = text("Open DeepSeek's API keys page", 13, TEXT);
+        deepSite.setPadding(0, dp(8), 0, dp(4));
+        deepSite.setOnClickListener(v -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Claude.DEEPSEEK_KEYS))); } catch (Exception ignored) { }
+        });
+        deepBox.addView(deepSite);
+        c.addView(deepBox);
         LinearLayout ownBox = new LinearLayout(this);
         ownBox.setOrientation(LinearLayout.VERTICAL);
         EditText name = field(ownBox, "Its name (what I call it)", Config.ownName, "Qwen", false);
@@ -1353,9 +1377,11 @@ public class MainActivity extends Activity {
         final int[] asked = {0};                              // which check is current: switching brains drops the last one
         Runnable show = () -> {
             pick(claude, !own[0]);
-            pick(mine, own[0]);
+            pick(deep, own[0] && ds[0]);
+            pick(mine, own[0] && !ds[0]);
             claudeBox.setVisibility(own[0] ? View.GONE : View.VISIBLE);
-            ownBox.setVisibility(own[0] ? View.VISIBLE : View.GONE);
+            deepBox.setVisibility(own[0] && ds[0] ? View.VISIBLE : View.GONE);
+            ownBox.setVisibility(own[0] && !ds[0] ? View.VISIBLE : View.GONE);
         };
         Runnable switched = () -> {   // the other brain's message would read as this one's (the owner's phone test, 2026-11-12)
             asked[0]++;
@@ -1364,30 +1390,38 @@ public class MainActivity extends Activity {
             show.run();
         };
         claude.setOnClickListener(v -> { if (own[0]) { own[0] = false; switched.run(); } });
-        mine.setOnClickListener(v -> { if (!own[0]) { own[0] = true; switched.run(); } });
+        deep.setOnClickListener(v -> { if (!own[0] || !ds[0]) { own[0] = true; ds[0] = true; switched.run(); } });
+        mine.setOnClickListener(v -> { if (!own[0] || ds[0]) { own[0] = true; ds[0] = false; switched.run(); } });
         show.run();
 
         c.addView(note);
         Button start = button("Start", true);
         start.setOnClickListener(v -> {
-            final boolean useOwn = own[0];
-            final String k = key.getText().toString().trim(), b = base.getText().toString().trim();
-            final String n = name.getText().toString().trim(), m = model.getText().toString().trim();
-            final String typed = ownKey.getText().toString().trim();
+            final boolean useOwn = own[0], useDeep = own[0] && ds[0];
+            final String k = key.getText().toString().trim();
+            final String b = useDeep ? Claude.DEEPSEEK_BASE : base.getText().toString().trim();
+            final String n = useDeep ? "DeepSeek" : name.getText().toString().trim();
+            final String m = useDeep ? Claude.DEEPSEEK_MODEL : model.getText().toString().trim();
+            final String typed = (useDeep ? deepKey : ownKey).getText().toString().trim();
             note.setTextColor(ERR);
-            if (useOwn) {
+            if (useDeep) {
+                if (typed.isEmpty()) { note.setText("Paste your DeepSeek key first."); return; }
+                if (typed.startsWith("sk-ant-")) { note.setText("That's a Claude key. Pick Claude above, or paste a DeepSeek key."); return; }
+            } else if (useOwn) {
                 if (b.isEmpty()) { note.setText("Your own server needs its address."); return; }
                 String bad = Config.addressProblem(b);
                 if (bad != null) { note.setText(bad); return; }
             } else if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
             Runnable go = () -> {
-                if (useOwn) {
+                if (useDeep) prefs().deepKey(typed);       // DeepSeek has its own slot: their own server stays as it was
+                else if (useOwn) {
                     Config.ownName = n;
                     Config.ownBase = b;
                     Config.ownModel = m;
                     if (!typed.isEmpty()) prefs().ownKey(typed);
                 } else prefs().key(k);
                 Config.own = useOwn;
+                Config.deep = useDeep;
                 prefs().saveConfig();
                 Claude.useBrain(Config.own);
                 startSetup();
@@ -1397,7 +1431,7 @@ public class MainActivity extends Activity {
             Claude.Brain test = useOwn ? new Claude.Brain(b.replaceAll("/+$", ""), typed.isEmpty() ? prefs().ownKey() : typed, true,
                     m.isEmpty() ? "own" : m) : new Claude.Brain(Claude.ANTHROPIC, k, false, "");
             note.setTextColor(MUTED);
-            note.setText(useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
+            note.setText(useDeep ? "Checking the key with DeepSeek..." : useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
             start.setEnabled(false);
             anyway.setVisibility(View.GONE);
             final int ticket = ++asked[0];
@@ -1659,18 +1693,26 @@ public class MainActivity extends Activity {
         c.addView(h);
 
         heading(c, "Brain");
-        final boolean[] own = {Config.own};
+        final boolean[] own = {Config.own}, ds = {Config.own && Config.deep};   // which one answers first
         LinearLayout pick = new LinearLayout(this);
-        Button claude = button("Claude", !own[0]), mine = button("Your own server", own[0]);
+        Button claude = button("Claude", !own[0]), deep = button("DeepSeek", ds[0]), mine = button("Your own server", own[0] && !ds[0]);
         pick.addView(claude, new LinearLayout.LayoutParams(-2, dp(38)));
         LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(38));
         gap.setMargins(dp(10), 0, 0, 0);
-        pick.addView(mine, gap);
+        pick.addView(deep, gap);
+        LinearLayout.LayoutParams gap2 = new LinearLayout.LayoutParams(-2, dp(38));
+        gap2.setMargins(dp(10), 0, 0, 0);
+        pick.addView(mine, gap2);
         c.addView(pick);
-        TextView backupHow = text("The one you pick answers. Set up the other one too, and when the first doesn't answer, "
-                + "Sprocket asks on a card whether the other may take that question.", 12, FAINT);
+        TextView backupHow = text("The one you pick answers. Set up the others too, and when it doesn't answer, Sprocket asks "
+                + "on a card whether the next one may take that question: your own server first, then DeepSeek, then Claude.", 12, FAINT);
         backupHow.setPadding(0, dp(6), 0, 0);
         c.addView(backupHow);
+        TextView deepLabel = text("", 14, MUTED);
+        deepLabel.setPadding(0, dp(10), 0, 0);
+        c.addView(deepLabel);
+        EditText deepKey = field(c, "Its key", "", prefs().deepKey().isEmpty() ? "sk-..." : "saved", true);
+        c.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
         TextView ownLabel = text("", 14, MUTED);
         ownLabel.setPadding(0, dp(10), 0, 0);
         c.addView(ownLabel);
@@ -1688,20 +1730,23 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams top = new LinearLayout.LayoutParams(-2, dp(38));
         top.setMargins(0, dp(8), 0, 0);
         c.addView(claudeKey, top);
-        Runnable showBrain = () -> {                       // both stay on show: the other one is the backup (11-13)
-            ownLabel.setText(own[0] ? "Your own server" : "Your own server, as a backup (optional)");
+        Runnable showBrain = () -> {                       // all stay on show: the others are the backups (11-13, 11-15)
+            boolean onClaude = !own[0], onDeep = own[0] && ds[0], onMine = own[0] && !ds[0];
+            deepLabel.setText(onDeep ? "DeepSeek" : "DeepSeek, as a backup (optional)");
+            ownLabel.setText(onMine ? "Your own server" : "Your own server, as a backup (optional)");
             boolean noKey = prefs().key().isEmpty();
-            claudeKey.setText(own[0] ? (noKey ? "Add a Claude key, as a backup (optional)" : "Claude key (backup)")
+            claudeKey.setText(!onClaude ? (noKey ? "Add a Claude key, as a backup (optional)" : "Claude key (backup)")
                     : (noKey ? "Add Claude key" : "Claude key"));
-            claude.setBackground(round(own[0] ? MINE : TEXT, 18));
-            claude.setTextColor(own[0] ? TEXT : 0xFF111111);
-            mine.setBackground(round(own[0] ? TEXT : MINE, 18));
-            mine.setTextColor(own[0] ? 0xFF111111 : TEXT);
+            for (Object[] b : new Object[][]{{claude, onClaude}, {deep, onDeep}, {mine, onMine}}) {
+                ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
+                ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
+            }
         };
         claude.setOnClickListener(v -> { own[0] = false; showBrain.run(); });
-        mine.setOnClickListener(v -> { own[0] = true; showBrain.run(); });
+        deep.setOnClickListener(v -> { own[0] = true; ds[0] = true; showBrain.run(); });
+        mine.setOnClickListener(v -> { own[0] = true; ds[0] = false; showBrain.run(); });
         showBrain.run();
-        c.addView(text("Tested with Claude, and with Qwen through the included go-between. Other models may work if they speak "
+        c.addView(text("Tested with Claude, DeepSeek, and Qwen through the included go-between. Other models may work if they speak "
                 + "Anthropic's Messages API, or sit behind the go-between (any OpenAI-compatible server).", 12, FAINT));
 
         heading(c, "Voices");
@@ -1751,7 +1796,8 @@ public class MainActivity extends Activity {
         LinearLayout btns = new LinearLayout(this);
         Button save = button("Save", true), back = button("Cancel", false);
         save.setOnClickListener(v -> {
-            if (own[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
+            if (own[0] && !ds[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
+            if (own[0] && ds[0] && deepKey.getText().toString().trim().isEmpty() && prefs().deepKey().isEmpty()) { note.setText("DeepSeek needs its key."); return; }
             for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) {
                 String bad = Config.addressProblem(f.getText().toString());
                 if (bad != null) { note.setText(bad + " (" + f.getText().toString().trim() + ")"); f.requestFocus(); return; }
@@ -1759,6 +1805,8 @@ public class MainActivity extends Activity {
             boolean home = false;
             for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) home |= Config.unencrypted(f.getText().toString());
             Config.own = own[0];
+            Config.deep = own[0] && ds[0];
+            if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
             Config.ownName = name.getText().toString().trim();
             Config.ownBase = base.getText().toString().trim();
             Config.ownModel = model.getText().toString().trim();
@@ -1921,11 +1969,14 @@ public class MainActivity extends Activity {
 
     /** A brain is set up (without the self-test's stand-in): what the morning brief's alarm waits for. */
     static boolean brainSetUp() {
-        return Config.own ? !Config.ownBase.trim().isEmpty() : !new SharedPreferencesLike(app).key().isEmpty();
+        SharedPreferencesLike sp = new SharedPreferencesLike(app);
+        return Config.own ? (Config.deep ? !sp.deepKey().isEmpty() : !Config.ownBase.trim().isEmpty()) : !sp.key().isEmpty();
     }
 
     /** A brain he can ask: Claude with its key, or his own server with its address (a key only if it wants one). */
-    private boolean ready() { return testKey != null || (Config.own ? !Config.ownBase.trim().isEmpty() : !prefs().key().isEmpty()); }
+    private boolean ready() {
+        return testKey != null || (Config.own ? (Config.deep ? !prefs().deepKey().isEmpty() : !Config.ownBase.trim().isEmpty()) : !prefs().key().isEmpty());
+    }
 
     /** A reply from his own server's model (not Claude's): free. */
     static boolean ownModel(String model) { return model != null && !model.isEmpty() && !model.startsWith("claude"); }
@@ -2042,14 +2093,27 @@ public class MainActivity extends Activity {
     private static Claude.Reply askBackup(Claude.Brain failed, Exception e, JSONObject req, Claude.Listener l) throws Exception {
         if (req == null || !Claude.backupOk(e) || standIn()) return null;
         SharedPreferencesLike p = new SharedPreferencesLike(app);
-        String otherKey = failed.own ? p.key() : p.ownKey();
-        if (failed.own ? otherKey.isEmpty() : Config.ownBase.trim().isEmpty()) return null;   // no other brain set up
-        android.util.Log.i("Sprocket", "brain down (" + (failed.own ? "own server" : "Claude") + "): asking about the backup");
-        Boolean yes = Hands.confirm(Claude.backupCard(failed.own), failed.own ? "Ask Claude" : "Ask " + Claude.ownName());
-        if (yes != Boolean.TRUE || stopped) return null;
-        Claude.Brain other = failed.own ? new Claude.Brain(Claude.ANTHROPIC, otherKey, false, Config.model())
-                : new Claude.Brain(Config.ownBase.trim().replaceAll("/+$", ""), otherKey, true, Config.model());
-        return Claude.send(other, req, l, live, TOOLS);
+        // the others they set up, cheapest first: their own server, DeepSeek, Claude (11-15, Chris: "fall back to
+        // whichever models they chose to set up"); each one asks first, and a "no" stops there
+        List<Claude.Brain> others = new ArrayList<>();
+        if (!Config.ownBase.trim().isEmpty())
+            others.add(new Claude.Brain(Config.ownBase.trim().replaceAll("/+$", ""), p.ownKey(), true, Config.ownModel.trim().isEmpty() ? "own" : Config.ownModel.trim()));
+        if (!p.deepKey().isEmpty()) others.add(new Claude.Brain(Claude.DEEPSEEK_BASE, p.deepKey(), true, Claude.DEEPSEEK_MODEL));
+        if (!p.key().isEmpty()) others.add(new Claude.Brain(Claude.ANTHROPIC, p.key(), false, ""));
+        Exception last = e;
+        Claude.Brain down = failed;
+        for (Claude.Brain other : others) {
+            if (other.own == down.own && other.base.equals(down.base)) continue;     // the one that just failed
+            if (other.own == failed.own && other.base.equals(failed.base)) continue;
+            if (!Claude.backupOk(last)) break;                                         // it said or did something: no redo
+            android.util.Log.i("Sprocket", "brain down (" + Claude.brainName(down) + "): asking about " + Claude.brainName(other));
+            Boolean yes = Hands.confirm(Claude.backupCard(down, other), "Ask " + Claude.brainName(other));
+            if (yes != Boolean.TRUE || stopped) return null;
+            try { return Claude.send(other, req, l, live, TOOLS); }
+            catch (Exception next) { last = next; down = other; }
+        }
+        if (last != e) throw last;
+        return null;
     }
 
     /** The history with what fits his question added to his latest message, for this request only (not the chat): a
@@ -3356,13 +3420,14 @@ public class MainActivity extends Activity {
             return;
         }
         String qk = test.getStringExtra("st_qwen_key");   // stage 2: Qwen's access code, only ever over adb
-        if (qk != null) { prefs().ownKey(qk); Config.own = true; prefs().saveConfig(); Claude.useBrain(true); render(); return; }
+        if (qk != null) { prefs().ownKey(qk); Config.own = true; Config.deep = false; prefs().saveConfig(); Claude.useBrain(true); render(); return; }
         String cfg = test.getStringExtra("st_config");   // his settings (Config JSON, plus own_key), only ever over adb
         if (cfg != null) {
             Config.fromJson(cfg);
             try {
                 JSONObject o = new JSONObject(cfg);
                 if (!o.optString("own_key", "").isEmpty()) prefs().ownKey(o.optString("own_key"));
+                if (!o.optString("deepseek_key", "").isEmpty()) prefs().deepKey(o.optString("deepseek_key"));
                 if (o.has("persona")) { prefs().persona(o.optString("persona")); persona = o.optString("persona").trim().isEmpty() ? defaultPersona() : o.optString("persona"); }
             } catch (Exception ignored) { }
             prefs().saveConfig();
