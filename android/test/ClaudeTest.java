@@ -379,14 +379,31 @@ public class ClaudeTest {
         Config.ownBase = "https://box.example:8448";
         Config.ownModel = "qwen";
         Claude.useBrain(true);
-        Claude.Brain started = Claude.Brain.now(q -> q ? "QWEN-KEY" : "CLAUDE-KEY");
+        java.util.function.Function<String, String> keys = id -> id.equals("own") ? "QWEN-KEY" : id.equals("claude") ? "CLAUDE-KEY"
+                : id.equals("deepseek") ? "DEEPSEEK-KEY" : "OPENAI-KEY";
+        Claude.Brain started = Claude.Brain.now(keys, null);
         try {
             Claude.send(started, Claude.request("PERSONA", null, null, "Friday, October 17, 2026, 3:10 AM", HERE, c.window(24), false),
                     null, null, (name, in) -> { Claude.useBrain(false); return "On."; });
         } catch (Exception e) { went.add("ERROR " + e.getMessage()); }
         eq("switching brains mid-answer: both rounds stay on his server with its key", went,
                 "[https://box.example:8448 QWEN-KEY qwen, https://box.example:8448 QWEN-KEY qwen]");
-        eq("a question started on Claude takes Claude's key", Claude.Brain.now(q -> q ? "QWEN-KEY" : "CLAUDE-KEY").key, "CLAUDE-KEY");
+        eq("a question started on Claude takes Claude's key", Claude.Brain.now(keys, null).key, "CLAUDE-KEY");
+        // Codex 049 #1: Settings switching DeepSeek -> OpenAI set the flags before the address, and a question taken in
+        // between paired DeepSeek's address with the OpenAI key. Each key must only ever go with its own company.
+        Claude.choose(true, true, false);                       // DeepSeek is on; its address is published
+        Config.deep = false; Config.oa = true;                  // halfway through a switch to OpenAI: base not updated yet
+        Claude.Brain half = Claude.Brain.now(keys, null);
+        eq("halfway through a switch: the address and the key are the same company's",
+                half.base + " " + half.key, Claude.OPENAI_BASE + " OPENAI-KEY");
+        Claude.choose(true, false, true);
+        Claude.Brain oaNow = Claude.Brain.now(keys, null);
+        eq("OpenAI: its address, its key, its model", oaNow.base + " " + oaNow.key + " " + oaNow.model, Claude.OPENAI_BASE + " OPENAI-KEY " + Claude.OPENAI_MODEL);
+        Claude.choose(true, true, false);
+        eq("DeepSeek: its address with its key", Claude.Brain.now(keys, null).base + " " + Claude.Brain.now(keys, null).key, Claude.DEEPSEEK_BASE + " DEEPSEEK-KEY");
+        Claude.choose(false, false, false);
+        eq("Claude: Anthropic with Claude's key", Claude.Brain.now(keys, null).base + " " + Claude.Brain.now(keys, null).key, Claude.ANTHROPIC + " CLAUDE-KEY");
+        eq("the practice stand-in keeps its own address", Claude.Brain.now(keys, "http://127.0.0.1:9").base, "http://127.0.0.1:9");
         Claude.Brain mixed = new Claude.Brain(Claude.ANTHROPIC, "k", false, "");
         JSONObject wrong = new JSONObject().put("model", "qwen").put("messages", new JSONArray());
         went.clear();
@@ -549,6 +566,15 @@ public class ClaudeTest {
         eq("they go to his server", Claude.base, "https://box.example:8448");
         eq("it's free", java.util.Arrays.toString(Claude.price("qwen")), "[0.0, 0.0, 0.0, 0.0, 0.0]");
         eq("so it isn't paid", Claude.paid("qwen"), false);
+        // Codex 049 #3: a key a provider repeats back is blanked out, whole or in pieces; ordinary words stay
+        String sk = "sk-proj-AbCdEfGhIjKlMnOpQrSt1234";
+        eq("a repeated key is blanked", Claude.scrub("Incorrect API key provided: " + sk + ".", sk), "Incorrect API key provided: [your key].");
+        eq("a piece of it too", Claude.scrub("echo AbCdEfGhIjKlMnOp", sk), "echo [part of your key]");
+        eq("other words stay", Claude.scrub("OpenAI answered 400: Unsupported parameter max_tokens", sk), "OpenAI answered 400: Unsupported parameter max_tokens");
+        eq("no key: unchanged", Claude.scrub("Your server answered 500", "", null), "Your server answered 500");
+        eq("a short access code, whole word (Codex 050 #3)", Claude.scrub("Your server answered 400: bad code secret7", "secret7"), "Your server answered 400: bad code [your key]");
+        eq("a short code glued into a word is blanked too (Codex 051 #3)", Claude.scrub("invalid_access_code_secret7", "secret7"), "invalid_access_code_[your key]");
+        eq("several keys at once", Claude.scrub("a=" + sk + " b=deepseek-secret-9876543210", sk, "deepseek-secret-9876543210"), "a=[your key] b=[your key]");
         // DeepSeek as a setup choice (11-15): its own plain words, not the go-between's
         eq("DeepSeek: a wrong key", Claude.checkProblem(true, 401, "{}", Claude.DEEPSEEK_BASE).startsWith("DeepSeek says that key isn't valid"), true);
         eq("DeepSeek: no credit", Claude.checkProblem(true, 402, "{\"error\":{\"message\":\"Insufficient Balance\"}}", Claude.DEEPSEEK_BASE).contains("no credit"), true);
@@ -604,7 +630,7 @@ public class ClaudeTest {
             return x;
         };
         try {
-            Claude.send(Claude.Brain.now(q -> "K"), noScreen, null, null, (name, in) -> { hiddenRan[0]++; return "read the screen"; });
+            Claude.send(Claude.Brain.now(id -> "K", null), noScreen, null, null, (name, in) -> { hiddenRan[0]++; return "read the screen"; });
         } catch (Exception e) { fed.add("ERROR " + e.getMessage()); }
         eq("the model asks for it anyway: it doesn't run", hiddenRan[0], 0);
         eq("and the model is told so", fed.size() == 1 && fed.get(0).contains("isn't available right now"), true);
@@ -623,7 +649,7 @@ public class ClaudeTest {
             x.calls.add(call);
             return x;
         };
-        try { Claude.send(Claude.Brain.now(q -> "K"), withScreen, null, null, (name, in) -> { lateRan[0]++; return "read"; }); } catch (Exception e) { }
+        try { Claude.send(Claude.Brain.now(id -> "K", null), withScreen, null, null, (name, in) -> { lateRan[0]++; return "read"; }); } catch (Exception e) { }
         eq("offered, then switched off before it ran: it doesn't run", Claude.offered(withScreen).contains("screen") + " " + lateRan[0], "true 0");
         JSONObject setupTurn = new JSONObject(noScreen.toString());
         setupTurn.remove("tools");

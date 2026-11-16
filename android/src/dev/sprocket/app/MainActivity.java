@@ -259,7 +259,8 @@ public class MainActivity extends Activity {
      * question so every round of it goes to the same place (Codex 040 #6). */
     static Claude.Brain brain() {
         SharedPreferencesLike p = new SharedPreferencesLike(app);
-        return Claude.Brain.now(q -> testKey != null ? testKey : q ? (Config.deep ? p.deepKey() : Config.oa ? p.openAiKey() : p.ownKey()) : p.key());
+        return Claude.Brain.now(id -> testKey != null ? testKey : id.equals("deepseek") ? p.deepKey() : id.equals("openai") ? p.openAiKey()
+                : id.equals("own") ? p.ownKey() : p.key(), testKey != null ? Claude.base : null);
     }
 
     /** Main thread: this morning's brief into the chat (a card) and the Feed screen's week. */
@@ -271,7 +272,7 @@ public class MainActivity extends Activity {
             t.cost = b.cost;
             synchronized (feed) { feed.keep(b); saveFeed(); }
         } catch (Exception e) {
-            android.util.Log.w("Sprocket", "brief not kept: " + e);
+            android.util.Log.w("Sprocket", "brief not kept: " + Claude.scrub(String.valueOf(e), allKeys(null)));
         }
         saveChat();
         if (current != null) current.render();
@@ -1440,19 +1441,21 @@ public class MainActivity extends Activity {
                 if (bad != null) { note.setText(bad); return; }
             } else if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
             Runnable go = () -> {
-                if (useDeep) prefs().deepKey(typed);       // DeepSeek and OpenAI have their own slots: their server stays as it was
-                else if (useOa) prefs().openAiKey(typed);
-                else if (useOwn) {
-                    Config.ownName = n;
-                    Config.ownBase = b;
-                    Config.ownModel = m;
-                    if (!typed.isEmpty()) prefs().ownKey(typed);
-                } else prefs().key(k);
-                Config.own = useOwn;
-                Config.deep = useDeep;
-                Config.oa = useOa;
-                prefs().saveConfig();
-                Claude.useBrain(Config.own);
+                synchronized (Claude.class) {   // the whole switch at once: nothing reads half of it (Codex 049 #1)
+                    if (useDeep) prefs().deepKey(typed);       // DeepSeek and OpenAI have their own slots: their server stays as it was
+                    else if (useOa) prefs().openAiKey(typed);
+                    else if (useOwn) {
+                        Config.ownName = n;
+                        Config.ownBase = b;
+                        Config.ownModel = m;
+                        if (!typed.isEmpty()) prefs().ownKey(typed);
+                    } else prefs().key(k);
+                    Config.own = useOwn;
+                    Config.deep = useDeep;
+                    Config.oa = useOa;
+                    prefs().saveConfig();
+                    Claude.useBrain(Config.own);
+                }
                 startSetup();
                 render();
             };
@@ -1846,27 +1849,29 @@ public class MainActivity extends Activity {
             }
             boolean home = false;
             for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) home |= Config.unencrypted(f.getText().toString());
-            Config.own = own[0];
-            Config.deep = own[0] && ds[0];
-            Config.oa = own[0] && oa[0];
-            if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
-            if (!oaKey.getText().toString().trim().isEmpty()) prefs().openAiKey(oaKey.getText().toString());
-            Config.ownName = name.getText().toString().trim();
-            Config.ownBase = base.getText().toString().trim();
-            Config.ownModel = model.getText().toString().trim();
-            if (!ownKey.getText().toString().trim().isEmpty()) prefs().ownKey(ownKey.getText().toString());
-            Config.voiceOut = out.getText().toString().trim();
-            Config.voiceIn = in.getText().toString().trim();
-            Config.github = gh.getText().toString().trim();
-            Config.homeDash = dash.getText().toString().trim();
-            Config.homeStats = stats.getText().toString().trim();
-            Config.homeHands = hands.getText().toString().trim();
-            Config.studio = studio.getText().toString().trim();
-            Config.callHours = hours.getText().toString().trim();
-            Config.off.clear();
-            for (java.util.Map.Entry<String, android.widget.CheckBox> e : boxes.entrySet()) if (!e.getValue().isChecked()) Config.off.add(e.getKey());
-            prefs().saveConfig();
-            Claude.useBrain(Config.own);
+            synchronized (Claude.class) {   // the whole switch at once: nothing reads half of it (Codex 049 #1)
+                Config.own = own[0];
+                Config.deep = own[0] && ds[0];
+                Config.oa = own[0] && oa[0];
+                if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
+                if (!oaKey.getText().toString().trim().isEmpty()) prefs().openAiKey(oaKey.getText().toString());
+                Config.ownName = name.getText().toString().trim();
+                Config.ownBase = base.getText().toString().trim();
+                Config.ownModel = model.getText().toString().trim();
+                if (!ownKey.getText().toString().trim().isEmpty()) prefs().ownKey(ownKey.getText().toString());
+                Config.voiceOut = out.getText().toString().trim();
+                Config.voiceIn = in.getText().toString().trim();
+                Config.github = gh.getText().toString().trim();
+                Config.homeDash = dash.getText().toString().trim();
+                Config.homeStats = stats.getText().toString().trim();
+                Config.homeHands = hands.getText().toString().trim();
+                Config.studio = studio.getText().toString().trim();
+                Config.callHours = hours.getText().toString().trim();
+                Config.off.clear();
+                for (java.util.Map.Entry<String, android.widget.CheckBox> e : boxes.entrySet()) if (!e.getValue().isChecked()) Config.off.add(e.getKey());
+                prefs().saveConfig();
+                Claude.useBrain(Config.own);
+            }
             if (Config.on("brief")) FeedAlarm.schedule(this); else FeedAlarm.cancel(this);
             VoiceOut.get(this).retryGateway();
             if (home) android.widget.Toast.makeText(this, "Saved. Home-network http isn't encrypted, and only works at home.", android.widget.Toast.LENGTH_LONG).show();
@@ -2121,7 +2126,8 @@ public class MainActivity extends Activity {
                 try { backup = stopped ? null : askBackup(k, e, req[0], listener[0]); }
                 catch (Exception e2) { e = e2; }
                 if (backup != null) r = backup;
-                else error = stopped ? null : (Net.offline(e) ? (k.own ? "your server didn't answer: check it's running and the phone can reach it" : "no internet: Sprocket's brain lives in the cloud") : e.getMessage());
+                else error = stopped ? null : (Net.offline(e) ? (k.own ? "your server didn't answer: check it's running and the phone can reach it" : "no internet: Sprocket's brain lives in the cloud")
+                        : Claude.scrub(e.getMessage(), allKeys(k.key)));   // Codex 049 #3
             }
             Claude.Reply done = r;
             String err = error;
@@ -2135,6 +2141,12 @@ public class MainActivity extends Activity {
      * saying or doing anything, and the other one is set up, a card asks whether the other one may answer it. Returns
      * its reply, or null (not offered, or he said no: the first error stands). Worker thread.
      */
+    /** Every key this phone holds (and the one in use), for blanking out of error text (Codex 049 #3). */
+    static String[] allKeys(String inUse) {
+        SharedPreferencesLike p = new SharedPreferencesLike(app);
+        return new String[]{inUse, p.key(), p.deepKey(), p.openAiKey(), p.ownKey()};
+    }
+
     private static Claude.Reply askBackup(Claude.Brain failed, Exception e, JSONObject req, Claude.Listener l) throws Exception {
         if (req == null || !Claude.backupOk(e) || standIn()) return null;
         SharedPreferencesLike p = new SharedPreferencesLike(app);
@@ -2335,7 +2347,7 @@ public class MainActivity extends Activity {
                 }
                 android.util.Log.i("Sprocket", "app memory: " + saved);
             } catch (Exception e) {
-                android.util.Log.w("Sprocket", "app memory: couldn't learn the route: " + e.getMessage());
+                android.util.Log.w("Sprocket", "app memory: couldn't learn the route: " + Claude.scrub(e.getMessage(), allKeys(null)));
             }
         }, "sprocket-route").start();
     }
@@ -3466,19 +3478,21 @@ public class MainActivity extends Activity {
             return;
         }
         String qk = test.getStringExtra("st_qwen_key");   // stage 2: Qwen's access code, only ever over adb
-        if (qk != null) { prefs().ownKey(qk); Config.own = true; Config.deep = Config.oa = false; prefs().saveConfig(); Claude.useBrain(true); render(); return; }
+        if (qk != null) { synchronized (Claude.class) { prefs().ownKey(qk); Claude.choose(true, false, false); prefs().saveConfig(); } Claude.useBrain(true); render(); return; }
         String cfg = test.getStringExtra("st_config");   // his settings (Config JSON, plus own_key), only ever over adb
         if (cfg != null) {
-            Config.fromJson(cfg);
-            try {
-                JSONObject o = new JSONObject(cfg);
-                if (!o.optString("own_key", "").isEmpty()) prefs().ownKey(o.optString("own_key"));
-                if (!o.optString("deepseek_key", "").isEmpty()) prefs().deepKey(o.optString("deepseek_key"));
-                if (!o.optString("openai_key", "").isEmpty()) prefs().openAiKey(o.optString("openai_key"));
-                if (o.has("persona")) { prefs().persona(o.optString("persona")); persona = o.optString("persona").trim().isEmpty() ? defaultPersona() : o.optString("persona"); }
-            } catch (Exception ignored) { }
-            prefs().saveConfig();
-            Claude.useBrain(Config.own);
+            synchronized (Claude.class) {   // the whole switch at once (Codex 049 #1)
+                Config.fromJson(cfg);
+                try {
+                    JSONObject o = new JSONObject(cfg);
+                    if (!o.optString("own_key", "").isEmpty()) prefs().ownKey(o.optString("own_key"));
+                    if (!o.optString("deepseek_key", "").isEmpty()) prefs().deepKey(o.optString("deepseek_key"));
+                    if (!o.optString("openai_key", "").isEmpty()) prefs().openAiKey(o.optString("openai_key"));
+                    if (o.has("persona")) { prefs().persona(o.optString("persona")); persona = o.optString("persona").trim().isEmpty() ? defaultPersona() : o.optString("persona"); }
+                } catch (Exception ignored) { }
+                prefs().saveConfig();
+                Claude.useBrain(Config.own);
+            }
             if (ready()) startSetup();           // a coding agent set the brain up (AGENTS.md): the walkthrough still runs
             render();
             return;

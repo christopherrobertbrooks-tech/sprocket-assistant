@@ -98,11 +98,50 @@ final class Claude {
 
         Brain(String base, String key, boolean own, String model) { this.base = base; this.key = key; this.own = own; this.model = model; }
 
-        /** The brain switched on right now; keyFor gets true for the own server's key, false for Claude's. */
-        static Brain now(java.util.function.Function<Boolean, String> keyFor) {
-            synchronized (Claude.class) { return new Brain(Claude.base, keyFor.apply(Config.own), Config.own, Config.model()); }   // keyFor knows Config.deep
+        /**
+         * The brain switched on right now. Which one is chosen is read ONCE, and its address, model and key all come
+         * from that one reading (Codex 049 #1: Settings switching DeepSeek -> OpenAI could pair the old address with
+         * the new key, sending an OpenAI key to DeepSeek). keyFor gets "claude", "deepseek", "openai" or "own".
+         * standIn: the practice stand-in's address (only with its made-up key), or null.
+         */
+        static Brain now(java.util.function.Function<String, String> keyFor, String standIn) {
+            synchronized (Claude.class) {
+                String id = chosen();
+                String base = standIn != null ? standIn : baseOf(id);
+                return new Brain(base, keyFor.apply(id), !id.equals("claude"), modelOf(id));
+            }
         }
     }
+
+    /** Which brain is switched on: "claude", "deepseek", "openai" or "own" (their own server). */
+    static synchronized String chosen() { return !Config.own ? "claude" : Config.deep ? "deepseek" : Config.oa ? "openai" : "own"; }
+
+    static String baseOf(String id) {
+        switch (id) {
+            case "claude": return ANTHROPIC;
+            case "deepseek": return DEEPSEEK_BASE;
+            case "openai": return OPENAI_BASE;
+            default: return Config.ownBase.trim().replaceAll("/+$", "");
+        }
+    }
+
+    static String modelOf(String id) {
+        switch (id) {
+            case "claude": return "";
+            case "deepseek": return DEEPSEEK_MODEL;
+            case "openai": return OPENAI_MODEL;
+            default: return Config.ownModel.trim().isEmpty() ? "own" : Config.ownModel.trim();
+        }
+    }
+
+    /** Switch brains in one step, so nothing reading the choice sees half of a switch (Codex 049 #1). */
+    static synchronized void choose(boolean own, boolean deep, boolean oa) {
+        Config.own = own;
+        Config.deep = own && deep;
+        Config.oa = own && oa && !deep;
+        base = Config.base();
+    }
+
     static final int HISTORY_TURNS = 24;                    // the last 24 to 35 messages go with each question (Chat.window)
     // Effort (2026-10-17 docs): Sonnet 5.5 defaults to "high", and Anthropic suggests "medium" or "low" for chat; a
     // phone assistant lives on speed, so plain questions run "low". Think harder = Opus at "high". Thinking counts
@@ -123,7 +162,7 @@ final class Claude {
             return new double[]{0.30 * h, 1.20 * h, 0.30 * h, 0.006 * h, 0.00075};
         }
         if (model != null && model.startsWith("gpt-6.1-sol"))   // OpenAI's pricing page, 2026-11-15 (Standard, short context)
-            return new double[]{2.00, 10.00, 2.00, 0.10, 0.01};
+            return new double[]{2.00, 10.00, 2.50, 0.10, 0.01};   // cache write: the 30-minute rate (Codex 049 #4)
         if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0, 0};
         return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20, 0.01} : new double[]{2, 10, 2.50, 0.10, 0.01};
     }
@@ -137,6 +176,13 @@ final class Claude {
         return !(weekday && ((h >= 1 && h < 4) || (h >= 6 && h < 10)));
     }
 
+    /** $ per million for the longer-lived cache writes: OpenAI's 12 hours $5.00; Anthropic's 1 hour, twice input. */
+    static double longWriteRate(String model) {
+        if (model != null && model.startsWith("gpt-6.1-sol")) return 5.00;
+        double[] p = price(model);
+        return model != null && model.startsWith("claude") ? 2 * p[0] : p[2];
+    }
+
     /** True when answers from this model cost money (Claude, DeepSeek); false for the owner's own server. */
     static boolean paid(String model) { return price(model)[1] > 0; }
 
@@ -144,19 +190,22 @@ final class Claude {
         String text = "", stop = "", model = "";
         final List<String> sources = new ArrayList<>();
         int input, output, cacheWrite, cacheRead, searches;
+        int cacheWriteLong;   // the longer-lived cache writes (Anthropic's 1 hour, OpenAI's 12 hours), dearer (Codex 050 #4)
         final JSONArray content = new JSONArray();          // everything he said this round, to send back with a tool's answer
         final List<JSONObject> calls = new ArrayList<>();   // the app's tools he asked for (tool_use blocks)
 
         /** An earlier round of the same turn: its usage and sources count too. */
         void add(Reply earlier) {
             input += earlier.input; output += earlier.output; cacheWrite += earlier.cacheWrite; cacheRead += earlier.cacheRead;
+            cacheWriteLong += earlier.cacheWriteLong;
             searches += earlier.searches;
             for (String x : earlier.sources) if (!sources.contains(x) && sources.size() < 3) sources.add(x);
         }
 
         double cost() {
             double[] p = price(model);
-            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3]) / 1e6 + searches * p[4];
+            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3] + cacheWriteLong * longWriteRate(model)) / 1e6
+                    + searches * p[4];
         }
     }
 
@@ -357,7 +406,10 @@ final class Claude {
                     JSONObject u = e.optJSONObject("message") == null ? null : e.getJSONObject("message").optJSONObject("usage");
                     if (u != null) {
                         r.input += u.optInt("input_tokens");
-                        r.cacheWrite += u.optInt("cache_creation_input_tokens");
+                        JSONObject cc = u.optJSONObject("cache_creation");
+                        int longer = cc == null ? 0 : cc.optInt("ephemeral_1h_input_tokens");
+                        r.cacheWrite += Math.max(0, u.optInt("cache_creation_input_tokens") - longer);
+                        r.cacheWriteLong += longer;
                         r.cacheRead += u.optInt("cache_read_input_tokens");
                     }
                     break;
@@ -557,9 +609,9 @@ final class Claude {
             InputStream in = code == 200 ? h.getInputStream() : h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
             h.disconnect();
-            return checkProblem(b.own, code, body, b.base);
+            return scrub(checkProblem(b.own, code, body, b.base), b.key);
         } catch (Exception e) {
-            return checkFailed(b.own, e, b.base);
+            return scrub(checkFailed(b.own, e, b.base), b.key);
         }
     }
 
@@ -573,6 +625,40 @@ final class Claude {
     /** OpenAI as a brain (11-15): its Responses API, through OpenAiWire; their own key. */
     static final String OPENAI_BASE = "https://api.openai.com", OPENAI_MODEL = "gpt-6.1-sol",
             OPENAI_KEYS = "https://platform.openai.com/api-keys";
+
+    /**
+     * Text with these keys blanked out, whole or in pieces of 10+ characters (Codex 049 #3: a provider's error reply
+     * can repeat the key it was sent, and that text reaches setup notes and the chat). Plain Java, for the tests.
+     */
+    static String scrub(String text, String... keys) {
+        if (text == null) return null;
+        String out = text;
+        for (String k : keys) {
+            if (k == null || k.trim().isEmpty()) continue;
+            String key = k.trim();
+            out = out.replace(key, "[your key]");   // the whole key, wherever it is, however short (Codex 051 #3)
+            if (key.length() < 8) continue;          // pieces only for long keys
+            java.util.regex.Matcher m = Pattern.compile("[A-Za-z0-9_\\-]{10,}").matcher(out);
+            StringBuffer b = new StringBuffer();
+            while (m.find()) m.appendReplacement(b, java.util.regex.Matcher.quoteReplacement(key.contains(m.group()) ? "[part of your key]" : m.group()));
+            m.appendTail(b);
+            out = b.toString();
+        }
+        return out;
+    }
+
+    /**
+     * The same failure, its message blanked of the key this request carried (Codex 050 #2: a background job that
+     * started with a key since replaced would otherwise only be blanked of the new one). Busy and Down keep their
+     * meaning for retries and the backup; a message with no key in it is passed on untouched, cause and all.
+     */
+    static Exception scrubbed(Exception e, String key) {
+        String m = e.getMessage(), s = scrub(m, key);
+        if (m == null || m.equals(s)) return e;
+        if (e instanceof Busy) return new Busy(s, ((Busy) e).retryAfter, ((Busy) e).said);
+        if (e instanceof Down) return new Down(s);
+        return new Exception(s);
+    }
 
     static boolean openAi(String base) { return base != null && base.toLowerCase(Locale.US).contains("api.openai.com"); }
 
@@ -871,13 +957,15 @@ final class Claude {
         if (code != 200) {
             InputStream in = h.getErrorStream();
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            if (code == 429 || code == 529) throw new Busy(why(code, body), h.getHeaderField("retry-after"), false);
-            if (downCode(code)) throw new Down(b.own ? serverDown(code) : why(code, body));
-            throw new Exception(why(code, body));
+            if (code == 429 || code == 529) throw new Busy(scrub(why(code, body), b.key), h.getHeaderField("retry-after"), false);
+            if (downCode(code)) throw new Down(b.own ? serverDown(code) : scrub(why(code, body), b.key));
+            throw new Exception(scrub(why(code, body), b.key));
         }
         Stream st = new Stream(req.optString("model"), l);
         try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
             for (String line; (line = r.readLine()) != null; ) st.line(line);
+        } catch (Exception e) {
+            throw scrubbed(e, b.key);
         }
         return st.finish();
     }
@@ -904,12 +992,14 @@ final class Claude {
             String body = in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
             if (code == 429 && !body.contains("insufficient_quota")) throw new Busy("OpenAI is busy right now", h.getHeaderField("retry-after"), false);
             if (downCode(code)) throw new Down("OpenAI isn't answering (" + code + ")");
-            throw new Exception(checkProblem(true, code, body, b.base));
+            throw new Exception(scrub(checkProblem(true, code, body, b.base), b.key));
         }
         Stream st = new Stream(b.model, l);
         OpenAiWire.Events ev = new OpenAiWire.Events();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
             for (String line; (line = r.readLine()) != null; ) for (String e : ev.feed(line)) st.line(e);
+        } catch (Exception e) {
+            throw scrubbed(e, b.key);
         }
         return st.finish();
     }

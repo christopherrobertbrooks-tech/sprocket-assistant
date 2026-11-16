@@ -53,6 +53,39 @@ MODEL_FILE = os.environ.get("MODEL_FILE", "").strip() or None
 UPSTREAM_KEY_FILE = os.path.expanduser(os.environ.get("UPSTREAM_KEY_FILE", "").strip()) or None
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """The model server never redirects (Codex 049 #2): following one would carry the key to whoever it points at."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "the model server redirected; not followed (the key stays put)",
+                                     headers, fp)
+
+
+def _opener(upstream):
+    """No redirects; and a model server on this computer is reached directly, never through a proxy set in the
+    environment (Codex 050 #1: http_proxy would carry the key, unencrypted, to the proxy)."""
+    host = urllib.parse.urlsplit(upstream).hostname
+    direct = host in ("127.0.0.1", "localhost", "::1")
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}) if direct else urllib.request.ProxyHandler(), _NoRedirect)
+
+
+UPSTREAM_OPENER = _opener(UPSTREAM)
+
+
+def key_destination_problem(upstream):
+    """Why a key mustn't go to this model server, or None. A key goes only over https, except to this computer
+    itself (Codex 049 #2: plain http would carry it unencrypted)."""
+    p = urllib.parse.urlsplit(upstream)
+    if p.scheme == "https" and p.hostname:
+        return None
+    if p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost", "::1"):
+        return None
+    return f"UPSTREAM_KEY_FILE needs an https:// UPSTREAM (or this computer itself), not {upstream}"
+
+
+_REQUEST = threading.local()   # the key this request (thread) sent upstream, for blanking its own errors (Codex 051 #1)
+
+
 def upstream_headers():
     h = {"Content-Type": "application/json"}
     if UPSTREAM_KEY_FILE:
@@ -60,6 +93,7 @@ def upstream_headers():
             k = f.read().strip()
         if k:
             h["Authorization"] = "Bearer " + k
+            _REQUEST.key = k
     return h
 
 SEARCH_TOOL = {
@@ -78,8 +112,36 @@ SEARCH_TOOL = {
 usage_lock = threading.Lock()
 
 
+def scrub(text, secrets=None):
+    """The text with any key or access code in it blanked out, whole or in pieces of 10+ characters (Codex 049 #3: a
+    server's error reply can repeat the key it was sent)."""
+    import re
+    if secrets is None:
+        secrets = []
+        if UPSTREAM_KEY_FILE:
+            try:
+                secrets.append(read_file(UPSTREAM_KEY_FILE))
+            except OSError:
+                pass
+        try:
+            secrets.append(read_file(TOKEN_FILE))
+        except OSError:
+            pass
+        secrets.append(getattr(_REQUEST, "key", None))   # even after the key file was replaced mid-request
+    out = str(text)
+    for s in secrets:
+        s = (s or "").strip()
+        if not s:
+            continue
+        out = out.replace(s, "[key]")   # the whole key, wherever it is, however short (Codex 051 #3)
+        if len(s) < 8:
+            continue
+        out = re.sub(r"[A-Za-z0-9_\-]{10,}", lambda m: "[part of a key]" if m.group(0) in s else m.group(0), out)
+    return out
+
+
 def log(msg):
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), msg, flush=True)
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), scrub(msg), flush=True)
 
 
 def read_file(path):
@@ -146,7 +208,7 @@ def brave_search(query):
 
 def call_upstream(body):
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
-    with urllib.request.urlopen(req, timeout=900) as r:
+    with _opener(UPSTREAM).open(req, timeout=900) as r:
         return json.load(r)
 
 
@@ -171,7 +233,7 @@ def brain_on_trial():
 def call_upstream_stream(body):
     """The model's streamed reply as OpenAI chunks; the connection opens now, so a failure shows before any reply."""
     req = urllib.request.Request(UPSTREAM + "/v1/chat/completions", json.dumps(body).encode(), upstream_headers())
-    r = urllib.request.urlopen(req, timeout=900)
+    r = _opener(UPSTREAM).open(req, timeout=900)
 
     def chunks():
         with r:
@@ -222,7 +284,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send_json(self, code, obj):
-        raw = json.dumps(obj).encode()
+        raw = (json.dumps(obj) if code == 200 else scrub(json.dumps(obj))).encode()   # errors: no key in them
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
@@ -325,7 +387,7 @@ class Handler(BaseHTTPRequestHandler):
             if not sent[0]:
                 return self.send_json(502, {"type": "error", "error": {"type": "api_error", "message": f"Your model didn't answer: {e}"}})
             try:
-                emit(messages._sse("error", {"type": "error", "error": {"type": "api_error", "message": f"your model stopped: {e}"}}))
+                emit(messages._sse("error", {"type": "error", "error": {"type": "api_error", "message": scrub(f"your model stopped: {e}")}}))
             except OSError:
                 pass
         self.close_connection = True
@@ -360,6 +422,8 @@ def missing():
 def main():
     for path in missing():
         sys.exit(f"missing {path}")
+    if UPSTREAM_KEY_FILE and key_destination_problem(UPSTREAM):
+        sys.exit(key_destination_problem(UPSTREAM))
     if not brave_key():
         log(f"no Brave Search key at {BRAVE_KEY_FILE}: web search will say it's unavailable")
     server = ThreadingHTTPServer((BIND, PORT), Handler)

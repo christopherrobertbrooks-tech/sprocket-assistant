@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+import urllib.request
 
 import proxy
 
@@ -226,3 +227,132 @@ class UpstreamKeyTest(unittest.TestCase):
         proxy.UPSTREAM_KEY_FILE = f.name
         self.assertEqual(proxy.upstream_headers()["Authorization"], "Bearer sk-test-key")
         os.unlink(f.name)
+
+
+class KeyStaysPutTest(unittest.TestCase):
+    """Codex 049 #2: with a key, the go-between never follows a redirect and never sends it over plain http."""
+
+    def test_key_only_over_https_or_to_this_computer(self):
+        self.assertIsNone(proxy.key_destination_problem("https://api.deepseek.com"))
+        self.assertIsNone(proxy.key_destination_problem("http://127.0.0.1:8080"))
+        self.assertIsNone(proxy.key_destination_problem("http://localhost:11434"))
+        self.assertIsNotNone(proxy.key_destination_problem("http://api.deepseek.com"))
+        self.assertIsNotNone(proxy.key_destination_problem("http://192.168.1.50:8080"))
+        self.assertIsNotNone(proxy.key_destination_problem("ftp://example.com"))
+
+    def test_a_redirect_is_not_followed_and_the_key_never_reaches_it(self):
+        import http.server
+        import threading
+        got_elsewhere = []
+
+        class Elsewhere(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                got_elsewhere.append(self.headers.get("Authorization"))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            do_GET = do_POST   # a 302 turns the POST into a GET
+
+            def log_message(self, *a):
+                pass
+
+        other = http.server.HTTPServer(("127.0.0.1", 0), Elsewhere)
+        where = f"http://127.0.0.1:{other.server_port}/v1/chat/completions"
+
+        class Redirects(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(302)   # the common redirect, which Python follows by default
+                self.send_header("Location", where)
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        first = http.server.HTTPServer(("127.0.0.1", 0), Redirects)
+        for s in (first, other):
+            threading.Thread(target=s.serve_forever, daemon=True).start()
+        saved = (proxy.UPSTREAM, proxy.UPSTREAM_KEY_FILE)
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-test-key\n")
+        try:
+            proxy.UPSTREAM, proxy.UPSTREAM_KEY_FILE = f"http://127.0.0.1:{first.server_port}", f.name
+            with self.assertRaises(Exception):
+                proxy.call_upstream({"messages": []})
+            with self.assertRaises(Exception):
+                proxy.call_upstream_stream({"messages": []})
+            self.assertEqual(got_elsewhere, [])   # the key never reached the redirect's target
+        finally:
+            proxy.UPSTREAM, proxy.UPSTREAM_KEY_FILE = saved
+            os.unlink(f.name)
+            first.shutdown()
+            other.shutdown()
+
+
+class ScrubTest(unittest.TestCase):
+    """Codex 049 #3: a key an upstream repeats back never reaches the log or an error sent to Sprocket."""
+
+    def test_whole_and_pieces(self):
+        key = "sk-proj-AbCdEfGhIjKlMnOpQrSt1234"
+        self.assertNotIn(key, proxy.scrub(f"Incorrect API key provided: {key}", [key]))
+        self.assertNotIn("AbCdEfGhIjKlMnOp", proxy.scrub("echo: AbCdEfGhIjKlMnOp", [key]))
+        self.assertEqual(proxy.scrub("model server error: HTTP Error 400", [key]), "model server error: HTTP Error 400")
+        self.assertEqual(proxy.scrub("bad access code secret7", ["secret7"]), "bad access code [key]")   # Codex 050 #3
+        self.assertNotIn("secret7", proxy.scrub("invalid_access_code_secret7", ["secret7"]))   # Codex 051 #3
+
+    def test_log_scrubs(self):
+        import io, contextlib
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-test-secret-0123456789\n")
+        saved = proxy.UPSTREAM_KEY_FILE
+        proxy.UPSTREAM_KEY_FILE = f.name
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                proxy.log("upstream said: bad key sk-test-secret-0123456789")
+            self.assertNotIn("sk-test-secret-0123456789", out.getvalue())
+        finally:
+            proxy.UPSTREAM_KEY_FILE = saved
+            os.unlink(f.name)
+
+
+class NoProxyForThisComputerTest(unittest.TestCase):
+    """Codex 050 #1: with http_proxy set, a model server on this computer is still reached directly (the key never
+    goes to the proxy)."""
+
+    def test_loopback_skips_the_environment_proxy(self):
+        saved = {k: os.environ.get(k) for k in ("http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY")}
+        try:
+            os.environ["http_proxy"] = os.environ["HTTP_PROXY"] = "http://relay.example:3128"
+            os.environ["no_proxy"] = os.environ["NO_PROXY"] = ""
+            handlers = proxy._opener("http://127.0.0.1:8080").handlers
+            self.assertFalse(any(isinstance(h, urllib.request.ProxyHandler) and h.proxies for h in handlers),
+                             "a proxy would carry the key")
+            remote = proxy._opener("https://api.deepseek.com").handlers
+            self.assertTrue(any(isinstance(h, urllib.request.ProxyHandler) and h.proxies for h in remote))   # https may use one
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+
+
+class InFlightKeyTest(unittest.TestCase):
+    """Codex 051 #1: an error from a request that sent key A is blanked of A, even after the file now says B."""
+
+    def test_request_key_kept(self):
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("sk-old-key-AAAAAAAAAAAA\n")
+        saved = proxy.UPSTREAM_KEY_FILE
+        proxy.UPSTREAM_KEY_FILE = f.name
+        try:
+            proxy.upstream_headers()                      # the request reads A
+            with open(f.name, "w") as g:
+                g.write("sk-new-key-BBBBBBBBBBBB\n")     # replaced mid-request
+            self.assertNotIn("sk-old-key-AAAAAAAAAAAA", proxy.scrub("upstream said: bad key sk-old-key-AAAAAAAAAAAA"))
+        finally:
+            proxy.UPSTREAM_KEY_FILE = saved
+            proxy._REQUEST.key = None
+            os.unlink(f.name)
