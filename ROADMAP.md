@@ -28,6 +28,11 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **Correct it mid-task.** Talk to Sprocket while it's working to change the plan ("make that a large", "skip the
   fries") without starting over, and after you stop it, "keep going" picks up where it left off. Also an idea from Mika.
 
+- **Tidier code for contributors.** Most of Sprocket's code already sits in small files that each do one job, but the
+  main screen's file has grown to about a quarter of the whole app. Planned: move its parts (the setup walkthrough,
+  the Settings pages, Notion lists, the test hooks and so on) into their own files, one at a time and tested after
+  each, so the code is easier to find your way around and changes don't collide.
+
 - **Smaller models tested.** Sprocket is tested on Qwen 3.8 27B, which needs a big graphics card. Planned: run the
   practice tests on smaller models that fit everyday graphics cards (8 to 16 GB) through the go-between, and list
   which ones handle Sprocket's tools well, with their scores and speed, so you can pick one for the computer you have.
