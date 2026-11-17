@@ -68,8 +68,11 @@ Every feature can be switched off in Settings.
 Pick one on Sprocket's first screen; you can set up the others later in Settings.
 - **Claude:** paste your own Claude API key. To get one: sign in at
   [console.anthropic.com](https://console.anthropic.com), add a little credit under **Billing** (and a monthly limit
-  under **Limits**, if you like), then **API keys > Create key**. The API is paid for what you use: a Claude Max plan
-  includes some API credit each month, other Claude.ai plans don't. Sprocket's first screen has these steps and a
+  under **Limits**, if you like), then **API keys > Create key**. The API is paid for what you use. Claude Max, Ultra and Team plans include
+  monthly API credit: claim it at [claude.ai](https://claude.ai/settings/billing) under **Settings > Billing > API
+  credits > Link organization**
+  ([how](https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-ultra-and-team-plans)); other
+  plans (Free, Pro, Enterprise) don't include it. Sprocket's first screen has these steps and a
   button to the Console. In Settings you can switch Claude's everyday model to **Haiku**, the cheapest, with the
   same key.
 - **DeepSeek:** paste your own DeepSeek API key, nothing else to set up. To get one: sign in at

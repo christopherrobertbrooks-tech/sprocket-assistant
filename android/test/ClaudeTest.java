@@ -359,13 +359,37 @@ public class ClaudeTest {
                 x.calls.add(b);
             } else {
                 x.stop = "end_turn";
+                if (calls[0] == 3) x.text = "Sent your text.";   // the nudge's answer
             }
             return x;
         };
         String before;
         try { before = Claude.send(new Claude.Brain(Claude.base, "k", false, ""), r2, null, null, (name, in) -> "Sent.").text; }
         catch (Exception e) { before = e.getMessage(); }
-        eq("words before the tool, none after: those words", before, "On it.");
+        // Codex 11-17 #3: "On it." was said BEFORE the step, so it isn't the finish: the nudge asks what was done
+        eq("words before the tool, none after: the nudge's answer", before, "Sent your text.");
+        eq("words before the tool, none after: the nudge was asked (three calls)", calls[0], 3);
+        calls[0] = 0;
+        Claude.transport = (key, body, l2, cancel) -> {   // Codex's case: a preamble, the flashlight, then silence twice
+            Claude.Reply x = new Claude.Reply();
+            x.model = Claude.SONNET;
+            if (++calls[0] == 1) {
+                x.stop = "tool_use";
+                x.text = "I'll turn on the flashlight.";
+                JSONObject b = new JSONObject().put("type", "tool_use").put("id", "toolu_t").put("name", "flashlight").put("input", new JSONObject());
+                x.content.put(new JSONObject().put("type", "text").put("text", x.text)).put(b);
+                x.calls.add(b);
+            } else {
+                x.stop = "end_turn";
+                x.text = ".";
+            }
+            return x;
+        };
+        String pre;
+        try { pre = Claude.send(new Claude.Brain(Claude.base, "k", false, ""), r2, null, null, (name, in) -> "Flashlight on.").text; }
+        catch (Exception e) { pre = e.getMessage(); }
+        eq("a preamble isn't left as the answer after a silent finish", pre, Claude.DONE_SILENTLY);
+        eq("the preamble case asks the nudge too", calls[0], 3);
         calls[0] = 0;
         Claude.transport = (key, body, l2, cancel) -> {
             Claude.Reply x = new Claude.Reply();
@@ -591,6 +615,30 @@ public class ClaudeTest {
         eq("stop", rep.stop, "end_turn");
         // 40 in x $2 + 30 out x $10 + 1500 cached x $0.10, per million, + $0.01 per search
         eq("cost", String.format(java.util.Locale.US, "%.6f", rep.cost()), String.format(java.util.Locale.US, "%.6f", (40 * 2 + 30 * 10 + 1500 * 0.10) / 1e6 + 0.01));
+        // Codex 11-17 #4: Haiku 5.5 prompts over 100K tokens are billed on a card 5x dearer, per request
+        Claude.Stream h1 = new Claude.Stream(Claude.HAIKU, null);
+        h1.line(ev("{\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100000}}}"));
+        h1.line(ev("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1000}}"));
+        Claude.Reply hs = h1.finish();
+        eq("Haiku at exactly 100K: the cheaper card", String.format(java.util.Locale.US, "%.7f", hs.cost()), "0.0105000");
+        Claude.Stream h2 = new Claude.Stream(Claude.HAIKU, null);
+        h2.line(ev("{\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1,\"cache_read_input_tokens\":100000}}}"));
+        h2.line(ev("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1000}}"));
+        Claude.Reply hl = h2.finish();
+        // 1 x $0.50 + 100,000 cached x $0.05 + 1,000 out x $2.50, per million
+        eq("Haiku over 100K (cache counts): the dearer card", String.format(java.util.Locale.US, "%.7f", hl.cost()), "0.0075005");
+        Claude.Stream h3 = new Claude.Stream(Claude.HAIKU, null);
+        h3.line(ev("{\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":60000}}}"));
+        h3.line(ev("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1000}}"));
+        Claude.Reply hshort = h3.finish();
+        hshort.add(hl);                       // a long round, then a short one: each keeps its own card
+        eq("mixed rounds: each priced on its own card", String.format(java.util.Locale.US, "%.7f", hshort.cost()), "0.0140005");
+        Claude.Stream h4 = new Claude.Stream(Claude.HAIKU, null);
+        h4.line(ev("{\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":60000}}}"));
+        h4.line(ev("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1000}}"));
+        Claude.Reply two = h4.finish();
+        two.add(hs);         // two short rounds adding past 100K stay on the cheaper card
+        eq("two short rounds stay cheap", String.format(java.util.Locale.US, "%.7f", two.cost()), "0.0170000");
         Claude.Reply o = new Claude.Reply();
         o.model = Claude.OPUS; o.output = 1_000_000;
         eq("Opus output price", o.cost(), 20.0);

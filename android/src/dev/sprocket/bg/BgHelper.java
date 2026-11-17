@@ -197,6 +197,7 @@ public final class BgHelper {
      */
     public static List<String> tasksOf(String stackList, String pkg, int onDisplay, boolean visible) {
         List<String> out = new ArrayList<>();
+        if (stackList.startsWith("ok ")) stackList = stackList.substring(3);   // sh()'s answer: "ok " + the output (Codex 11-17 #2)
         String root = null;
         int disp = -1;
         java.util.regex.Pattern rp = java.util.regex.Pattern.compile("^RootTask id=(\\d+).*\\bdisplayId=(\\d+)");

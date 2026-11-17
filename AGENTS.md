@@ -21,8 +21,8 @@ do that part for them.
 - Each step below that needs a tap on the phone: tell them exactly what to tap, then wait for them.
 
 ## 1. Ask first
-1. **Which brain?** **Claude** (a Claude API key from console.anthropic.com, paid per use; a Claude Max plan
-   includes some API credit each month, other Claude.ai plans don't), **DeepSeek** (a key from
+1. **Which brain?** **Claude** (a Claude API key from console.anthropic.com, paid per use; Claude Max, Ultra and
+   Team plans include monthly API credit, claimed at claude.ai under Settings > Billing > API credits), **DeepSeek** (a key from
    platform.deepseek.com), **OpenAI** (an API key from platform.openai.com; a ChatGPT subscription doesn't include
    it), or **their own model** (a server they run that speaks the OpenAI chat API: llama.cpp's server, vLLM, Ollama,
    LM Studio...).
