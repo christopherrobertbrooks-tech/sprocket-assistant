@@ -85,7 +85,12 @@ final class OpenAiWire {
         JSONArray theirs = req.optJSONArray("tools");
         for (int i = 0; theirs != null && i < theirs.length(); i++) {
             JSONObject t = theirs.getJSONObject(i);
-            if (t.optString("type").startsWith("web_search")) { tools.put(new JSONObject().put("type", "web_search")); continue; }
+            if (t.optString("type").startsWith("web_search")) {   // his town too (11-17: without it OpenAI asked "which Springfield?")
+                JSONObject search = new JSONObject().put("type", "web_search");
+                if (t.optJSONObject("user_location") != null) search.put("user_location", t.getJSONObject("user_location"));
+                tools.put(search);
+                continue;
+            }
             if (t.has("type") && !t.optString("type").equals("custom")) continue;   // another server tool: none on OpenAI
             tools.put(new JSONObject().put("type", "function").put("name", t.optString("name"))
                     .put("description", t.optString("description"))

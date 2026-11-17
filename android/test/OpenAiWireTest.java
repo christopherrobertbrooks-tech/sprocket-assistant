@@ -73,6 +73,14 @@ public class OpenAiWireTest {
         eq("the tool's picture follows as a message", in.getJSONObject(4).getJSONArray("content").getJSONObject(1).optString("image_url"), "data:image/png;base64,AAAA");
         JSONArray tools = r.getJSONArray("tools");
         eq("Claude's search -> OpenAI's search", tools.getJSONObject(0).optString("type"), "web_search");
+        // 11-17: Claude's search carried his town (user_location) but OpenAI's didn't, so OpenAI asked "which Springfield?"
+        JSONObject near = new JSONObject(req.toString());
+        near.getJSONArray("tools").getJSONObject(0).put("user_location", new JSONObject().put("type", "approximate")
+                .put("city", "Springfield").put("region", "Missouri").put("country", "US").put("timezone", "America/Chicago"));
+        JSONObject nearSearch = OpenAiWire.request(near, "gpt-6.1-sol").getJSONArray("tools").getJSONObject(0);
+        eq("his town reaches OpenAI's search", nearSearch.optJSONObject("user_location") == null ? "none"
+                : nearSearch.getJSONObject("user_location").optString("city") + ", " + nearSearch.getJSONObject("user_location").optString("region"), "Springfield, Missouri");
+        eq("no town, no location", tools.getJSONObject(0).has("user_location"), false);
         eq("a phone tool, flat", tools.getJSONObject(1).optString("type") + " " + tools.getJSONObject(1).optString("name"), "function screen");
         eq("think harder", OpenAiWire.request(new JSONObject(req.toString()).put("output_config", new JSONObject().put("effort", "high")), "gpt-6.1-sol")
                 .getJSONObject("reasoning").optString("effort"), "high");
