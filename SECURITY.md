@@ -1,5 +1,18 @@
 # Security
 
+## Security fix, November 17, 2026
+
+An independent code review of 0.1.17 found one more way a key could show up in an error message. No real key is known
+to have been exposed.
+
+1. **A hand-made access code with a quote mark or backslash could show up in a go-between error.** If a model
+   server's error reply repeated the go-between's access code or upstream key, and that code contained `"` or `\`,
+   the go-between blanked it out of its log but could still pass it back in the error it sent to Sprocket. *Fixed:*
+   the go-between now blanks every piece of an error before turning it into a reply. *Affected:* only go-betweens
+   whose access code or `UPSTREAM_KEY_FILE` key you typed yourself with one of those characters; codes made by
+   `start.py` and keys from providers don't contain them. *What to do:* update the go-between. If you made your own
+   code with a quote mark or backslash, make a new one.
+
 ## Security fixes, November 15, 2026
 
 An independent code review of the new cloud brains (DeepSeek, OpenAI), done in three passes, found problems before

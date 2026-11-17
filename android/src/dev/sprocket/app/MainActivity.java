@@ -1303,8 +1303,9 @@ public class MainActivity extends Activity {
             + "(https://my-computer.my-tailnet.ts.net:8448), another https:// one, or a home-network one "
             + "(http://192.168.1.50:8048: only at home, and unencrypted). The README shows how to set each one up.";
     // Codex's review 2026-11-12: a newcomer needs the steps, and the surprise said up front.
-    static final String CLAUDE_KEY_HOW = "How to get one: 1. Sign in at console.anthropic.com. The API is paid for what you use; a "
-            + "Claude Max plan includes some API credit each month, other Claude.ai plans don't. 2. Under Billing, add a little credit (and set a "
+    static final String CLAUDE_KEY_HOW = "How to get one: 1. Sign in at console.anthropic.com. The API is paid for what you use. A "
+            + "Claude Max, Ultra or Team plan includes monthly API credit: claim it at claude.ai under Settings > Billing > API "
+            + "credits > Link organization. 2. Or, under Billing in the Console, add a little credit (and set a "
             + "monthly limit under Limits, if you like). 3. Under API keys, create a key, copy it and paste it here. It stays "
             + "on this phone.";
     static final String CONSOLE_KEYS = "https://console.anthropic.com/settings/keys";

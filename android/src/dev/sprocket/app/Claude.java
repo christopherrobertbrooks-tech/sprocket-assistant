@@ -167,7 +167,8 @@ final class Claude {
         if (model != null && model.startsWith("gpt-6.1-sol"))   // OpenAI's pricing page, 2026-11-15 (Standard, short context)
             return new double[]{2.00, 10.00, 2.50, 0.10, 0.01};   // cache write: the 30-minute rate (Codex 049 #4)
         if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0, 0};
-        if (HAIKU.equals(model)) return new double[]{0.10, 0.50, 0.125, 0.01, 0.01};   // pricing page 11-16 (prompts up to 100K)
+        if (HAIKU.equals(model)) return new double[]{0.10, 0.50, 0.125, 0.01, 0.01};   // pricing page 11-16 (prompts up to 100K;
+        // a longer prompt is billed at 5x every token rate, searches unchanged: Reply.longPrompt, Codex 11-17 #4)
         return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20, 0.01} : new double[]{2, 10, 2.50, 0.10, 0.01};
     }
 
@@ -198,19 +199,31 @@ final class Claude {
         final JSONArray content = new JSONArray();          // everything he said this round, to send back with a tool's answer
         final List<JSONObject> calls = new ArrayList<>();   // the app's tools he asked for (tool_use blocks)
 
+        // Haiku 5.5 bills a request whose prompt (input + cache) is over 100K tokens at 5x every token rate. Priced per
+        // request: longPrompt marks this reply's own round (until it takes in another), extra holds the surcharge of
+        // rounds already added, so several short rounds never add up to the dearer card (Codex 11-17 #4).
+        static final int LONG_PROMPT = 100_000;
+        boolean longPrompt;
+        double extra;
+
+        private double tokenCost() {
+            double[] p = price(model);
+            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3] + cacheWriteLong * longWriteRate(model)) / 1e6;
+        }
+
+        private double surcharge() { return extra + (longPrompt ? 4 * tokenCost() : 0); }
+
         /** An earlier round of the same turn: its usage and sources count too. */
         void add(Reply earlier) {
+            extra = surcharge() + earlier.surcharge();   // both priced on their own cards before the counts merge
+            longPrompt = false;
             input += earlier.input; output += earlier.output; cacheWrite += earlier.cacheWrite; cacheRead += earlier.cacheRead;
             cacheWriteLong += earlier.cacheWriteLong;
             searches += earlier.searches;
             for (String x : earlier.sources) if (!sources.contains(x) && sources.size() < 3) sources.add(x);
         }
 
-        double cost() {
-            double[] p = price(model);
-            return (input * p[0] + output * p[1] + cacheWrite * p[2] + cacheRead * p[3] + cacheWriteLong * longWriteRate(model)) / 1e6
-                    + searches * p[4];
-        }
+        double cost() { return tokenCost() + surcharge() + searches * price(model)[4]; }
     }
 
     /** Where the phone is, roughly: for web search's location and the note to Claude. Empty strings when unknown. */
@@ -415,6 +428,7 @@ final class Claude {
                         r.cacheWrite += Math.max(0, u.optInt("cache_creation_input_tokens") - longer);
                         r.cacheWriteLong += longer;
                         r.cacheRead += u.optInt("cache_read_input_tokens");
+                        r.longPrompt = HAIKU.equals(r.model) && r.input + r.cacheWrite + r.cacheWriteLong + r.cacheRead > Reply.LONG_PROMPT;
                     }
                     break;
                 }
@@ -874,7 +888,7 @@ final class Claude {
         if (b.own && !b.model.equals(model)) { req.put("model", b.model); retarget(req, b); }
         else if (!b.own && !model.startsWith("claude")) { req.put("model", claudeModel()); retarget(req, b); }
         Reply total = null;
-        boolean acted = false, usedScreen = false;
+        boolean acted = false, usedScreen = false, quietEnd = false, lastWrapUp = false;
         QuietSteps quiet = l == null ? null : new QuietSteps(l);
         for (int round = 1; ; round++) {
             Reply rep;
@@ -883,6 +897,9 @@ final class Claude {
                 if (round > 1) throw new Exception(e.getMessage());
                 throw e;
             }
+            // Codex 11-17 #3: words said BEFORE a step ("I'll turn on the flashlight") aren't the finish; only a wrap-up
+            // round's words (a cart summary said with "stay") are. A silent last round otherwise still gets the nudge.
+            quietEnd = silent(rep.text) && !lastWrapUp;
             if (total != null) {
                 rep.add(total);
                 if (rep.text.replaceAll("[\\p{Punct}\\s]", "").isEmpty()) rep.text = total.text;   // said it before acting, nothing (or just ".") after: that's the reply
@@ -911,6 +928,7 @@ final class Claude {
                 if (!"screen".equals(call.optString("name")) || !(act.equals("stay") || act.equals("note"))) wrapUp = false;
             }
             if (quiet != null) { if (more && !wrapUp) quiet.drop(); else quiet.flush(); }   // a step's words stay on screen only
+            lastWrapUp = wrapUp;
             if ("tool_use".equals(rep.stop) && !rep.calls.isEmpty()) {
                 acted = true;
                 JSONArray results = new JSONArray();
@@ -936,7 +954,7 @@ final class Claude {
             }
         }
         if (total.text.isEmpty() && !acted) throw new Exception("Claude sent no answer");
-        if (acted && silent(total.text) && !(tools != null && tools.stopped())) {   // did the work, said nothing (11-16)
+        if (acted && (silent(total.text) || quietEnd) && !(tools != null && tools.stopped())) {   // did the work, said nothing (11-16)
             Reply said = null;
             try { said = onceRetrying(b, askToSay(req, total), l, cancel, null); } catch (Exception ignored) { }
             if (said != null && !silent(said.text) && said.calls.isEmpty()) {

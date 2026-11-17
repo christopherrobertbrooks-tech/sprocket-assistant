@@ -32,6 +32,15 @@ public class BgHelperTest {
                 "taskId=2243: com.walmart.android/w.Splash bounds=[0,0][1080,2340] userId=0 visible=true");
         eq("the one in front of them is never closed", BgHelper.leftovers(theirs, "com.walmart.android", 7).contains("2243"), false);
         eq("other apps' windows are never closed", BgHelper.leftovers(list, "com.anthropic.claude", 7), Arrays.asList());
+        // Codex 11-17 #2: the helper's sh() answers "ok " + the command's output, so the first block starts "ok RootTask"
+        String first = "ok RootTask id=3001 bounds=[0,0][1080,2340] displayId=0 userId=0\n"
+                + "  taskId=3001: com.walmart.android/w.Splash bounds=[0,0][1080,2340] userId=0 visible=true topActivity=ComponentInfo{w/r}\n"
+                + "RootTask id=3002 bounds=[0,0][1080,2340] displayId=7 userId=0\n"
+                + "  taskId=3002: com.target.ui/t.Main bounds=[0,0][1080,2340] userId=0 visible=false topActivity=ComponentInfo{t/m}\n";
+        eq("the first window in sh's answer counts (in front of them)", BgHelper.tasksOf(first, "com.walmart.android", 0, true), Arrays.asList("3001"));
+        eq("the first window in sh's answer counts (a leftover)", BgHelper.leftovers(first.replace("visible=true", "visible=false"), "com.walmart.android", 7),
+                Arrays.asList("3001"));
+        eq("an error answer has no windows", BgHelper.tasksOf("error: " + first.substring(3), "com.walmart.android", 0, true), Arrays.asList());
         eq("the app, from a component", BgHelper.pkgOf("-a android.intent.action.MAIN -n com.walmart.android/w.Splash"), "com.walmart.android");
         eq("the app, from a package", BgHelper.pkgOf("-a android.intent.action.VIEW -d https://x.com -p com.target.ui"), "com.target.ui");
         eq("no app named", BgHelper.pkgOf("-a android.settings.WIFI_SETTINGS"), "");

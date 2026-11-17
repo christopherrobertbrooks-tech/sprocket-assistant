@@ -300,6 +300,14 @@ class ScrubTest(unittest.TestCase):
         self.assertEqual(proxy.scrub("bad access code secret7", ["secret7"]), "bad access code [key]")   # Codex 050 #3
         self.assertNotIn("secret7", proxy.scrub("invalid_access_code_secret7", ["secret7"]))   # Codex 051 #3
 
+    def test_error_reply_scrubbed_before_json(self):
+        """Codex 11-17 #1: json.dumps escaped a quote or backslash in the code first, so the blanking missed it."""
+        for key in ['a"b', 'ab\\cd', 'sk-"quoted\\key-0123456789']:
+            raw = proxy.json_body(502, {"error": {"message": f"upstream said: bad key {key}"}}, [key])
+            self.assertNotIn(key, json.loads(raw)["error"]["message"])
+        ok = proxy.json_body(200, {"text": 'he said "hi"'}, ['"hi"'])
+        self.assertEqual(json.loads(ok)["text"], 'he said "hi"')   # a good answer goes out as it is
+
     def test_log_scrubs(self):
         import io, contextlib
         with tempfile.NamedTemporaryFile("w", delete=False) as f:

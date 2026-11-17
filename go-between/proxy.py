@@ -140,6 +140,25 @@ def scrub(text, secrets=None):
     return out
 
 
+def scrub_values(obj, secrets=None):
+    """obj with every string in it scrubbed, before it becomes JSON (Codex 11-17 #1: JSON escapes a quote or backslash
+    in a key, so scrubbing the finished JSON could miss it)."""
+    if isinstance(obj, str):
+        return scrub(obj, secrets)
+    if isinstance(obj, dict):
+        return {scrub(k, secrets): scrub_values(v, secrets) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [scrub_values(v, secrets) for v in obj]
+    return obj
+
+
+def json_body(code, obj, secrets=None):
+    """The reply's bytes: an answer as it is, an error with no key in it."""
+    if code == 200:
+        return json.dumps(obj).encode()
+    return scrub(json.dumps(scrub_values(obj, secrets)), secrets).encode()
+
+
 def log(msg):
     print(time.strftime("%Y-%m-%d %H:%M:%S"), scrub(msg), flush=True)
 
@@ -284,7 +303,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send_json(self, code, obj):
-        raw = (json.dumps(obj) if code == 200 else scrub(json.dumps(obj))).encode()   # errors: no key in them
+        raw = json_body(code, obj)   # errors: no key in them
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
