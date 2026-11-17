@@ -46,6 +46,9 @@ public class ScreenTest {
         eq("a greyed-out item says so, and the list says what that means", Screen.describe("Settings", Arrays.asList(grey)),
                 "Screen of Settings:\n[1] switch \"Use Battery Saver\" (on) (greyed out)\n" + Screen.GREYED);
         eq("an item is usable unless told otherwise", button("OK").enabled, true);
+        // 11-17 practice (OpenAI h08): Battery Saver greyed out, no reason on screen -> "the screen doesn't say why"; the
+        // reason (charging) is one phone_status away
+        eq("greyed out with no reason shown: phone_status says if it's charging", Screen.GREYED.contains("phone_status"), true);
         eq("a tap on a greyed-out item is refused, saying why", Screen.refuseTap("com.android.settings", grey) != null
                 && Screen.refuseTap("com.android.settings", grey).contains("greyed out"), true);
         eq("the greyed-out note tells it not to claim the change", Screen.GREYED.contains("can't be changed right now"), true);
@@ -318,6 +321,9 @@ public class ScreenTest {
             eq("persona: permission pop-ups get Don't allow and a mention", persona.contains("Permission pop-ups.") && persona.contains("that you said no"), true);
             // 11-16 judged practice: OpenAI asked "which state is that Springfield in?" twice instead of searching
             eq("persona: a named place is searched as given, asked about only if results don't settle it", persona.contains("search with the name as he said it"), true);
+            // 11-17 practice: with one listing matching the name and street, OpenAI still asked "which state?" (no town known)
+            eq("persona: a listing matching the name and street settles it", persona.contains("A listing that matches the name and street he gave settles it"), true);
+            eq("persona: not asking which state when a listing matches", persona.contains("don't ask which state or town"), true);
             eq("persona: adding to his list never opens an app", persona.contains("never open an app or go_to a saved way to add to his list"), true);
         } catch (java.io.IOException e) { eq("persona readable", e, ""); }
 

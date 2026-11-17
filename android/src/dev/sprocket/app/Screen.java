@@ -215,7 +215,8 @@ final class Screen {
      * charges; it read as a plain switch and the brain said it was on).
      */
     static final String GREYED = "(Greyed out: the phone won't let that item be used or changed right now, often for a "
-            + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done.)\n";
+            + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done. "
+            + "No reason on the screen? phone_status says whether the phone is charging (Battery Saver can't turn on while it charges).)\n";
 
     /** A tap pressed again and again (a quantity +) goes at most this many times in one step. */
     static final int MAX_REPEAT = 50;
