@@ -324,6 +324,24 @@ final class Screen {
         return -1;
     }
 
+    /** True when something on the screen scrolls (a list find can go through). */
+    static boolean hasList(List<Item> items) {
+        for (Item it : items) if (it.scrollable) return true;
+        return false;
+    }
+
+    /**
+     * find's answer when the words never showed. Only a screen with a list got a full top-to-bottom look (11-17 practice:
+     * find ran on an item's own page, no list, and "looked from the top to the bottom" made it say the deli had no
+     * pickles; the pickle spear was at the bottom of the menu one screen back).
+     */
+    static String findMiss(String text, boolean hadList) {
+        if (hadList) return "No “" + text + "” anywhere in this list: Sprocket looked from the top to the bottom. Say so plainly.";
+        return "No “" + text + "” on this screen, and nothing on it scrolls, so this was NOT a look through a list or menu"
+                + " (it may be an item's own page). Don't tell them it isn't there: finish here, go back to the list or menu,"
+                + " and find it there.";
+    }
+
     /** True while some list on the screen says it has more below. */
     static boolean moreBelow(List<Item> items) {
         for (Item it : items) if ("more below".equals(it.value)) return true;

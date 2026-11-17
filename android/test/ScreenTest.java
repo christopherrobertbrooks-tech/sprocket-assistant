@@ -119,6 +119,16 @@ public class ScreenTest {
         eq("find: the list itself never counts", Screen.findItem(menu, ""), -1);
         eq("find: more below", Screen.moreBelow(menu), true);
         eq("find: at the bottom", Screen.moreBelow(Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "at the bottom"))), false);
+        // 11-17 practice (Haiku, m06): it tapped the Turkey Club and ran find "pickle" in the same step, so find ran on the
+        // Turkey Club page (no list at all) and answered "looked from the top to the bottom" -> it said the deli
+        // doesn't sell pickles. A screen with nothing that scrolls was never a full look at the menu.
+        List<Screen.Item> itemPage = Arrays.asList(button("Turkey Club"), button("Add 1 to cart · $10.99"));
+        eq("find: a page with no list has no list", Screen.hasList(itemPage), false);
+        eq("find: a menu has a list", Screen.hasList(menu), true);
+        eq("find miss after a full look says so", Screen.findMiss("pickle", true).contains("from the top to the bottom"), true);
+        eq("find miss on a page with no list never claims a full look", Screen.findMiss("pickle", false).contains("top to the bottom"), false);
+        eq("find miss on a page with no list sends it back to the list", Screen.findMiss("pickle", false).contains("go back"), true);
+        eq("find miss on a page with no list forbids 'not sold'", Screen.findMiss("pickle", false).contains("Don't tell them it isn't there"), true);
         // lunch budgets: to see the real total (delivery, tax, tip) Sprocket must open checkout; that doesn't
         // charge anything, so in a food or shopping app it needs no card. Placing the order always does.
         eq("Go to checkout in a food app: no card", Screen.needsCard("dev.playground.eats", button("Go to checkout")), false);

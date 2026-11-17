@@ -490,6 +490,7 @@ public class ScreenHands extends AccessibilityService {
         String screen = read();
         int hit = Screen.findItem(lastItems, text);
         if (hit > 0) return "Found \u201c" + text + "\u201d: item " + hit + ".\n" + screen;
+        if (!Screen.hasList(lastItems)) return Screen.findMiss(text, false) + "\n" + screen;
         for (int i = 0; i < 30; i++) {   // to the top first: what it's after may be above
             String before = Screen.describe("", lastItems);
             screen = scroll(false);
@@ -503,7 +504,7 @@ public class ScreenHands extends AccessibilityService {
             screen = scroll(true);
             if (Screen.describe("", lastItems).equals(before)) break;
         }
-        return "No \u201c" + text + "\u201d anywhere in this list: Sprocket looked from the top to the bottom. Say so plainly.\n" + screen;
+        return Screen.findMiss(text, true) + "\n" + screen;
     }
 
     /**
