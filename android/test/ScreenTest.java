@@ -296,6 +296,8 @@ public class ScreenTest {
             // 11-16 "add ... to a list" right after Walmart talk went to go_to "Walmart Lists" and typed into Walmart's list
             // 11-16 his design: Amazon asks first, one item at a time
             eq("persona: Amazon asks for anything he shops for, not just the grocery list", persona.contains("anything he shops for on Amazon"), true);
+            // 11-16 the charger went in but the cart was never shown to him
+            eq("persona: Amazon ends on the cart, shown to him", persona.contains("open the Amazon cart, check it, and leave it up for him"), true);
             eq("persona: Amazon finds, tells, then asks before each add", persona.contains("At Amazon, ask before each item goes in"), true);
             eq("persona: permission pop-ups get Don't allow and a mention", persona.contains("Permission pop-ups.") && persona.contains("that you said no"), true);
             eq("persona: adding to his list never opens an app", persona.contains("never open an app or go_to a saved way to add to his list"), true);
