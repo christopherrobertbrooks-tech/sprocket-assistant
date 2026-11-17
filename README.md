@@ -68,29 +68,36 @@ Every feature can be switched off in Settings.
 Pick one on Sprocket's first screen; you can set up the others later in Settings.
 - **Claude:** paste your own Claude API key. To get one: sign in at
   [console.anthropic.com](https://console.anthropic.com), add a little credit under **Billing** (and a monthly limit
-  under **Limits**, if you like), then **API keys > Create key**. A Claude.ai subscription doesn't include this: the
-  API is paid separately, for what you use. Sprocket's first screen has these steps and a button to the Console.
+  under **Limits**, if you like), then **API keys > Create key**. The API is paid for what you use: a Claude Max plan
+  includes some API credit each month, other Claude.ai plans don't. Sprocket's first screen has these steps and a
+  button to the Console. In Settings you can switch Claude's everyday model to **Haiku**, the cheapest, with the
+  same key.
 - **DeepSeek:** paste your own DeepSeek API key, nothing else to set up. To get one: sign in at
   [platform.deepseek.com](https://platform.deepseek.com), add a little credit, then create a key under **API keys**.
   Web search works through DeepSeek's own search. What you ask goes to DeepSeek, a company in China.
+- **OpenAI:** paste your own OpenAI API key, nothing else to set up. To get one: sign in at
+  [platform.openai.com](https://platform.openai.com), add a little credit under **Billing**, then create a key under
+  **API keys**. A ChatGPT subscription doesn't include this: the API is paid separately, for what you use. Web search
+  works through OpenAI's own search. What you ask goes to OpenAI.
 - **Your own model:** point Settings at any server that speaks the Messages API. The included
   [go-between](go-between/) (a small Python server) translates for any OpenAI-compatible server (llama.cpp, vLLM,
   Ollama and others) and adds web search through your own Brave Search key. Tested with Qwen.
 - **More than one, as backups:** set up any of the others in Settings. If the one you picked doesn't answer (your
   server is off, or a service is overloaded), Sprocket asks on a card whether the next one may answer that question:
-  your own server first, then DeepSeek, then Claude. Nothing switches without your yes, and a question it had already
+  your own server first, then DeepSeek, then OpenAI, then Claude. Nothing switches without your yes, and a question it had already
   started acting on is never handed over.
 
 ### What it costs
-Claude and DeepSeek charge for what you use; your own model costs nothing per question. Sprocket shows the cost under
+Claude, DeepSeek and OpenAI charge for what you use; your own model costs nothing per question. Sprocket shows the cost under
 each answer. Some real examples with DeepSeek (November 2026 prices; half price outside China's working hours and on
 weekends):
 - A simple question ("what is 5 plus 5"): about $0.0002, up to $0.002 for the first question of a new chat.
 - A food order, filling the cart in a delivery app (about a dozen steps): about $0.004.
-- Sprocket's whole practice set of 62 phone tasks (food orders, settings, texts, packages, searches): $0.12.
+- Sprocket's whole practice set of 68 phone tasks (food orders, settings, texts, packages, searches): $0.15.
 
-The same practice set cost $0.87 on OpenAI's comparable model (not built into Sprocket yet). Prices change: check
-each provider's own pricing page.
+The same practice set cost $1.47 on OpenAI and $0.83 on Claude Haiku. How each did on it (every test read and judged
+by hand): DeepSeek 68 of 68, OpenAI 64 of 68, Claude Haiku 62 of 68; the misses OpenAI and Haiku had are fixed in
+0.1.17. Prices change: check each provider's own pricing page.
 
 ## Voices (optional)
 - **Speaking:** the phone's own voice by default. Or run a voice server that takes `POST /speak {"text", "mood"}` and
@@ -233,7 +240,7 @@ It's a personal project, so answers may take a while.
 ## Privacy
 - Your keys stay on your phone. Your chat, memory and lists stay on your phone (and in your own Notion, if you
   connect it).
-- What you ask goes to the brain you chose: Anthropic for Claude, DeepSeek for DeepSeek, or your own server.
+- What you ask goes to the brain you chose: Anthropic for Claude, DeepSeek for DeepSeek, OpenAI for OpenAI, or your own server.
 - Background work talks only to your own phone's wireless debugging (on the phone itself); its pairing code is read
   from the screen and never saved.
 - Weather comes from Open-Meteo, GitHub from GitHub's public API, lists from your Notion when connected. Web search

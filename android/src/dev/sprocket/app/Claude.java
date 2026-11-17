@@ -30,7 +30,7 @@ final class Claude {
 
     static final String SONNET = "claude-sonnet-5-5", OPUS = "claude-opus-5-5", HAIKU = "claude-haiku-5-5";
 
-    /** Claude's everyday model: Sonnet, or Haiku when they chose the cheapest (11-16: Haiku passed the practice set 63/68). */
+    /** Claude's everyday model: Sonnet, or Haiku when they chose the cheapest (11-16: Haiku passed the practice set, 62 of 68 judged). */
     static String claudeModel() { return Config.haiku ? HAIKU : SONNET; }
     static final String ANTHROPIC = "https://api.anthropic.com";
     static String base = ANTHROPIC;                         // the self-test points it at a stand-in server

@@ -39,9 +39,9 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 
 - **More phones tested.** It's tested on one Samsung phone. Reports from other phones, good or bad, help most.
 - **Setup polish,** from what new users run into.
-- **More cloud brains.** Today the cloud choices are Claude Sonnet (Opus for "think harder") and DeepSeek. Planned:
-  OpenAI (it passed Sprocket's practice set: 53 of 62), other Anthropic models (a cheaper, faster one, for instance)
-  and Google's Gemini, each with its own key, tested with Sprocket's tools before it's offered.
+- **More cloud brains.** Today the cloud choices are Claude (Sonnet, or Haiku to save money; Opus for "think
+  harder"), DeepSeek and OpenAI. Planned: Google's Gemini, with its own key, tested with Sprocket's tools before it's
+  offered.
 
 - **A practice ground.** Sprocket's brain works through hard, made-up phone situations before releases (two contacts
   with the same name, a tool that times out after it worked, a change of mind halfway, a card you cancel), with pretend

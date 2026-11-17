@@ -10,8 +10,8 @@ them about each feature (microphone, contacts, screen control and so on) and the
 do that part for them.
 
 ## Rules
-- **Never ask for, read or store their Claude API key.** They paste it into the phone themselves, on Sprocket's first
-  screen. Don't write any key into a file in this repository, and never commit one.
+- **Never ask for, read or store their API key** (Claude, DeepSeek or OpenAI). They paste it into the phone
+  themselves, on Sprocket's first screen. Don't write any key into a file in this repository, and never commit one.
 - **Ask before installing anything** on their computer (the JDK, the Android SDK, Python packages) and say what it is
   and roughly how big.
 - **Don't grant Sprocket's permissions or switches over adb** (`pm grant`, `settings put secure ...`). The
@@ -21,9 +21,11 @@ do that part for them.
 - Each step below that needs a tap on the phone: tell them exactly what to tap, then wait for them.
 
 ## 1. Ask first
-1. **Which brain?** Claude (they need a Claude API key from console.anthropic.com, paid per use; a Claude.ai
-   subscription doesn't include it), or **their own model** (a server they run that speaks the OpenAI chat API:
-   llama.cpp's server, vLLM, Ollama, LM Studio...).
+1. **Which brain?** **Claude** (a Claude API key from console.anthropic.com, paid per use; a Claude Max plan
+   includes some API credit each month, other Claude.ai plans don't), **DeepSeek** (a key from
+   platform.deepseek.com), **OpenAI** (an API key from platform.openai.com; a ChatGPT subscription doesn't include
+   it), or **their own model** (a server they run that speaks the OpenAI chat API: llama.cpp's server, vLLM, Ollama,
+   LM Studio...).
 2. For their own model: does it run on this computer, and do they use Tailscale?
 
 ## 2. The app: download it (the easy way)
@@ -36,9 +38,9 @@ Only if they'd rather build it themselves (or want to change the code), see "Bui
 downloaded copy and a self-built one are signed with different keys, so neither can update the other.
 
 ## 3. The brain
-**Claude:** tell them to tap **Claude** on Sprocket's first screen. It shows how to get a key (with a button that
-opens the Claude Console), then they paste it and tap **Start**. Sprocket tests the key before going on. Done; skip
-to step 4.
+**Claude, DeepSeek or OpenAI:** tell them to tap that brain on Sprocket's first screen. It shows how to get a key
+(for Claude, with a button that opens the Claude Console), then they paste it and tap **Start**. Sprocket tests the
+key before going on. Done; skip to step 4.
 
 **Their own model:** use the included [go-between](go-between/README.md), on the computer that runs their model.
 1. Their model server must be running. If they have none, suggest Ollama (ollama.com) and a model that supports
