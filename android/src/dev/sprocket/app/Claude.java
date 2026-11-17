@@ -748,7 +748,7 @@ final class Claude {
             + "where it ended up.";
 
     /** The request for that one more turn: its last round as it was (minus empty text, which the API refuses), then the
-     *  nudge on his side. The original request is left as it was. */
+     *  nudge on the user's side. The original request is left as it was. */
     static JSONObject askToSay(JSONObject req, Reply last) throws Exception {
         JSONObject n = new JSONObject(req.toString());
         JSONArray kept = new JSONArray();

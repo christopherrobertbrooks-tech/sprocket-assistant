@@ -86,7 +86,7 @@ public class ScreenTest {
         // a food-order test: deleting the extra item they asked to remove asked again and again on a card.
         // Taking an item out of a food or shopping cart is easy to undo: no card. Account, address, payment: still a card.
         // 11-16: Amazon's notification prompt came up mid-run and Sprocket tapped a choice on its own (Don't allow);
-        // granting an app a permission is his call
+        // granting an app a permission is the owner's call
         String pc = "com.google.android.permissioncontroller";
         eq("Allow on a permission pop-up: card", Screen.needsCard(pc, button("Allow")), true);
         eq("While using the app: card", Screen.needsCard(pc, button("While using the app")), true);
@@ -313,18 +313,18 @@ public class ScreenTest {
             eq("persona: any wording of list-to-store means the cart", persona.contains("Send my grocery list to Walmart"), true);
             eq("persona: never the store app's own list unless named", persona.contains("never copy it into a list inside the store's app"), true);
             // 11-16 "add ... to a list" right after Walmart talk went to go_to "Walmart Lists" and typed into Walmart's list
-            // 11-16 his design: Amazon asks first, one item at a time
-            eq("persona: Amazon asks for anything he shops for, not just the grocery list", persona.contains("anything he shops for on Amazon"), true);
-            // 11-16 the charger went in but the cart was never shown to him
-            eq("persona: Amazon ends on the cart, shown to him", persona.contains("open the Amazon cart, check it, and leave it up for him"), true);
+            // 11-16 the owner's design: Amazon asks first, one item at a time
+            eq("persona: Amazon asks for anything they shop for, not just the grocery list", persona.contains("anything they shop for on Amazon"), true);
+            // 11-16 the charger went in but the cart was never shown to them
+            eq("persona: Amazon ends on the cart, shown to them", persona.contains("open the Amazon cart, check it, and leave it up for them"), true);
             eq("persona: Amazon finds, tells, then asks before each add", persona.contains("At Amazon, ask before each item goes in"), true);
             eq("persona: permission pop-ups get Don't allow and a mention", persona.contains("Permission pop-ups.") && persona.contains("that you said no"), true);
             // 11-16 judged practice: OpenAI asked "which state is that Springfield in?" twice instead of searching
-            eq("persona: a named place is searched as given, asked about only if results don't settle it", persona.contains("search with the name as he said it"), true);
+            eq("persona: a named place is searched as given, asked about only if results don't settle it", persona.contains("search with the name as they said it"), true);
             // 11-17 practice: with one listing matching the name and street, OpenAI still asked "which state?" (no town known)
-            eq("persona: a listing matching the name and street settles it", persona.contains("A listing that matches the name and street he gave settles it"), true);
+            eq("persona: a listing matching the name and street settles it", persona.contains("A listing that matches the name and street they gave settles it"), true);
             eq("persona: not asking which state when a listing matches", persona.contains("don't ask which state or town"), true);
-            eq("persona: adding to his list never opens an app", persona.contains("never open an app or go_to a saved way to add to his list"), true);
+            eq("persona: adding to their list never opens an app", persona.contains("never open an app or go_to a saved way to add to their list"), true);
         } catch (java.io.IOException e) { eq("persona readable", e, ""); }
 
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");

@@ -299,7 +299,7 @@ final class AppNotes {
      * already on your screen" without a look, and no go_to). Looser than find(): his own words, and half of the place's
      * words once the app's name is left out ("spam folder" for "Gmail spam folder").
      */
-    /** Words too common to point at a saved way on their own (his own lists are Sprocket's, not an app's). */
+    /** Words too common to point at a saved way on their own (the owner's own lists are Sprocket's, not an app's). */
     private static final List<String> COMMON = java.util.Arrays.asList("list", "lists", "page", "screen", "app", "open", "go");
 
     String hint(String asked) {

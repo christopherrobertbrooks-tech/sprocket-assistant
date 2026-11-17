@@ -275,8 +275,8 @@ final class Screen {
      * deleting the extra item they'd just asked to remove asked again and again).
      */
     static boolean needsCard(String packageName, Item it) {
-        // 11-16: giving an app a permission (Amazon's notification prompt mid-run) is his call: any answer on Android's
-        // permission pop-up except "Don't allow" waits for his OK
+        // 11-16: giving an app a permission (Amazon's notification prompt mid-run) is the owner's call: any answer on Android's
+        // permission pop-up except "Don't allow" waits for their OK
         if (packageName != null && packageName.endsWith("permissioncontroller"))
             return !it.label.trim().matches("(?i)(don.t allow|deny|no thanks|not now|cancel)\\b.*");
         if (!risky(it)) return false;

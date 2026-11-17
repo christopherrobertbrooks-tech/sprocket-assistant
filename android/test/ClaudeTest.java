@@ -402,15 +402,15 @@ public class ClaudeTest {
             } else {
                 nudgeBody[0] = body.toString();
                 x.stop = "end_turn";
-                x.text = "Flashlight's on, boss.";
+                x.text = "Flashlight's on.";
             }
             return x;
         };
         String told;
-        try { told = Claude.send(new Claude.Brain(Claude.base, "k", false), r2, null, null, (name, in) -> "Flashlight on.").text; }
+        try { told = Claude.send(new Claude.Brain(Claude.base, "k", false, ""), r2, null, null, (name, in) -> "Flashlight on.").text; }
         catch (Exception e) { told = e.getMessage(); }
-        eq("a silent '.' after acting: the extra turn's words are the reply", told, "Flashlight's on, boss.");
-        eq("the extra turn carried the nudge", nudgeBody[0].contains("you finished without telling him anything"), true);
+        eq("a silent '.' after acting: the extra turn's words are the reply", told, "Flashlight's on.");
+        eq("the extra turn carried the nudge", nudgeBody[0].contains("you finished without telling them anything"), true);
         Claude.transport = keep;
 
         // the brain is switched while a tool runs (Codex 040 #6): every round still goes to the brain and key it began with

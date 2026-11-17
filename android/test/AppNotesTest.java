@@ -139,7 +139,7 @@ public class AppNotesTest {
         eq("no hint for something else", r.hint("what's the weather"), "");
         eq("no hint with nothing asked", r.hint(null), "");
         // 11-16: a saved "Walmart list" way was hinted for "Send my grocery list to Walmart" (only "list" matched), and
-        // Sprocket copied his list into Walmart's Favorites instead of the cart
+        // Sprocket copied the list into Walmart's Favorites instead of the cart
         AppNotes w = new AppNotes();
         w.learnRoute("com.walmart.android", "Walmart", "Walmart list", java.util.Arrays.asList(AppNotes.Step.open("open_app", "Walmart"),
                 AppNotes.Step.tap("Walmart", "My Items")), 10);
