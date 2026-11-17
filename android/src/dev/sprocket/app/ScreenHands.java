@@ -560,6 +560,8 @@ public class ScreenHands extends AccessibilityService {
         }
         AccessibilityNodeInfo target = n;
         while (target != null && !target.isClickable()) target = target.getParent();   // a label inside a clickable row
+        AccessibilityNodeInfo sw = n.isCheckable() ? n : checkableIn(target, 0);   // a switch to check afterwards (11-16)
+        boolean swBefore = sw != null && sw.isChecked();
         boolean done = target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK);
         if (!done && finger) {   // a finger on the same spot, only on the screen it was read from, and only when the
             stillThere(n, 0);    // spot is the item itself (11-12: a failed click's finger landed on a recent search)
@@ -570,7 +572,27 @@ public class ScreenHands extends AccessibilityService {
             done = gesture(r.centerX(), r.centerY(), r.centerX(), r.centerY(), 60);
         }
         if (!done) throw new Exception("the tap didn't go through");
-        return settleAndRead();
+        String screen = settleAndRead();
+        if (sw != null) {
+            String label = it.label.isEmpty() ? it.role : it.label;
+            String note = Screen.switchNote(label, swBefore, sw.refresh() ? sw.isChecked() : null);
+            if (note != null) {
+                android.util.Log.i("Sprocket", "switch unchanged after a tap (kinds only)");
+                return note + "\n" + screen;
+            }
+        }
+        return screen;
+    }
+
+    /** A switch inside a tapped row (a settings row's toggle), a few levels down at most; null for none. */
+    private static AccessibilityNodeInfo checkableIn(AccessibilityNodeInfo n, int depth) {
+        if (n == null || depth > 3) return null;
+        if (n.isCheckable()) return n;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo c = checkableIn(n.getChild(i), depth + 1);
+            if (c != null) return c;
+        }
+        return null;
     }
 
     /** True unless something else tappable is drawn over the item's middle, where a finger would land (Screen.onTop). */

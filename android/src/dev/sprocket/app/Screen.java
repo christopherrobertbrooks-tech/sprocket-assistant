@@ -478,6 +478,17 @@ final class Screen {
         return null;
     }
 
+    /**
+     * What to tell the brain after tapping a switch (or a row with one in it): nothing when it changed or can't be read
+     * again; else that it didn't change (11-16: cloud brains tapped Dark mode, Bigger text and Battery saver and believed
+     * they were on when they weren't). after: the switch's state read again once the screen settled (null = gone).
+     */
+    static String switchNote(String label, boolean before, Boolean after) {
+        if (after == null || after != before) return null;
+        return "The switch \u201c" + label + "\u201d still shows " + (after ? "ON" : "OFF")
+                + ": the tap didn't change it. Look at the screen: a pop-up may need an answer, or tap it again.";
+    }
+
     /** At most this many back presses while looking for a saved way's first button. */
     static final int START_BACKS = 2;
 

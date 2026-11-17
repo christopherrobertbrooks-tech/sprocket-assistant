@@ -16,6 +16,12 @@ public class ScreenTest {
     static Screen.Item button(String label) { return new Screen.Item("button", label, true, false, false, false, false); }
 
     public static void main(String[] a) {
+        // 11-16: cloud brains tapped Dark mode / Bigger text / Battery saver and believed they'd changed; they hadn't
+        eq("a switch that changed: no note", Screen.switchNote("Dark mode", false, true), null);
+        eq("a switch that didn't change: said plainly", Screen.switchNote("Dark mode", false, false),
+                "The switch \u201cDark mode\u201d still shows OFF: the tap didn't change it. Look at the screen: a pop-up may need an answer, or tap it again.");
+        eq("still on", Screen.switchNote("Battery saver", true, true).contains("still shows ON"), true);
+        eq("no switch read after: no note", Screen.switchNote("Dark mode", false, null), null);
         // 11-16: the glow asked "is the hidden screen there?" from the main thread, where Android refuses sockets; the
         // failure read as "no hidden screen" and the hands worked on his real screen (pressed Home, scrolled his apps).
         eq("main thread never asks the helper", Screen.bgMayAsk(true, 100_000, 0), false);
