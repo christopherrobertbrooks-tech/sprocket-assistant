@@ -736,6 +736,32 @@ final class Claude {
     // The hands (stage 1) take a step per tap or scroll, so a question that uses the screen gets more rounds: plenty on
     // Qwen (free), fewer on Claude (every round re-sends the whole prompt, at a price).
     static final int SCREEN_ROUNDS_QWEN = 40, SCREEN_ROUNDS_CLAUDE = 12;
+    /**
+     * 11-16 (judged practice): Haiku did the work four times and ended its turn with no words, so nothing was said.
+     * A reply is silent when it is empty or only punctuation; after tools, a silent finish gets one more turn.
+     */
+    static boolean silent(String text) { return text == null || text.replaceAll("[\\p{Punct}\\s]", "").isEmpty(); }
+
+    static final String SAY_WHAT_YOU_DID = "(Sprocket: you finished without telling them anything. In a sentence or two, "
+            + "tell them what you did and what's left for them to do. No more tools.)";
+    static final String DONE_SILENTLY = "I finished the steps but didn't get my words back: check the screen to see "
+            + "where it ended up.";
+
+    /** The request for that one more turn: its last round as it was (minus empty text, which the API refuses), then the
+     *  nudge on his side. The original request is left as it was. */
+    static JSONObject askToSay(JSONObject req, Reply last) throws Exception {
+        JSONObject n = new JSONObject(req.toString());
+        JSONArray kept = new JSONArray();
+        for (int i = 0; i < last.content.length(); i++) {
+            JSONObject b = last.content.getJSONObject(i);
+            if ("text".equals(b.optString("type")) && b.optString("text").trim().isEmpty()) continue;
+            kept.put(new JSONObject(b.toString()));
+        }
+        if (kept.length() > 0) n.getJSONArray("messages").put(new JSONObject().put("role", "assistant").put("content", kept));
+        n.getJSONArray("messages").put(new JSONObject().put("role", "user").put("content", SAY_WHAT_YOU_DID));
+        return n;
+    }
+
     static final String OUT_OF_STEPS = "That took more steps than I'm allowed. I stopped partway; ask again and I'll pick it up.";
 
     static int roundLimit(boolean usedScreen, boolean onOwn) {
@@ -909,7 +935,21 @@ final class Claude {
                 break;
             }
         }
-        if (total.text.isEmpty() && !acted) throw new Exception("Claude sent no answer");   // acted silently: not an error
+        if (total.text.isEmpty() && !acted) throw new Exception("Claude sent no answer");
+        if (acted && silent(total.text) && !(tools != null && tools.stopped())) {   // did the work, said nothing (11-16)
+            Reply said = null;
+            try { said = onceRetrying(b, askToSay(req, total), l, cancel, null); } catch (Exception ignored) { }
+            if (said != null && !silent(said.text) && said.calls.isEmpty()) {
+                said.add(total);
+                total = said;
+            } else {
+                total.text = DONE_SILENTLY;
+                if (l != null) {
+                    l.text(DONE_SILENTLY);
+                    for (String s : DONE_SILENTLY.split("(?<=[.!?:])\\s+")) l.sentence(s, "");
+                }
+            }
+        }
         return total;
     }
 
