@@ -76,6 +76,14 @@ public class ScreenTest {
         eq("Sprocket's own screen says how to get out of it", Screen.OWN_SCREEN.contains("open_app"), true);
         // a food-order test: deleting the extra item they asked to remove asked again and again on a card.
         // Taking an item out of a food or shopping cart is easy to undo: no card. Account, address, payment: still a card.
+        // 11-16: Amazon's notification prompt came up mid-run and Sprocket tapped a choice on its own (Don't allow);
+        // granting an app a permission is his call
+        String pc = "com.google.android.permissioncontroller";
+        eq("Allow on a permission pop-up: card", Screen.needsCard(pc, button("Allow")), true);
+        eq("While using the app: card", Screen.needsCard(pc, button("While using the app")), true);
+        eq("Only this time: card", Screen.needsCard("com.android.permissioncontroller", button("Only this time")), true);
+        eq("Don't allow: no card (the safe answer)", Screen.needsCard(pc, button("Don\u2019t allow")), false);
+        eq("Allow in an ordinary app's own screen: as before", Screen.needsCard("com.walmart.android", button("Allow substitutions")), false);
         eq("Delete Item in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Delete Item")), false);
         eq("Remove in a food app's cart: no card", Screen.needsCard("dev.playground.eats", button("Remove Onion Rings")), false);
         eq("Delete account in DoorDash: card", Screen.needsCard("com.dd.doordash", button("Delete account")), true);
@@ -289,6 +297,7 @@ public class ScreenTest {
             // 11-16 his design: Amazon asks first, one item at a time
             eq("persona: Amazon asks for anything he shops for, not just the grocery list", persona.contains("anything he shops for on Amazon"), true);
             eq("persona: Amazon finds, tells, then asks before each add", persona.contains("At Amazon, ask before each item goes in"), true);
+            eq("persona: permission pop-ups get Don't allow and a mention", persona.contains("Permission pop-ups.") && persona.contains("that you said no"), true);
             eq("persona: adding to his list never opens an app", persona.contains("never open an app or go_to a saved way to add to his list"), true);
         } catch (java.io.IOException e) { eq("persona readable", e, ""); }
 
