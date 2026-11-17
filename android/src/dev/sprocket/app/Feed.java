@@ -143,7 +143,7 @@ final class Feed {
             facts.append("\nTheir news topics (search the web, last two days): ").append(String.join("; ", f.topics)).append('\n');
         }
         facts.append("\nSections they want: ").append(want.isEmpty() ? "none (a bottom line only)" : String.join(", ", want)).append('.');
-        JSONObject req = new JSONObject().put("model", Config.own ? Config.model() : Claude.SONNET).put("max_tokens", 2500).put("stream", true)
+        JSONObject req = new JSONObject().put("model", Config.own ? Config.model() : Claude.claudeModel()).put("max_tokens", 2500).put("stream", true)
                 .put("system", WRITER)
                 .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", facts.toString())));
         if (news)

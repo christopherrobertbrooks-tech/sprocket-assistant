@@ -53,6 +53,15 @@ public class ClaudeTest {
         c.add("user", "and tomorrow?", 3);
         JSONObject r = Claude.request("PERSONA", null, null, "Friday, October 17, 2026, 3:10 AM", HERE, c.window(24), false);
         eq("normal = Sonnet", r.getString("model"), Claude.SONNET);
+        // 11-16 Haiku 5.5 as a Claude choice (passed the practice set 63/68): same key, cheapest; think harder stays Opus
+        Config.haiku = true;
+        eq("haiku chosen: normal = Haiku", Claude.request("P", null, null, "now", HERE, c.window(24), false).getString("model"), "claude-haiku-5-5");
+        eq("haiku chosen: think harder = Opus", Claude.request("P", null, null, "now", HERE, c.window(24), true).getString("model"), Claude.OPUS);
+        eq("haiku chosen: the brain line says Haiku", Claude.brainNowClaude(false).contains("Haiku"), true);
+        Config.haiku = false;
+        eq("haiku price (anthropic pricing page 11-16)", java.util.Arrays.toString(Claude.price("claude-haiku-5-5")), java.util.Arrays.toString(new double[]{0.10, 0.50, 0.125, 0.01, 0.01}));
+        eq("sonnet price unchanged", java.util.Arrays.toString(Claude.price(Claude.SONNET)), java.util.Arrays.toString(new double[]{2, 10, 2.50, 0.10, 0.01}));
+        eq("haiku off: Sonnet again", Claude.request("P", null, null, "now", HERE, c.window(24), false).getString("model"), Claude.SONNET);
         eq("streamed", r.optBoolean("stream", false), true);
         eq("room for thinking + a short answer", r.getInt("max_tokens"), 2000);
         eq("fast: low effort", r.getJSONObject("output_config").getString("effort"), "low");

@@ -18,6 +18,7 @@ final class Config {
 
     static boolean own;                                  // not Claude: DeepSeek or their own server
     static boolean deep;                                 // with own: the brain is DeepSeek (its own key), not their server
+    static boolean haiku;                                // Claude's everyday model is Haiku (cheapest), not Sonnet
     static boolean oa;                                   // with own: the brain is OpenAI (its own key)
     static String ownName = "", ownBase = "", ownModel = "";
     static String voiceOut = "", voiceIn = "";           // POST /speak {text, mood} -> audio; OpenAI-style /v1/audio/transcriptions
@@ -171,7 +172,7 @@ final class Config {
 
     static String toJson() {
         try {
-            return new JSONObject().put("own", own).put("deep", deep).put("oa", oa).put("own_name", ownName).put("own_base", ownBase).put("own_model", ownModel)
+            return new JSONObject().put("own", own).put("deep", deep).put("oa", oa).put("haiku", haiku).put("own_name", ownName).put("own_base", ownBase).put("own_model", ownModel)
                     .put("voice_out", voiceOut).put("voice_in", voiceIn).put("home_dash", homeDash).put("home_stats", homeStats)
                     .put("home_hands", homeHands).put("studio", studio).put("github", github).put("call_hours", callHours).put("off", new JSONArray(new java.util.ArrayList<>(off)))
                     .toString();
@@ -192,6 +193,7 @@ final class Config {
         own = o.optBoolean("own", own);
         deep = o.optBoolean("deep", deep);
         oa = o.optBoolean("oa", oa);
+        haiku = o.optBoolean("haiku", haiku);
         ownName = o.optString("own_name", ownName);
         ownBase = server(o, "own_base", ownBase);
         ownModel = o.optString("own_model", ownModel);

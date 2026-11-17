@@ -28,7 +28,10 @@ import java.util.regex.Pattern;
 final class Claude {
     private Claude() { }
 
-    static final String SONNET = "claude-sonnet-5-5", OPUS = "claude-opus-5-5";
+    static final String SONNET = "claude-sonnet-5-5", OPUS = "claude-opus-5-5", HAIKU = "claude-haiku-5-5";
+
+    /** Claude's everyday model: Sonnet, or Haiku when they chose the cheapest (11-16: Haiku passed the practice set 63/68). */
+    static String claudeModel() { return Config.haiku ? HAIKU : SONNET; }
     static final String ANTHROPIC = "https://api.anthropic.com";
     static String base = ANTHROPIC;                         // the self-test points it at a stand-in server
 
@@ -62,7 +65,7 @@ final class Claude {
     }
 
     static String brainNowClaude(boolean harder) {
-        return "Your brain right now is Claude " + (harder ? "Opus" : "Sonnet") + " (Anthropic's API, from their credits).";
+        return "Your brain right now is Claude " + (harder ? "Opus" : Config.haiku ? "Haiku" : "Sonnet") + " (Anthropic's API, from their credits).";
     }
 
     /** The line for the brain that's really answering (the backup took over from another one). */
@@ -164,6 +167,7 @@ final class Claude {
         if (model != null && model.startsWith("gpt-6.1-sol"))   // OpenAI's pricing page, 2026-11-15 (Standard, short context)
             return new double[]{2.00, 10.00, 2.50, 0.10, 0.01};   // cache write: the 30-minute rate (Codex 049 #4)
         if (model == null || !model.startsWith("claude")) return new double[]{0, 0, 0, 0, 0};
+        if (HAIKU.equals(model)) return new double[]{0.10, 0.50, 0.125, 0.01, 0.01};   // pricing page 11-16 (prompts up to 100K)
         return OPUS.equals(model) ? new double[]{4, 20, 5, 0.20, 0.01} : new double[]{2, 10, 2.50, 0.10, 0.01};
     }
 
@@ -278,7 +282,7 @@ final class Claude {
 
     static JSONObject request(String persona, String about, String memory, String now, Where where, List<Chat.Turn> history,
                               boolean harder) throws Exception {
-        String model = Config.own ? Config.model() : harder ? OPUS : SONNET;
+        String model = Config.own ? Config.model() : harder ? OPUS : claudeModel();
         JSONObject who = new JSONObject().put("type", "text").put("text", persona);
         if (!harder) who.put("cache_control", new JSONObject().put("type", "ephemeral"));
         JSONArray system = new JSONArray().put(who);
@@ -602,7 +606,7 @@ final class Claude {
             h.setRequestProperty("content-type", "application/json");
             JSONObject req = oa ? new JSONObject().put("model", b.model).put("input", "Hi").put("max_output_tokens", 16).put("store", false)
                     .put("reasoning", new JSONObject().put("effort", "low"))
-                    : new JSONObject().put("model", b.own ? b.model : SONNET).put("max_tokens", 1)
+                    : new JSONObject().put("model", b.own ? b.model : claudeModel()).put("max_tokens", 1)
                     .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", "Hi")));
             try (OutputStream o = h.getOutputStream()) { o.write(req.toString().getBytes(StandardCharsets.UTF_8)); }
             int code = h.getResponseCode();
@@ -842,7 +846,7 @@ final class Claude {
     static Reply send(Brain b, JSONObject req, Listener l, HttpURLConnection[] cancel, Tools tools) throws Exception {
         String model = req.optString("model");   // the model goes with the brain the question started on
         if (b.own && !b.model.equals(model)) { req.put("model", b.model); retarget(req, b); }
-        else if (!b.own && !model.startsWith("claude")) { req.put("model", SONNET); retarget(req, b); }
+        else if (!b.own && !model.startsWith("claude")) { req.put("model", claudeModel()); retarget(req, b); }
         Reply total = null;
         boolean acted = false, usedScreen = false;
         QuietSteps quiet = l == null ? null : new QuietSteps(l);
