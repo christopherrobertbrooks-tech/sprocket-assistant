@@ -268,7 +268,7 @@ public class MainActivity extends Activity {
         try {
             Chat.Turn t = chat.add("assistant", b.toJson(), b.at);
             t.kind = "feed";
-            t.model = Config.own ? Config.model() : Claude.SONNET;
+            t.model = Config.own ? Config.model() : Claude.claudeModel();
             t.cost = b.cost;
             synchronized (feed) { feed.keep(b); saveFeed(); }
         } catch (Exception e) {
@@ -1154,7 +1154,7 @@ public class MainActivity extends Activity {
             row.setOrientation(LinearLayout.VERTICAL);
             row.addView(feedCard(fb));
             TextView meta = text("Morning brief  \u00b7  " + (ownModel(t.model) ? Claude.ownName() + (Claude.paid(t.model) ? String.format(Locale.US, "  \u00b7  $%.2f", t.cost) : "  \u00b7  free")
-                    : "Sonnet  \u00b7  " + String.format(Locale.US, "$%.2f", t.cost)), 11, FAINT);
+                    : (Claude.HAIKU.equals(t.model) ? "Haiku" : "Sonnet") + "  \u00b7  " + String.format(Locale.US, "$%.2f", t.cost)), 11, FAINT);
             meta.setPadding(dp(8), dp(3), 0, 0);
             row.addView(meta);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -1240,7 +1240,7 @@ public class MainActivity extends Activity {
     private static String meta(Chat.Turn t) {
         if (ownModel(t.model) && Claude.paid(t.model)) return Claude.nameFor(t.model) + String.format(Locale.US, "  ·  $%.4f", t.cost);
         if (ownModel(t.model)) return Claude.nameFor(t.model) + ", your server  ·  free";
-        String who = Claude.OPUS.equals(t.model) ? "Opus, thinking harder" : "Sonnet";
+        String who = Claude.OPUS.equals(t.model) ? "Opus, thinking harder" : Claude.HAIKU.equals(t.model) ? "Haiku" : "Sonnet";
         return who + String.format(Locale.US, "  ·  $%.4f", t.cost);
     }
 
@@ -1772,6 +1772,26 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams top = new LinearLayout.LayoutParams(-2, dp(38));
         top.setMargins(0, dp(8), 0, 0);
         c.addView(claudeKey, top);
+        final boolean[] hk = {Config.haiku};   // Claude's everyday model (11-16: Haiku passed the practice set, 63 of 68)
+        LinearLayout claudeModel = new LinearLayout(this);
+        claudeModel.setPadding(0, dp(8), 0, 0);
+        Button sonnetB = button("Sonnet", !hk[0]), haikuB = button("Haiku (cheapest)", hk[0]);
+        claudeModel.addView(sonnetB, new LinearLayout.LayoutParams(-2, dp(38)));
+        LinearLayout.LayoutParams gap3 = new LinearLayout.LayoutParams(-2, dp(38));
+        gap3.setMargins(dp(10), 0, 0, 0);
+        claudeModel.addView(haikuB, gap3);
+        c.addView(claudeModel);
+        c.addView(text("Claude's model, same key: Sonnet is smarter; Haiku costs about a twentieth as much. \"Think harder\" "
+                + "always uses Opus.", 12, FAINT));
+        Runnable showModel = () -> {
+            for (Object[] b : new Object[][]{{sonnetB, !hk[0]}, {haikuB, hk[0]}}) {
+                ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
+                ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
+            }
+        };
+        sonnetB.setOnClickListener(v -> { hk[0] = false; showModel.run(); });
+        haikuB.setOnClickListener(v -> { hk[0] = true; showModel.run(); });
+        showModel.run();
         Runnable showBrain = () -> {                       // all stay on show: the others are the backups (11-13, 11-15)
             boolean onClaude = !own[0], onDeep = own[0] && ds[0], onOa = own[0] && oa[0], onMine = own[0] && !ds[0] && !oa[0];
             deepLabel.setText(onDeep ? "DeepSeek" : "DeepSeek, as a backup (optional)");
@@ -1853,6 +1873,7 @@ public class MainActivity extends Activity {
                 Config.own = own[0];
                 Config.deep = own[0] && ds[0];
                 Config.oa = own[0] && oa[0];
+                Config.haiku = hk[0];
                 if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
                 if (!oaKey.getText().toString().trim().isEmpty()) prefs().openAiKey(oaKey.getText().toString());
                 Config.ownName = name.getText().toString().trim();
@@ -2328,7 +2349,7 @@ public class MainActivity extends Activity {
         Claude.Brain b = brain();
         new Thread(() -> {
             try {
-                JSONObject req = new JSONObject().put("model", b.own ? b.model : Claude.SONNET).put("max_tokens", 400)
+                JSONObject req = new JSONObject().put("model", b.own ? b.model : Claude.claudeModel()).put("max_tokens", 400)
                         .put("stream", true).put("messages", new JSONArray().put(new JSONObject().put("role", "user")
                                 .put("content", AppNotes.routePrompt(asked, t.steps, t.end, said))));
                 AppNotes.Choice ch = AppNotes.choice(Claude.send(b, req, null, null, null).text, t.steps.size());
