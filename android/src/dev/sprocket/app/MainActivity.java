@@ -1303,8 +1303,8 @@ public class MainActivity extends Activity {
             + "(https://my-computer.my-tailnet.ts.net:8448), another https:// one, or a home-network one "
             + "(http://192.168.1.50:8048: only at home, and unencrypted). The README shows how to set each one up.";
     // Codex's review 2026-11-12: a newcomer needs the steps, and the surprise said up front.
-    static final String CLAUDE_KEY_HOW = "How to get one: 1. Sign in at console.anthropic.com. A Claude.ai subscription doesn't "
-            + "cover this: the API is paid separately, for what you use. 2. Under Billing, add a little credit (and set a "
+    static final String CLAUDE_KEY_HOW = "How to get one: 1. Sign in at console.anthropic.com. The API is paid for what you use; a "
+            + "Claude Max plan includes some API credit each month, other Claude.ai plans don't. 2. Under Billing, add a little credit (and set a "
             + "monthly limit under Limits, if you like). 3. Under API keys, create a key, copy it and paste it here. It stays "
             + "on this phone.";
     static final String CONSOLE_KEYS = "https://console.anthropic.com/settings/keys";
@@ -1333,9 +1333,9 @@ public class MainActivity extends Activity {
         final boolean[] ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};
         LinearLayout claude = option("Claude", "Anthropic's AI. Needs a Claude key; you pay Anthropic for what you use.");
         LinearLayout deep = option("DeepSeek", "DeepSeek's AI. Needs a DeepSeek key; you pay DeepSeek for what you use, usually "
-                + "well under a cent a question. Tested with Sprocket's practice set: 59 of 62.");
+                + "well under a cent a question. Tested with Sprocket's practice set: 68 of 68.");
         LinearLayout openai = option("OpenAI", "OpenAI's API (not a ChatGPT subscription). Needs an OpenAI API key; you pay "
-                + "OpenAI for what you use. Tested with Sprocket's practice set: 53 of 62.");
+                + "OpenAI for what you use. Tested with Sprocket's practice set: 64 of 68.");
         LinearLayout mine = option("Your own server", "A model you run yourself, through the included go-between or anything "
                 + "that speaks Anthropic's Messages API. Tested with Qwen.");
         LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(-1, -2);
@@ -1772,7 +1772,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams top = new LinearLayout.LayoutParams(-2, dp(38));
         top.setMargins(0, dp(8), 0, 0);
         c.addView(claudeKey, top);
-        final boolean[] hk = {Config.haiku};   // Claude's everyday model (11-16: Haiku passed the practice set, 63 of 68)
+        final boolean[] hk = {Config.haiku};   // Claude's everyday model (11-16: Haiku passed the practice set, 62 of 68 judged)
         LinearLayout claudeModel = new LinearLayout(this);
         claudeModel.setPadding(0, dp(8), 0, 0);
         Button sonnetB = button("Sonnet", !hk[0]), haikuB = button("Haiku (cheapest)", hk[0]);
