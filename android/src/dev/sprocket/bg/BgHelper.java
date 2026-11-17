@@ -215,7 +215,7 @@ public final class BgHelper {
         return out;
     }
 
-    /** An app's windows to close before Sprocket opens it fresh: his out of sight, then all on the hidden screen. Plain Java. */
+    /** An app's windows to close before Sprocket opens it fresh: the owner's out of sight, then all on the hidden screen. Plain Java. */
     public static List<String> leftovers(String stackList, String pkg, int hidden) {
         List<String> out = new ArrayList<>(tasksOf(stackList, pkg, 0, false));
         out.addAll(tasksOf(stackList, pkg, hidden, false));
@@ -243,8 +243,8 @@ public final class BgHelper {
                 workPkg = pkgOf(rest);
                 if (!workPkg.isEmpty()) {
                     // 11-16: Walmart pulled its old, out-of-sight window up on the real screen mid-run, and each start
-                    // left another window (7 piled up in his recent apps). The app's leftovers close first: the hidden
-                    // screen's, and his he isn't looking at; one they have in front of them stays. One fresh window follows.
+                    // left another window (7 piled up in the recent apps). The app's leftovers close first: the hidden
+                    // screen's, and the owner's they aren't looking at; one they have in front of them stays. One fresh window follows.
                     String list = sh(Arrays.asList("am", "stack", "list"));
                     hisOwn = !tasksOf(list, workPkg, 0, true).isEmpty();
                     for (String t : leftovers(list, workPkg, display)) sh(Arrays.asList("am", "stack", "remove", t));
