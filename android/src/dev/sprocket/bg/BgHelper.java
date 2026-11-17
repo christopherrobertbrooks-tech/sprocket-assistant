@@ -168,6 +168,71 @@ public final class BgHelper {
         }
     }
 
+    /** The app Sprocket is working in on the hidden screen, and whether they had it in front of them when it started. */
+    static volatile String workPkg = "";
+    static volatile boolean hisOwn;
+
+    /**
+     * After a step: if the app threw a window up on the real screen (and they didn't have it open there themselves), it goes
+     * back to the hidden screen. Waits a moment for the app to finish starting it. The step's own answer is returned.
+     */
+    static String pullBack(String reply) {
+        if (workPkg.isEmpty() || hisOwn) return reply;
+        try {
+            Thread.sleep(300);
+            String list = sh(Arrays.asList("am", "stack", "list"));
+            for (String t : tasksOf(list, workPkg, 0, true)) {
+                sh(Arrays.asList("am", "display", "move-stack", t, String.valueOf(display)));
+                System.out.println("pulled " + workPkg + " back off the real screen");
+            }
+        } catch (Exception e) {
+            System.out.println("pull back: " + e);
+        }
+        return reply;
+    }
+
+    /**
+     * The root tasks of an app on a display, from "am stack list": visible (in front of them) or not. Plain Java (the
+     * desktop tests).
+     */
+    public static List<String> tasksOf(String stackList, String pkg, int onDisplay, boolean visible) {
+        List<String> out = new ArrayList<>();
+        String root = null;
+        int disp = -1;
+        java.util.regex.Pattern rp = java.util.regex.Pattern.compile("^RootTask id=(\\d+).*\\bdisplayId=(\\d+)");
+        for (String line : stackList.split("\n")) {
+            java.util.regex.Matcher m = rp.matcher(line);
+            if (m.find()) { root = m.group(1); disp = Integer.parseInt(m.group(2)); continue; }
+            String t = line.trim();
+            if (root == null || disp != onDisplay || !t.startsWith("taskId=")) continue;
+            int colon = t.indexOf(": "), slash = t.indexOf('/');
+            if (colon < 0 || slash < colon) continue;
+            if (t.substring(colon + 2, slash).equals(pkg) && t.contains(" visible=" + visible + " ")) {
+                if (!out.contains(root)) out.add(root);
+            }
+            root = null;   // a root task's first (top) task decides
+        }
+        return out;
+    }
+
+    /** An app's windows to close before Sprocket opens it fresh: the owner's out of sight, then all on the hidden screen. Plain Java. */
+    public static List<String> leftovers(String stackList, String pkg, int hidden) {
+        List<String> out = new ArrayList<>(tasksOf(stackList, pkg, 0, false));
+        out.addAll(tasksOf(stackList, pkg, hidden, false));
+        out.addAll(tasksOf(stackList, pkg, hidden, true));
+        return out;
+    }
+
+    /** The app an "am start" names ("-n pkg/cls" or "-p pkg"), "" for none. Plain Java. */
+    public static String pkgOf(String amArgs) {
+        String[] w = amArgs.trim().split("\\s+");
+        for (int i = 0; i + 1 < w.length; i++) {
+            if (w[i].equals("-n")) { int s = w[i + 1].indexOf('/'); return s > 0 ? w[i + 1].substring(0, s) : ""; }
+            if (w[i].equals("-p")) return w[i + 1];
+        }
+        return "";
+    }
+
     static String run(String cmd) throws Exception {
         String[] a = cmd.split(" ", 2);
         String rest = a.length > 1 ? a[1] : "";
@@ -175,13 +240,22 @@ public final class BgHelper {
             case "ping": return "display " + display;
             case "quit": return "bye";
             case "start": {   // a fresh task on the hidden screen (never moves one of theirs off the real screen)
+                workPkg = pkgOf(rest);
+                if (!workPkg.isEmpty()) {
+                    // 11-16: Walmart pulled its old, out-of-sight window up on the real screen mid-run, and each start
+                    // left another window (7 piled up in the recent apps). The app's leftovers close first: the hidden
+                    // screen's, and the owner's they aren't looking at; one they have in front of them stays. One fresh window follows.
+                    String list = sh(Arrays.asList("am", "stack", "list"));
+                    hisOwn = !tasksOf(list, workPkg, 0, true).isEmpty();
+                    for (String t : leftovers(list, workPkg, display)) sh(Arrays.asList("am", "stack", "remove", t));
+                }
                 List<String> c = new ArrayList<>(Arrays.asList("am", "start", "--display", String.valueOf(display), "-f", "0x18000000"));
                 c.addAll(Arrays.asList(rest.split(" ")));
                 return sh(c);
             }
-            case "tap": return sh(Arrays.asList(("input -d " + display + " tap " + rest).split(" ")));
-            case "swipe": return sh(Arrays.asList(("input -d " + display + " swipe " + rest).split(" ")));
-            case "key": return sh(Arrays.asList(("input -d " + display + " keyevent " + rest).split(" ")));
+            case "tap": return pullBack(sh(Arrays.asList(("input -d " + display + " tap " + rest).split(" "))));
+            case "swipe": return pullBack(sh(Arrays.asList(("input -d " + display + " swipe " + rest).split(" "))));
+            case "key": return pullBack(sh(Arrays.asList(("input -d " + display + " keyevent " + rest).split(" "))));
             case "shot": return shot(rest);
             case "show": {   // the hidden screen's top app onto the real screen (an order's cart, for their checkout tap)
                 String list = sh(Arrays.asList("am", "stack", "list"));

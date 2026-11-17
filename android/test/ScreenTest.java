@@ -16,6 +16,12 @@ public class ScreenTest {
     static Screen.Item button(String label) { return new Screen.Item("button", label, true, false, false, false, false); }
 
     public static void main(String[] a) {
+        // 11-16: cloud brains tapped Dark mode / Bigger text / Battery saver and believed they'd changed; they hadn't
+        eq("a switch that changed: no note", Screen.switchNote("Dark mode", false, true), null);
+        eq("a switch that didn't change: said plainly", Screen.switchNote("Dark mode", false, false),
+                "The switch \u201cDark mode\u201d still shows OFF: the tap didn't change it. Look at the screen: a pop-up may need an answer, or tap it again.");
+        eq("still on", Screen.switchNote("Battery saver", true, true).contains("still shows ON"), true);
+        eq("no switch read after: no note", Screen.switchNote("Dark mode", false, null), null);
         // 11-16: the glow asked "is the hidden screen there?" from the main thread, where Android refuses sockets; the
         // failure read as "no hidden screen" and the hands worked on his real screen (pressed Home, scrolled his apps).
         eq("main thread never asks the helper", Screen.bgMayAsk(true, 100_000, 0), false);
@@ -40,6 +46,9 @@ public class ScreenTest {
         eq("a greyed-out item says so, and the list says what that means", Screen.describe("Settings", Arrays.asList(grey)),
                 "Screen of Settings:\n[1] switch \"Use Battery Saver\" (on) (greyed out)\n" + Screen.GREYED);
         eq("an item is usable unless told otherwise", button("OK").enabled, true);
+        // 11-17 practice (OpenAI h08): Battery Saver greyed out, no reason on screen -> "the screen doesn't say why"; the
+        // reason (charging) is one phone_status away
+        eq("greyed out with no reason shown: phone_status says if it's charging", Screen.GREYED.contains("phone_status"), true);
         eq("a tap on a greyed-out item is refused, saying why", Screen.refuseTap("com.android.settings", grey) != null
                 && Screen.refuseTap("com.android.settings", grey).contains("greyed out"), true);
         eq("the greyed-out note tells it not to claim the change", Screen.GREYED.contains("can't be changed right now"), true);
@@ -76,6 +85,14 @@ public class ScreenTest {
         eq("Sprocket's own screen says how to get out of it", Screen.OWN_SCREEN.contains("open_app"), true);
         // a food-order test: deleting the extra item they asked to remove asked again and again on a card.
         // Taking an item out of a food or shopping cart is easy to undo: no card. Account, address, payment: still a card.
+        // 11-16: Amazon's notification prompt came up mid-run and Sprocket tapped a choice on its own (Don't allow);
+        // granting an app a permission is the owner's call
+        String pc = "com.google.android.permissioncontroller";
+        eq("Allow on a permission pop-up: card", Screen.needsCard(pc, button("Allow")), true);
+        eq("While using the app: card", Screen.needsCard(pc, button("While using the app")), true);
+        eq("Only this time: card", Screen.needsCard("com.android.permissioncontroller", button("Only this time")), true);
+        eq("Don't allow: no card (the safe answer)", Screen.needsCard(pc, button("Don\u2019t allow")), false);
+        eq("Allow in an ordinary app's own screen: as before", Screen.needsCard("com.walmart.android", button("Allow substitutions")), false);
         eq("Delete Item in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Delete Item")), false);
         eq("Remove in a food app's cart: no card", Screen.needsCard("dev.playground.eats", button("Remove Onion Rings")), false);
         eq("Delete account in DoorDash: card", Screen.needsCard("com.dd.doordash", button("Delete account")), true);
@@ -105,6 +122,16 @@ public class ScreenTest {
         eq("find: the list itself never counts", Screen.findItem(menu, ""), -1);
         eq("find: more below", Screen.moreBelow(menu), true);
         eq("find: at the bottom", Screen.moreBelow(Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "at the bottom"))), false);
+        // 11-17 practice (Haiku, m06): it tapped the Turkey Club and ran find "pickle" in the same step, so find ran on the
+        // Turkey Club page (no list at all) and answered "looked from the top to the bottom" -> it said the deli
+        // doesn't sell pickles. A screen with nothing that scrolls was never a full look at the menu.
+        List<Screen.Item> itemPage = Arrays.asList(button("Turkey Club"), button("Add 1 to cart · $10.99"));
+        eq("find: a page with no list has no list", Screen.hasList(itemPage), false);
+        eq("find: a menu has a list", Screen.hasList(menu), true);
+        eq("find miss after a full look says so", Screen.findMiss("pickle", true).contains("from the top to the bottom"), true);
+        eq("find miss on a page with no list never claims a full look", Screen.findMiss("pickle", false).contains("top to the bottom"), false);
+        eq("find miss on a page with no list sends it back to the list", Screen.findMiss("pickle", false).contains("go back"), true);
+        eq("find miss on a page with no list forbids 'not sold'", Screen.findMiss("pickle", false).contains("Don't tell them it isn't there"), true);
         // lunch budgets: to see the real total (delivery, tax, tip) Sprocket must open checkout; that doesn't
         // charge anything, so in a food or shopping app it needs no card. Placing the order always does.
         eq("Go to checkout in a food app: no card", Screen.needsCard("dev.playground.eats", button("Go to checkout")), false);
@@ -282,6 +309,22 @@ public class ScreenTest {
             String persona = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/assets/persona.md")), "UTF-8");
             eq("persona: stuck in an app, search with this phone's details", persona.contains("Stuck in an app") && persona.contains("This phone"), true);
             eq("persona: one conversation's look is in its own menu", persona.contains("that conversation's own menu"), true);
+            // 11-16 "Send my grocery list to Walmart" copied it into Walmart's own list instead of the cart
+            eq("persona: any wording of list-to-store means the cart", persona.contains("Send my grocery list to Walmart"), true);
+            eq("persona: never the store app's own list unless named", persona.contains("never copy it into a list inside the store's app"), true);
+            // 11-16 "add ... to a list" right after Walmart talk went to go_to "Walmart Lists" and typed into Walmart's list
+            // 11-16 the owner's design: Amazon asks first, one item at a time
+            eq("persona: Amazon asks for anything they shop for, not just the grocery list", persona.contains("anything they shop for on Amazon"), true);
+            // 11-16 the charger went in but the cart was never shown to them
+            eq("persona: Amazon ends on the cart, shown to them", persona.contains("open the Amazon cart, check it, and leave it up for them"), true);
+            eq("persona: Amazon finds, tells, then asks before each add", persona.contains("At Amazon, ask before each item goes in"), true);
+            eq("persona: permission pop-ups get Don't allow and a mention", persona.contains("Permission pop-ups.") && persona.contains("that you said no"), true);
+            // 11-16 judged practice: OpenAI asked "which state is that Springfield in?" twice instead of searching
+            eq("persona: a named place is searched as given, asked about only if results don't settle it", persona.contains("search with the name as they said it"), true);
+            // 11-17 practice: with one listing matching the name and street, OpenAI still asked "which state?" (no town known)
+            eq("persona: a listing matching the name and street settles it", persona.contains("A listing that matches the name and street they gave settles it"), true);
+            eq("persona: not asking which state when a listing matches", persona.contains("don't ask which state or town"), true);
+            eq("persona: adding to their list never opens an app", persona.contains("never open an app or go_to a saved way to add to their list"), true);
         } catch (java.io.IOException e) { eq("persona readable", e, ""); }
 
         System.out.println("ScreenTest: " + (n - fails) + "/" + n + " passed");

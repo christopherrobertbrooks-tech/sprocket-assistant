@@ -215,7 +215,8 @@ final class Screen {
      * charges; it read as a plain switch and the brain said it was on).
      */
     static final String GREYED = "(Greyed out: the phone won't let that item be used or changed right now, often for a "
-            + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done.)\n";
+            + "reason shown nearby, like charging. It can't be changed right now: tell the boss that and why, never that it's done. "
+            + "No reason on the screen? phone_status says whether the phone is charging (Battery Saver can't turn on while it charges).)\n";
 
     /** A tap pressed again and again (a quantity +) goes at most this many times in one step. */
     static final int MAX_REPEAT = 50;
@@ -274,6 +275,10 @@ final class Screen {
      * deleting the extra item they'd just asked to remove asked again and again).
      */
     static boolean needsCard(String packageName, Item it) {
+        // 11-16: giving an app a permission (Amazon's notification prompt mid-run) is the owner's call: any answer on Android's
+        // permission pop-up except "Don't allow" waits for their OK
+        if (packageName != null && packageName.endsWith("permissioncontroller"))
+            return !it.label.trim().matches("(?i)(don.t allow|deny|no thanks|not now|cancel)\\b.*");
         if (!risky(it)) return false;
         String p = packageName == null ? "" : packageName.toLowerCase(Locale.US);
         boolean shop = false;
@@ -318,6 +323,24 @@ final class Screen {
             if (all) return i + 1;
         }
         return -1;
+    }
+
+    /** True when something on the screen scrolls (a list find can go through). */
+    static boolean hasList(List<Item> items) {
+        for (Item it : items) if (it.scrollable) return true;
+        return false;
+    }
+
+    /**
+     * find's answer when the words never showed. Only a screen with a list got a full top-to-bottom look (11-17 practice:
+     * find ran on an item's own page, no list, and "looked from the top to the bottom" made it say the deli had no
+     * pickles; the pickle spear was at the bottom of the menu one screen back).
+     */
+    static String findMiss(String text, boolean hadList) {
+        if (hadList) return "No “" + text + "” anywhere in this list: Sprocket looked from the top to the bottom. Say so plainly.";
+        return "No “" + text + "” on this screen, and nothing on it scrolls, so this was NOT a look through a list or menu"
+                + " (it may be an item's own page). Don't tell them it isn't there: finish here, go back to the list or menu,"
+                + " and find it there.";
     }
 
     /** True while some list on the screen says it has more below. */
@@ -472,6 +495,17 @@ final class Screen {
         if (!readApp.equals(nowApp)) return "the screen changed since it was read (another app is up now); read it again";
         if (stillShown != null && !stillShown) return "that item is gone from the screen now; read it again";
         return null;
+    }
+
+    /**
+     * What to tell the brain after tapping a switch (or a row with one in it): nothing when it changed or can't be read
+     * again; else that it didn't change (11-16: cloud brains tapped Dark mode, Bigger text and Battery saver and believed
+     * they were on when they weren't). after: the switch's state read again once the screen settled (null = gone).
+     */
+    static String switchNote(String label, boolean before, Boolean after) {
+        if (after == null || after != before) return null;
+        return "The switch \u201c" + label + "\u201d still shows " + (after ? "ON" : "OFF")
+                + ": the tap didn't change it. Look at the screen: a pop-up may need an answer, or tap it again.";
     }
 
     /** At most this many back presses while looking for a saved way's first button. */

@@ -138,6 +138,15 @@ public class AppNotesTest {
         eq("no hint for the app's name alone", r.hint("open gmail"), "");
         eq("no hint for something else", r.hint("what's the weather"), "");
         eq("no hint with nothing asked", r.hint(null), "");
+        // 11-16: a saved "Walmart list" way was hinted for "Send my grocery list to Walmart" (only "list" matched), and
+        // Sprocket copied the list into Walmart's Favorites instead of the cart
+        AppNotes w = new AppNotes();
+        w.learnRoute("com.walmart.android", "Walmart", "Walmart list", java.util.Arrays.asList(AppNotes.Step.open("open_app", "Walmart"),
+                AppNotes.Step.tap("Walmart", "My Items")), 10);
+        eq("a common word alone ('list') hints no saved way", w.hint("Send my grocery list to Walmart"), "");
+        w.learnRoute("com.walmart.android", "Walmart", "walmart order history", java.util.Arrays.asList(AppNotes.Step.open("open_app", "Walmart"),
+                AppNotes.Step.tap("Walmart", "Account")), 11);
+        eq("real words still hint", w.hint("show my walmart order history").contains("walmart order history"), true);
 
         // a scroll is skipped once the button after it shows (11-13: five saved scrolls went past Spam)
         java.util.List<AppNotes.Step> five = java.util.Arrays.asList(AppNotes.Step.open("open_app", "Gmail"), AppNotes.Step.tap("Gmail", "Open navigation drawer"),

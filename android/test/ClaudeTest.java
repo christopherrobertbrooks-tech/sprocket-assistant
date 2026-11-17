@@ -62,6 +62,23 @@ public class ClaudeTest {
         eq("haiku price (anthropic pricing page 11-16)", java.util.Arrays.toString(Claude.price("claude-haiku-5-5")), java.util.Arrays.toString(new double[]{0.10, 0.50, 0.125, 0.01, 0.01}));
         eq("sonnet price unchanged", java.util.Arrays.toString(Claude.price(Claude.SONNET)), java.util.Arrays.toString(new double[]{2, 10, 2.50, 0.10, 0.01}));
         eq("haiku off: Sonnet again", Claude.request("P", null, null, "now", HERE, c.window(24), false).getString("model"), Claude.SONNET);
+        // 11-16 judged practice: Haiku did the work 4 times and said NOTHING; a silent finish after tools gets one more turn
+        eq("silent: empty", Claude.silent(""), true);
+        eq("silent: just a dot", Claude.silent(" . "), true);
+        eq("not silent: words", Claude.silent("Cart's loaded."), false);
+        try {
+            Claude.Reply last = new Claude.Reply();
+            last.content.put(new JSONObject().put("type", "text").put("text", ""));
+            last.content.put(new JSONObject().put("type", "tool_use").put("id", "t1").put("name", "screen").put("input", new JSONObject()));
+            JSONObject base = new JSONObject().put("model", "m").put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", "add 42 hash browns")));
+            JSONObject ask = Claude.askToSay(base, last);
+            JSONArray m = ask.getJSONArray("messages");
+            eq("ask: the question, its last turn, then the nudge", m.length(), 3);
+            eq("ask: the nudge is the user's side", m.getJSONObject(2).getString("role"), "user");
+            eq("ask: says what to do", m.getJSONObject(2).getString("content"), Claude.SAY_WHAT_YOU_DID);
+            eq("ask: an empty text block is dropped (the API refuses them)", m.getJSONObject(1).getJSONArray("content").length(), 1);
+            eq("ask: the original request is untouched", base.getJSONArray("messages").length(), 1);
+        } catch (Exception e) { eq("askToSay", e.toString(), ""); }
         eq("streamed", r.optBoolean("stream", false), true);
         eq("room for thinking + a short answer", r.getInt("max_tokens"), 2000);
         eq("fast: low effort", r.getJSONObject("output_config").getString("effort"), "low");
@@ -366,7 +383,34 @@ public class ClaudeTest {
         String quiet;
         try { quiet = "[" + Claude.send(new Claude.Brain(Claude.base, "k", false, ""), r2, null, null, (name, in) -> "Flashlight on.").text + "]"; }
         catch (Exception e) { quiet = e.getMessage(); }
-        eq("no words at all, but it acted: not an error", quiet, "[]");
+        eq("acted, said nothing, and the extra turn said nothing too: the plain fallback line", quiet, "[" + Claude.DONE_SILENTLY + "]");
+        eq("the extra turn was asked for (three calls: the step, the silent finish, the nudge)", calls[0], 3);
+        calls[0] = 0;
+        final String[] nudgeBody = {""};
+        Claude.transport = (key, body, l2, cancel) -> {   // 11-16: the extra turn gets words back
+            Claude.Reply x = new Claude.Reply();
+            x.model = Claude.SONNET;
+            if (++calls[0] == 1) {
+                x.stop = "tool_use";
+                JSONObject b = new JSONObject().put("type", "tool_use").put("id", "toolu_t").put("name", "flashlight").put("input", new JSONObject());
+                x.content.put(b);
+                x.calls.add(b);
+            } else if (calls[0] == 2) {
+                x.stop = "end_turn";
+                x.text = ".";
+                x.content.put(new JSONObject().put("type", "text").put("text", "."));
+            } else {
+                nudgeBody[0] = body.toString();
+                x.stop = "end_turn";
+                x.text = "Flashlight's on.";
+            }
+            return x;
+        };
+        String told;
+        try { told = Claude.send(new Claude.Brain(Claude.base, "k", false, ""), r2, null, null, (name, in) -> "Flashlight on.").text; }
+        catch (Exception e) { told = e.getMessage(); }
+        eq("a silent '.' after acting: the extra turn's words are the reply", told, "Flashlight's on.");
+        eq("the extra turn carried the nudge", nudgeBody[0].contains("you finished without telling them anything"), true);
         Claude.transport = keep;
 
         // the brain is switched while a tool runs (Codex 040 #6): every round still goes to the brain and key it began with
