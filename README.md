@@ -56,6 +56,10 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
   "text". Works over the lock screen. You set the hours.
 - **Lists:** groceries sorted by aisle, to-dos with due dates, lists from a photo of a recipe, and (optionally) kept
   in Notion so you can edit them on a computer.
+- **Grocery list to cart:** "put my grocery list in my Walmart cart" adds each item on your list, with its amount, to
+  your grocery app's cart, choosing what you bought there before or the store's everyday version, then tells you what
+  it couldn't find and stops on the cart for your tap. On Amazon it asks about each item first. It never places the
+  order.
 - **Morning brief** at 6 am: weather, calendar, what's due, and news on topics you pick.
 - **Memory:** tell it to remember something and it keeps a note on your phone (up to 2,000). Notes go along with
   your question when its words fit; "always remember" notes go with every message. Search, pin or delete them under
