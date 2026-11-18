@@ -4,10 +4,6 @@ Sprocket is a personal project, shared as-is, and grows with what its owner uses
 what might happen, and what won't (with the reason). Ideas are welcome in [Discussions](../../discussions/categories/ideas).
 
 ## Planned
-- **Grocery list to cart.** "Put my grocery list in my Walmart cart": Sprocket takes the list it already keeps and
-  adds each item to your grocery or delivery app's cart (Walmart, Instacart, Target and others), asks when an item has
-  several close matches, tells you what it couldn't find, and stops on the cart for your tap. It never places the order.
-
 - **Where's my food?** "Where's my order?" opens your delivery app or the restaurant's own app and reads the live
   status: being made, picked up, or a few minutes away.
 
