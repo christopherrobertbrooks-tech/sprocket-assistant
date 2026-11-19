@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
     static Goals goals;                        // what he's working toward (files/goals.json)
     static Feed feed;                          // the morning brief: settings, news topics, the last week (files/feed.json)
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
-    private static String attached;            // a photo waiting to go with his next message (its file name)
+    static String attached;            // a photo waiting to go with his next message (its file name)
     private static final ExecutorService photoWork = Executors.newSingleThreadExecutor();
     static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
     private static final int TAKE_PHOTO = 21, PICK_PHOTO = 22;
@@ -84,7 +84,7 @@ public class MainActivity extends Activity {
     ScrollView scroll;
     EditText box;
     private Button send;
-    private static boolean harder;
+    static boolean harder;
 
     /** The side-button card (SprocketSession) while it shows: what it hears back about the question it asked. */
     interface Watch {
@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
 
     static volatile Watch watch;
     private static final Listen listen = new Listen();   // phase 4: Talk, and the one follow-up
-    private static boolean spokenTurn;          // the question now being answered was said, not typed
+    static boolean spokenTurn;          // the question now being answered was said, not typed
     static final int ASK_MIC = 9;
     static final int ASK_SETUP = 11;
     private LinearLayout bottomBar;               // hidden on the first-open screen, with the top bar's buttons
@@ -104,7 +104,7 @@ public class MainActivity extends Activity {
     static int setupAt = Setup.OFF;
     static boolean setupGithub, setupReturning;
     static final java.util.Set<String> setupTried = new java.util.HashSet<>();
-    private static String testKey;     // self-test only: a made-up key, never saved
+    static String testKey;     // self-test only: a made-up key, never saved
 
     /** True only in a self-test against the stand-in server: a made-up key, not Claude and not his own server. The self-test's
      * pretend answers (cards that answer themselves, words "heard" without the mic) work only then (Codex 041 #2). */
@@ -1013,7 +1013,7 @@ public class MainActivity extends Activity {
 
 
 
-    private void startSetup() { new SetupWalkthrough(this).startSetup(); }
+    void startSetup() { new SetupWalkthrough(this).startSetup(); }
 
 
     private void addSetupCard() { new SetupWalkthrough(this).addSetupCard(); }
@@ -1073,7 +1073,7 @@ public class MainActivity extends Activity {
     }
 
     /** A brain he can ask: Claude with its key, or his own server with its address (a key only if it wants one). */
-    private boolean ready() {
+    boolean ready() {
         return testKey != null || (Config.own ? (Config.deep ? !prefs().deepKey().isEmpty() : Config.oa ? !prefs().openAiKey().isEmpty()
                 : !Config.ownBase.trim().isEmpty()) : !prefs().key().isEmpty());
     }
@@ -1975,128 +1975,5 @@ public class MainActivity extends Activity {
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) talk(false);
     }
 
-    private void selfTest(Intent test) {
-        if (test == null) return;
-        String cards = test.getStringExtra("st_test_cards");   // Sprocket Test only: "no" = Send/Call cards cancel themselves
-        if (cards != null && getPackageName().endsWith(".test")) { Hands.testCards = cards; return; }
-        String call = test.getStringExtra("st_fake_call");   // Sprocket Test only: a pretend ringing call, "Name|number"
-        if (call != null && getPackageName().endsWith(".test")) {
-            String heard = test.getStringExtra("st_call_hear");   // what the listens "hear" in turn ("~4000" = silence); else the mic
-            Listen.script = heard == null ? null : new java.util.ArrayDeque<>(java.util.Arrays.asList(heard.split("\\|")));
-            CallAnnouncer.testCalls = true;
-            CallAnnouncer.pretend(this, call);
-            return;
-        }
-        if (test.getBooleanExtra("st_clear_lists", false) && getPackageName().endsWith(".test")) {   // test leftovers out
-            synchronized (lists) { lists = new Lists(); saveLists(); }
-            render();
-            android.util.Log.i("PA-REPLY", "LISTS cleared");
-            return;
-        }
-        if (test.getBooleanExtra("st_brief_now", false) && getPackageName().endsWith(".test")) {   // a real brief now, his brain
-            FeedService.start(this);
-            return;
-        }
-        String qk = test.getStringExtra("st_qwen_key");   // stage 2: Qwen's access code, only ever over adb
-        if (qk != null) { synchronized (Claude.class) { prefs().ownKey(qk); Claude.choose(true, false, false); prefs().saveConfig(); } Claude.useBrain(true); render(); return; }
-        String cfg = test.getStringExtra("st_config");   // his settings (Config JSON, plus own_key), only ever over adb
-        if (cfg != null) {
-            synchronized (Claude.class) {   // the whole switch at once (Codex 049 #1)
-                Config.fromJson(cfg);
-                try {
-                    JSONObject o = new JSONObject(cfg);
-                    if (!o.optString("own_key", "").isEmpty()) prefs().ownKey(o.optString("own_key"));
-                    if (!o.optString("deepseek_key", "").isEmpty()) prefs().deepKey(o.optString("deepseek_key"));
-                    if (!o.optString("openai_key", "").isEmpty()) prefs().openAiKey(o.optString("openai_key"));
-                    if (o.has("persona")) { prefs().persona(o.optString("persona")); persona = o.optString("persona").trim().isEmpty() ? defaultPersona() : o.optString("persona"); }
-                } catch (Exception ignored) { }
-                prefs().saveConfig();
-                Claude.useBrain(Config.own);
-            }
-            if (ready()) startSetup();           // a coding agent set the brain up (AGENTS.md): the walkthrough still runs
-            render();
-            return;
-        }
-        // stage 1: run tools directly, results to logcat (tag PA-TOOL). st_steps is a JSON array of
-        // {"tool": name, "input": {...}, "wait": ms before it}, run in order, so a test can leave Phone Assistant first.
-        String tool = test.getStringExtra("st_tool"), steps = test.getStringExtra("st_steps");
-        if (tool != null || steps != null) {
-            String input = test.getStringExtra("st_input");
-            new Thread(() -> {
-                try {
-                    org.json.JSONArray list = steps != null ? new org.json.JSONArray(steps) : new org.json.JSONArray()
-                            .put(new org.json.JSONObject().put("tool", tool).put("input", new org.json.JSONObject(input == null ? "{}" : input)));
-                    for (int i = 0; i < list.length(); i++) {
-                        org.json.JSONObject s = list.getJSONObject(i);
-                        Thread.sleep(s.optLong("wait", 0));
-                        String out;
-                        try { out = Phone.run(this, s.getString("tool"), s.optJSONObject("input") == null ? new org.json.JSONObject() : s.getJSONObject("input")); }
-                        catch (Exception e) { out = "error: " + e.getMessage(); }
-                        android.util.Log.i("PA-TOOL", "step " + (i + 1) + " " + s.getString("tool") + ": " + out);
-                    }
-                    android.util.Log.i("PA-TOOL", "done");
-                } catch (Exception e) {
-                    android.util.Log.i("PA-TOOL", "bad steps: " + e.getMessage());
-                }
-            }).start();
-            return;
-        }
-        String bg = test.getStringExtra("st_bg");   // stage 3 over adb: "pair" (waits for the pairing window) or "start"
-        if (bg != null) {
-            new Thread(() -> {
-                String r;
-                try { r = bg.equals("pair") ? BgSetup.pair(app, 180_000) : BgSetup.startHelper(app); }
-                catch (Exception e) { r = "error: " + e; }
-                android.util.Log.i("PA-REPLY", "BG " + bg + " -> " + r);
-            }, "sprocket-bg-setup").start();
-            return;
-        }
-        String say = test.getStringExtra("st_say"), base = test.getStringExtra("st_base"), k = test.getStringExtra("st_key");
-        if (test.getBooleanExtra("st_feed_now", false) && base != null && k != null
-                && k.startsWith("sk-standin")) {               // the morning brief, now, against the stand-in
-            Claude.base = base;
-            testKey = k;
-            FeedService.start(this);
-            return;
-        }
-        if (say == null) return;
-        // A stand-in server only ever gets a made-up key: the saved real key is never sent anywhere but Anthropic.
-        if (base != null) {
-            if (k == null || !k.startsWith("sk-standin")) return;
-            Claude.base = base;
-            Studio.base = base;
-            testKey = k;
-            Hands.autoAnswer = test.getStringExtra("st_confirm");   // "yes" / "no": the card answers itself after 5 s
-            Hands.testHeard = test.getStringExtra("st_card_heard");  // or the card "hears" these words (no mic here)
-            testFaults = PhoneTools.faults(test.getStringExtra("st_fault"));   // practice only: "send_text:refused;add_event:no_confirm"
-        }
-        if (test.getBooleanExtra("st_new", false)) { chat = new Chat(); saveChat(); }
-        if (test.getBooleanExtra("st_fresh", false) && standIn()) {   // practice only: nothing carried over from the last test
-            synchronized (lists) { lists = new Lists(); saveLists(); }
-            memory = new Memory(); saveMemory();
-            appNotes = new AppNotes(); saveAppNotes();
-            File cardLog = new File(getExternalFilesDir(null), "cards.txt");
-            if (cardLog.exists() && !cardLog.delete()) android.util.Log.w("Sprocket", "practice: cards.txt stayed");
-        }
-        String pic = test.getStringExtra("st_photo");          // a test picture in the app's own external folder
-        if (pic != null) {
-            try { attached = Photo.save(app, Uri.fromFile(new File(getExternalFilesDir(null), pic))); }
-            catch (Exception e) { android.util.Log.w("Sprocket", "test photo: " + e); }
-        }
-        harder = test.getBooleanExtra("st_harder", false);
-        render();
-        SelfTest st = new SelfTest();
-        VoiceOut.get(this).watch = (text, mood, how, ms) -> {
-            try { st.voiced.add(new JSONObject().put("text", text).put("mood", mood).put("how", how).put("fetch_ms", ms)); }
-            catch (Exception ignored) { }
-        };
-        spokenTurn = test.getBooleanExtra("st_spoken", false);   // as if he had said it (the mic can't be tested here)
-        String hear = test.getStringExtra("st_hear");           // what the listens after the answer "hear" (no mic here)
-        Listen.script = hear == null || hear.isEmpty() || base == null ? null : new java.util.ArrayDeque<>(java.util.Arrays.asList(hear.split("\\|")));
-        if (test.getStringExtra("st_card_say") != null) {     // the card's next "heard" words (stand-in only)
-            SprocketSession.testHeard = test.getStringExtra("st_card_say");
-            return;
-        }
-        ask(say, st);
-    }
+    private void selfTest(Intent test) { new TestHooks(this).selfTest(test); }
 }
