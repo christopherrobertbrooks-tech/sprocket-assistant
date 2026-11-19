@@ -51,7 +51,7 @@ import java.util.concurrent.Executors;
  * anywhere but Anthropic) + st_say send one message through the real screen and write files/selftest.json.
  */
 public class MainActivity extends Activity {
-    private static final int BG = 0xFF111214, PANEL = 0xFF1C1D21, MINE = 0xFF2A2B30, TEXT = 0xFFE6E7EA,
+    static final int BG = 0xFF111214, PANEL = 0xFF1C1D21, MINE = 0xFF2A2B30, TEXT = 0xFFE6E7EA,
             MUTED = 0xFF8B8F97, FAINT = 0xFF5D6169, AMBER = 0xFFE3B341, ERR = 0xFFE5786D;
 
     // The conversation and the reply in progress belong to the app, not to one screen: Android can rebuild the screen
@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
     private static final ExecutorService photoWork = Executors.newSingleThreadExecutor();
     private static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
     private static final int TAKE_PHOTO = 21, PICK_PHOTO = 22;
-    private boolean showingMemory, showingLists, editingAbout, showingFeed, showingGoals;
+    boolean showingMemory, showingLists, editingAbout, showingFeed, showingGoals;
     private final java.util.Set<Long> openDays = new java.util.HashSet<>();   // the Feed screen's opened days
     private LinearLayout attachRow;
     static MainActivity current;              // the screen on show, if any (Hands shows its cards there)
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
     private static Context app;                // for saving when no screen is on show
     private TextView pendingView;
     private static String persona = "";
-    private LinearLayout list;
+    LinearLayout list;
     private ScrollView scroll;
     private EditText box;
     private Button send;
@@ -568,7 +568,7 @@ public class MainActivity extends Activity {
     }
 
     /** Markdown drawn into a card: title, headings, bullets, tables and tappable links. */
-    private void markdownInto(LinearLayout card, String md) {
+    void markdownInto(LinearLayout card, String md) {
         for (Markdown.Block b : Markdown.parse(md)) {
             if (b.kind.equals("rows")) { card.addView(table(b)); continue; }
             boolean title = b.kind.equals("title"), head = b.kind.equals("heading"), bullet = b.kind.equals("bullet");
@@ -712,16 +712,16 @@ public class MainActivity extends Activity {
         void notionPage(String id) { p.edit().putString("notion_page", id).apply(); }
     }
 
-    private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
+    int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 
-    private GradientDrawable round(int color, int radius) {
+    GradientDrawable round(int color, int radius) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
         g.setCornerRadius(dp(radius));
         return g;
     }
 
-    private TextView text(String t, int sp, int color) {
+    TextView text(String t, int sp, int color) {
         TextView v = new TextView(this);
         v.setText(t);
         v.setTextSize(sp);
@@ -729,7 +729,7 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    private Button chip(String t) {
+    Button chip(String t) {
         Button c = new Button(this);
         c.setText(t);
         c.setAllCaps(false);
@@ -927,7 +927,7 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private void note(String s) { android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show(); }
+    void note(String s) { android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show(); }
 
     /** Think harder is on for the next question only: the text box says so, outlined amber, until it's sent. */
     private void styleHarder() {
@@ -1085,9 +1085,9 @@ public class MainActivity extends Activity {
      * away, and Sprocket then said it couldn't use the screen). A save that fails (a bad address) keeps the page open
      * with the reason. Cancel is the way out without saving. Null on every other page.
      */
-    private Runnable backSaves;
+    Runnable backSaves;
 
-    private void render() {
+    void render() {
         backSaves = null;
         list.removeAllViews();
         backSaves = null;   // only Settings and Personality set it again
@@ -2326,7 +2326,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { return new AppNotes(); }
     }
 
-    private static void saveAppNotes() {
+    static void saveAppNotes() {
         try {
             File tmp = new File(app.getFilesDir(), "app-notes.json.tmp");
             Files.write(tmp.toPath(), appNotes.toJson().getBytes(StandardCharsets.UTF_8));
@@ -2882,7 +2882,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { return new Memory(); }
     }
 
-    private static void saveMemory() {
+    static void saveMemory() {
         try {
             File tmp = new File(app.getFilesDir(), "memory.json.tmp");
             Files.write(tmp.toPath(), memory.toJson().getBytes(StandardCharsets.UTF_8));
@@ -2899,7 +2899,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { return ""; }
     }
 
-    private static boolean saveAbout(String text) {
+    static boolean saveAbout(String text) {
         try {
             File tmp = new File(app.getFilesDir(), "about.md.tmp");
             Files.write(tmp.toPath(), Memory.tidyAbout(text).getBytes(StandardCharsets.UTF_8));
@@ -2927,199 +2927,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** ⋯ Memory: his About-you page (Edit), then every note, each with Delete. */
-    private void memoryCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        list.addView(aboutCard());
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.setMargins(0, dp(12), 0, 0);
-        c.setLayoutParams(cp);
-        TextView h = text("What Sprocket remembers", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        int count, pinned = 0;
-        synchronized (memory) { count = memory.notes.size(); for (Memory.Note n : memory.notes) if (n.always) pinned++; }
-        if (count == 0)
-            c.addView(text("Nothing yet. Tell them \u201cremember\u2026\u201d, or just mention something worth keeping.", 14, MUTED));
-        else c.addView(text(count + (count == 1 ? " note" : " notes") + ", " + pinned + " always on. Always-on notes go with every "
-                + "message; the rest go along when they fit what you ask. Tap Always to change that, or Delete.", 14, MUTED));
-        LinearLayout rows = new LinearLayout(this);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        if (count > 0) {
-            EditText find = new EditText(this);
-            find.setHint("Search notes");
-            find.setText(memorySearch);
-            find.setTextColor(TEXT);
-            find.setHintTextColor(FAINT);
-            find.setSingleLine(true);
-            find.addTextChangedListener(new android.text.TextWatcher() {
-                public void beforeTextChanged(CharSequence x, int a, int b, int d) { }
-                public void onTextChanged(CharSequence x, int a, int b, int d) { }
-                public void afterTextChanged(android.text.Editable e) { memorySearch = e.toString(); noteRows(rows); }
-            });
-            c.addView(find);
-        }
-        c.addView(rows);
-        noteRows(rows);
-        List<AppNotes.App> apps = new ArrayList<>();       // app memory for screen control: each fact, with Delete
-        if (appNotes != null) synchronized (appNotes) {
-            for (AppNotes.App a : appNotes.apps) {
-                AppNotes.App copy = new AppNotes.App(a.pkg, a.name);
-                copy.facts.addAll(a.facts);
-                copy.routes.addAll(a.routes);
-                apps.add(copy);
-            }
-        }
-        TextView ah = text("What Sprocket learned about apps", 17, TEXT);
-        ah.setTypeface(Typeface.DEFAULT_BOLD);
-        ah.setPadding(0, dp(20), 0, 0);
-        c.addView(ah);
-        c.addView(text(apps.isEmpty() ? "Nothing yet. When Sprocket finds something in an app for you, it notes where it was, "
-                + "so next time it can go straight there." : "Where things are in your apps, read before Sprocket taps through "
-                + "them. Delete any that are wrong.", 14, MUTED));
-        for (AppNotes.App a : apps) {
-            List<long[]> ids = new ArrayList<>();          // facts and saved ways (routes, 11-13: they weren't listed)
-            List<String> said = new ArrayList<>();
-            for (AppNotes.Fact f : a.facts) { ids.add(new long[]{f.id}); said.add(f.text); }
-            for (AppNotes.Route r : a.routes) { ids.add(new long[]{r.id}); said.add(r.text()); }
-            for (int i = 0; i < ids.size(); i++) {
-                long id = ids.get(i)[0];
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(10), 0, 0);
-                row.addView(text(a.name + ": " + said.get(i), 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-                Button del = chip("Delete");
-                del.setBackground(round(MINE, 18));
-                del.setTextColor(TEXT);
-                del.setOnClickListener(v -> {
-                    synchronized (appNotes) { appNotes.delete(a.pkg, id); saveAppNotes(); }
-                    memoryCard();
-                });
-                LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
-                delp.setMargins(dp(10), 0, 0, 0);
-                row.addView(del, delp);
-                c.addView(row);
-            }
-        }
-        Button done = chip("Done");
-        done.setBackground(round(TEXT, 18));
-        done.setTextColor(0xFF111111);
-        done.setOnClickListener(v -> { showingMemory = false; render(); });
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(40));
-        bp.setMargins(0, dp(16), 0, 0);
-        c.addView(done, bp);
-        list.addView(c);
-    }
+    private void memoryCard() { new MemoryPage(this).memoryCard(); }
 
-    private static String memorySearch = "";
-    private static final int NOTES_SHOWN = 60;   // thousands of notes: the newest 60, or the search's first 60
+    static String memorySearch = "";
+    static final int NOTES_SHOWN = 60;   // thousands of notes: the newest 60, or the search's first 60
 
-    /** The Memory screen's notes, newest first, filtered by his search: each with Always (pin) and Delete. */
-    private void noteRows(LinearLayout rows) {
-        rows.removeAllViews();
-        List<Memory.Note> found;
-        synchronized (memory) { found = memory.search(memorySearch); }
-        for (int i = 0; i < Math.min(NOTES_SHOWN, found.size()); i++) {
-            Memory.Note n = found.get(i);
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(10), 0, 0);
-            row.addView(text(n.text, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-            Button pin = chip("Always");
-            pin.setBackground(round(n.always ? AMBER : MINE, 18));
-            pin.setTextColor(n.always ? 0xFF111111 : TEXT);
-            pin.setOnClickListener(v -> {
-                synchronized (memory) { memory.setAlways(n.id, !n.always); saveMemory(); }
-                memoryCard();
-            });
-            LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-2, dp(36));
-            pp.setMargins(dp(10), 0, 0, 0);
-            row.addView(pin, pp);
-            Button del = chip("Delete");
-            del.setBackground(round(MINE, 18));
-            del.setTextColor(TEXT);
-            del.setOnClickListener(v -> {
-                synchronized (memory) { memory.delete(n.id); saveMemory(); }
-                memoryCard();
-            });
-            LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
-            delp.setMargins(dp(8), 0, 0, 0);
-            row.addView(del, delp);
-            rows.addView(row);
-        }
-        if (found.size() > NOTES_SHOWN)
-            rows.addView(text((found.size() - NOTES_SHOWN) + " more: search to find them.", 13, FAINT));
-        else if (found.isEmpty() && !memorySearch.trim().isEmpty()) rows.addView(text("No note has those words.", 13, FAINT));
-    }
 
-    /** His About-you page: read (drawn like a brief) with Edit, or a text box with Save and Cancel. */
-    private View aboutCard() {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView h = text("About you", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        top.addView(h, new LinearLayout.LayoutParams(0, -2, 1));
-        c.addView(top);
-        c.addView(text("Goes to Claude with each message. Never passwords, keys, emails or IP addresses.", 14, MUTED));
-        if (editingAbout) {
-            EditText e = new EditText(this);
-            e.setText(about);
-            e.setTextColor(TEXT);
-            e.setTextSize(14);
-            e.setGravity(Gravity.TOP);
-            e.setMinLines(8);
-            e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                    | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-            e.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(Memory.ABOUT_LONGEST)});
-            LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2);
-            ep.setMargins(0, dp(10), 0, 0);
-            c.addView(e, ep);
-            LinearLayout row = new LinearLayout(this);
-            Button save = chip("Save");
-            save.setBackground(round(TEXT, 18));
-            save.setTextColor(0xFF111111);
-            save.setOnClickListener(v -> {
-                if (!saveAbout(e.getText().toString())) { note("Couldn't save it"); return; }
-                editingAbout = false;
-                hideKeyboard(e);
-                render();
-            });
-            Button cancel = chip("Cancel");
-            cancel.setBackground(round(MINE, 18));
-            cancel.setTextColor(TEXT);
-            cancel.setOnClickListener(v -> { editingAbout = false; hideKeyboard(e); render(); });
-            row.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-            LinearLayout.LayoutParams xp = new LinearLayout.LayoutParams(-2, dp(40));
-            xp.setMargins(dp(10), 0, 0, 0);
-            row.addView(cancel, xp);
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
-            rp.setMargins(0, dp(12), 0, 0);
-            c.addView(row, rp);
-            return c;
-        }
-        Button edit = chip("Edit");
-        edit.setBackground(round(MINE, 18));
-        edit.setTextColor(TEXT);
-        edit.setOnClickListener(v -> { editingAbout = true; render(); });
-        top.addView(edit, new LinearLayout.LayoutParams(-2, dp(36)));
-        if (about.isEmpty()) {
-            TextView none = text("Nothing yet. Tap Edit to tell Sprocket about yourself: who you are, your people, your setup.", 15, TEXT);
-            none.setPadding(0, dp(10), 0, 0);
-            c.addView(none);
-        } else markdownInto(c, about);
-        return c;
-    }
 
-    private void hideKeyboard(View v) {
+    void hideKeyboard(View v) {
         android.view.inputmethod.InputMethodManager im = getSystemService(android.view.inputmethod.InputMethodManager.class);
         if (im != null) im.hideSoftInputFromWindow(v.getWindowToken(), 0);
     }
