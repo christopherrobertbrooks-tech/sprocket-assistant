@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
     static final int ASK_TOOL_PERMISSION = 8;       // the screen on show, if any
     private static Context app;                // for saving when no screen is on show
     private TextView pendingView;
-    private static String persona = "";
+    static String persona = "";
     LinearLayout list;
     private ScrollView scroll;
     private EditText box;
@@ -1246,7 +1246,7 @@ public class MainActivity extends Activity {
 
     private void scrollDown() { scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN)); }
 
-    private void keyCard(boolean replacing) { new SetupWalkthrough(this).keyCard(replacing); }
+    void keyCard(boolean replacing) { new SetupWalkthrough(this).keyCard(replacing); }
 
     // ------------------------------------------------------------------ first open (Setup)
     static final String ADDRESS_HOW = "The go-between's start.py prints exactly what to type here. Its address is a Tailscale one "
@@ -1301,7 +1301,7 @@ public class MainActivity extends Activity {
         return e;
     }
 
-    private TextView heading(LinearLayout c, String t) {
+    TextView heading(LinearLayout c, String t) {
         TextView h = text(t, 16, TEXT);
         h.setTypeface(Typeface.DEFAULT_BOLD);
         h.setPadding(0, dp(18), 0, dp(2));
@@ -1316,328 +1316,10 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    /** ⋯ Settings (the open-source cleanup, 2026-11-11): the brain, voices, features, optional servers, personality. */
-    private void settingsCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Settings", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
+    private void settingsCard() { new SettingsPage(this).settingsCard(); }
 
-        heading(c, "Brain");
-        final boolean[] own = {Config.own}, ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};   // which answers first
-        LinearLayout pick = new LinearLayout(this);
-        Button claude = button("Claude", !own[0]), deep = button("DeepSeek", ds[0]), openai = button("OpenAI", oa[0]),
-                mine = button("Your own server", own[0] && !ds[0] && !oa[0]);
-        pick.addView(claude, new LinearLayout.LayoutParams(-2, dp(38)));
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(38));
-        gap.setMargins(dp(10), 0, 0, 0);
-        pick.addView(deep, gap);
-        LinearLayout.LayoutParams gap2 = new LinearLayout.LayoutParams(-2, dp(38));
-        gap2.setMargins(dp(10), 0, 0, 0);
-        pick.addView(openai, gap2);
-        c.addView(pick);
-        LinearLayout pick2 = new LinearLayout(this);   // a second row: four don't fit across a phone
-        pick2.setPadding(0, dp(8), 0, 0);
-        pick2.addView(mine, new LinearLayout.LayoutParams(-2, dp(38)));
-        c.addView(pick2);
-        TextView backupHow = text("The one you pick answers. Set up the others too, and when it doesn't answer, Sprocket asks "
-                + "on a card whether the next one may take that question: your own server first, then DeepSeek, OpenAI, Claude.", 12, FAINT);
-        backupHow.setPadding(0, dp(6), 0, 0);
-        c.addView(backupHow);
-        TextView deepLabel = text("", 14, MUTED);
-        deepLabel.setPadding(0, dp(10), 0, 0);
-        c.addView(deepLabel);
-        EditText deepKey = field(c, "Its key", "", prefs().deepKey().isEmpty() ? "sk-..." : "saved", true);
-        c.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
-        TextView oaLabel = text("", 14, MUTED);
-        oaLabel.setPadding(0, dp(10), 0, 0);
-        c.addView(oaLabel);
-        EditText oaKey = field(c, "Its key", "", prefs().openAiKey().isEmpty() ? "sk-..." : "saved", true);
-        c.addView(text(OPENAI_KEY_HOW, 12, FAINT));
-        TextView ownLabel = text("", 14, MUTED);
-        ownLabel.setPadding(0, dp(10), 0, 0);
-        c.addView(ownLabel);
-        LinearLayout ownBox = new LinearLayout(this);
-        ownBox.setOrientation(LinearLayout.VERTICAL);
-        EditText name = field(ownBox, "Its name (what Sprocket calls it)", Config.ownName, "Qwen", false);
-        EditText base = field(ownBox, "Its address (speaks Anthropic's Messages API, or the included go-between)", Config.ownBase,
-                "https://my-server:8448", false);
-        EditText model = field(ownBox, "Model name (blank if the server has one)", Config.ownModel, "qwen", false);
-        EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", prefs().ownKey().isEmpty() ? "none" : "saved", true);
-        ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
-        c.addView(ownBox);
-        Button claudeKey = button(prefs().key().isEmpty() ? "Add Claude key" : "Claude key", false);
-        claudeKey.setOnClickListener(v -> keyCard(true));
-        LinearLayout.LayoutParams top = new LinearLayout.LayoutParams(-2, dp(38));
-        top.setMargins(0, dp(8), 0, 0);
-        c.addView(claudeKey, top);
-        final boolean[] hk = {Config.haiku};   // Claude's everyday model (11-16: Haiku passed the practice set, 62 of 68 judged)
-        LinearLayout claudeModel = new LinearLayout(this);
-        claudeModel.setPadding(0, dp(8), 0, 0);
-        Button sonnetB = button("Sonnet", !hk[0]), haikuB = button("Haiku (cheapest)", hk[0]);
-        claudeModel.addView(sonnetB, new LinearLayout.LayoutParams(-2, dp(38)));
-        LinearLayout.LayoutParams gap3 = new LinearLayout.LayoutParams(-2, dp(38));
-        gap3.setMargins(dp(10), 0, 0, 0);
-        claudeModel.addView(haikuB, gap3);
-        c.addView(claudeModel);
-        c.addView(text("Claude's model, same key: Sonnet is smarter; Haiku costs about a twentieth as much. \"Think harder\" "
-                + "always uses Opus.", 12, FAINT));
-        Runnable showModel = () -> {
-            for (Object[] b : new Object[][]{{sonnetB, !hk[0]}, {haikuB, hk[0]}}) {
-                ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
-                ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
-            }
-        };
-        sonnetB.setOnClickListener(v -> { hk[0] = false; showModel.run(); });
-        haikuB.setOnClickListener(v -> { hk[0] = true; showModel.run(); });
-        showModel.run();
-        Runnable showBrain = () -> {                       // all stay on show: the others are the backups (11-13, 11-15)
-            boolean onClaude = !own[0], onDeep = own[0] && ds[0], onOa = own[0] && oa[0], onMine = own[0] && !ds[0] && !oa[0];
-            deepLabel.setText(onDeep ? "DeepSeek" : "DeepSeek, as a backup (optional)");
-            oaLabel.setText(onOa ? "OpenAI" : "OpenAI, as a backup (optional)");
-            ownLabel.setText(onMine ? "Your own server" : "Your own server, as a backup (optional)");
-            boolean noKey = prefs().key().isEmpty();
-            claudeKey.setText(!onClaude ? (noKey ? "Add a Claude key, as a backup (optional)" : "Claude key (backup)")
-                    : (noKey ? "Add Claude key" : "Claude key"));
-            for (Object[] b : new Object[][]{{claude, onClaude}, {deep, onDeep}, {openai, onOa}, {mine, onMine}}) {
-                ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
-                ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
-            }
-        };
-        claude.setOnClickListener(v -> { own[0] = false; showBrain.run(); });
-        deep.setOnClickListener(v -> { own[0] = true; ds[0] = true; oa[0] = false; showBrain.run(); });
-        openai.setOnClickListener(v -> { own[0] = true; oa[0] = true; ds[0] = false; showBrain.run(); });
-        mine.setOnClickListener(v -> { own[0] = true; ds[0] = false; oa[0] = false; showBrain.run(); });
-        showBrain.run();
-        c.addView(text("Tested with Claude, DeepSeek, OpenAI, and Qwen through the included go-between. Other models may work if they speak "
-                + "Anthropic's Messages API, or sit behind the go-between (any OpenAI-compatible server).", 12, FAINT));
 
-        heading(c, "Voices");
-        EditText out = field(c, "Voice server (blank = the phone's own voice)", Config.voiceOut, "http://my-server:8472", false);
-        EditText in = field(c, "Speech-to-text server (blank = the phone's own recognizer)", Config.voiceIn, "http://my-server:8080", false);
-        c.addView(text("The voice server takes POST /speak {text, mood} and returns audio. The speech-to-text server takes "
-                + "an OpenAI-style /v1/audio/transcriptions upload (whisper.cpp's server does).", 12, FAINT));
-
-        heading(c, "Features");
-        java.util.Map<String, android.widget.CheckBox> boxes = new java.util.LinkedHashMap<>();
-        for (String[] f : Config.FEATURES) {
-            android.widget.CheckBox b = new android.widget.CheckBox(this);
-            b.setText(f[1]);
-            b.setTextColor(TEXT);
-            b.setChecked(Config.on(f[0]));
-            c.addView(b);
-            TextView d = text(f[2], 12, FAINT);
-            d.setPadding(dp(32), 0, 0, dp(4));
-            c.addView(d);
-            boxes.put(f[0], b);
-        }
-
-        EditText hours = field(c, "Call announcer hours (blank = always)", Config.callHours, "mon-thu 6-23, fri 6-24, sat 0-24, sun 0-23", false);
-
-        heading(c, "Optional servers");
-        EditText gh = field(c, "Your GitHub username", Config.github, "for the GitHub feature", false);
-        EditText dash = field(c, "Home dashboard (/api/state)", Config.homeDash, "blank = off", false);
-        EditText stats = field(c, "Server stats (/stats)", Config.homeStats, "blank = off", false);
-        EditText hands = field(c, "Server job runner", Config.homeHands, "blank = off", false);
-        EditText studio = field(c, "Studio", Config.studio, "blank = off", false);
-
-        heading(c, "More");
-        LinearLayout more = new LinearLayout(this);
-        Button notion = button("Notion key (lists)", false), who = button("Personality", false);
-        notion.setOnClickListener(v -> notionCard());
-        who.setOnClickListener(v -> personaCard());
-        more.addView(notion, new LinearLayout.LayoutParams(-2, dp(38)));
-        more.addView(who, gap);
-        c.addView(more);
-        TextView credits = text("Weather data by Open-Meteo.com (CC BY 4.0); place names from GeoNames. Sprocket is not "
-                + "affiliated with Anthropic or any model maker.", 12, FAINT);
-        credits.setPadding(0, dp(14), 0, 0);
-        c.addView(credits);
-
-        TextView note = text("", 13, ERR);
-        c.addView(note);
-        LinearLayout btns = new LinearLayout(this);
-        Button save = button("Save", true), back = button("Cancel", false);
-        save.setOnClickListener(v -> {
-            if (own[0] && !ds[0] && !oa[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
-            if (own[0] && oa[0] && oaKey.getText().toString().trim().isEmpty() && prefs().openAiKey().isEmpty()) { note.setText("OpenAI needs its key."); return; }
-            if (own[0] && ds[0] && deepKey.getText().toString().trim().isEmpty() && prefs().deepKey().isEmpty()) { note.setText("DeepSeek needs its key."); return; }
-            for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) {
-                String bad = Config.addressProblem(f.getText().toString());
-                if (bad != null) { note.setText(bad + " (" + f.getText().toString().trim() + ")"); f.requestFocus(); return; }
-            }
-            boolean home = false;
-            for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) home |= Config.unencrypted(f.getText().toString());
-            synchronized (Claude.class) {   // the whole switch at once: nothing reads half of it (Codex 049 #1)
-                Config.own = own[0];
-                Config.deep = own[0] && ds[0];
-                Config.oa = own[0] && oa[0];
-                Config.haiku = hk[0];
-                if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
-                if (!oaKey.getText().toString().trim().isEmpty()) prefs().openAiKey(oaKey.getText().toString());
-                Config.ownName = name.getText().toString().trim();
-                Config.ownBase = base.getText().toString().trim();
-                Config.ownModel = model.getText().toString().trim();
-                if (!ownKey.getText().toString().trim().isEmpty()) prefs().ownKey(ownKey.getText().toString());
-                Config.voiceOut = out.getText().toString().trim();
-                Config.voiceIn = in.getText().toString().trim();
-                Config.github = gh.getText().toString().trim();
-                Config.homeDash = dash.getText().toString().trim();
-                Config.homeStats = stats.getText().toString().trim();
-                Config.homeHands = hands.getText().toString().trim();
-                Config.studio = studio.getText().toString().trim();
-                Config.callHours = hours.getText().toString().trim();
-                Config.off.clear();
-                for (java.util.Map.Entry<String, android.widget.CheckBox> e : boxes.entrySet()) if (!e.getValue().isChecked()) Config.off.add(e.getKey());
-                prefs().saveConfig();
-                Claude.useBrain(Config.own);
-            }
-            if (Config.on("brief")) FeedAlarm.schedule(this); else FeedAlarm.cancel(this);
-            VoiceOut.get(this).retryGateway();
-            if (home) android.widget.Toast.makeText(this, "Saved. Home-network http isn't encrypted, and only works at home.", android.widget.Toast.LENGTH_LONG).show();
-            render();
-        });
-        back.setOnClickListener(v -> render());
-        backSaves = save::performClick;
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        btns.addView(back, gap);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(12), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
-
-    /** ⋯ Settings > Personality: his own wording of who Sprocket is, or back to the one the app comes with. */
-    private void personaCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Personality", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        c.addView(text("This goes to the brain with every question: who Sprocket is and how it talks. Change anything.", 13, MUTED));
-        EditText e = new EditText(this);
-        e.setText(persona);
-        e.setTextColor(TEXT);
-        e.setTextSize(13);
-        e.setMinLines(12);
-        e.setGravity(Gravity.TOP);
-        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        c.addView(e);
-        TextView example = text("Want a character? Load the example: a loud robot who is sure he was built for war, and now "
-                + "sets your timers. Then change anything and Save.", 13, MUTED);
-        example.setPadding(0, dp(8), 0, 0);
-        c.addView(example);
-        Button load = button("Load the example", false);
-        load.setOnClickListener(v -> e.setText(examplePersona()));
-        LinearLayout.LayoutParams lp0 = new LinearLayout.LayoutParams(-2, dp(40));
-        lp0.setMargins(0, dp(6), 0, 0);
-        c.addView(load, lp0);
-        LinearLayout btns = new LinearLayout(this);
-        Button save = button("Save", true), reset = button("Use the original", false), back = button("Cancel", false);
-        save.setOnClickListener(v -> {
-            String t = e.getText().toString();
-            if (t.trim().isEmpty()) return;
-            prefs().persona(t.equals(defaultPersona()) ? "" : t);
-            persona = t;
-            settingsCard();
-        });
-        reset.setOnClickListener(v -> { prefs().persona(""); persona = defaultPersona(); personaCard(); });
-        back.setOnClickListener(v -> settingsCard());
-        backSaves = save::performClick;
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(40));
-        gap.setMargins(dp(10), 0, 0, 0);
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        btns.addView(reset, gap);
-        btns.addView(back, new LinearLayout.LayoutParams(gap));
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(12), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
-
-    /** ⋯ Notion key: his "Sprocket" Notion connection's key, so his lists live in Notion (it stays on this phone). */
-    private void notionCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Notion key (lists)", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        c.addView(text("Your lists live in Notion once this is set: one table per list on the \u201cSprocket lists\u201d page. "
-                + "Make the key at notion.so/developers/tokens: New token, name it Sprocket, tick Notion API, Create token. "
-                + "Sprocket only ever touches that one page. The key stays on this phone.", 14, MUTED));
-        EditText k = new EditText(this);
-        k.setHint(prefs().notionKey().isEmpty() ? "ntn_..." : "saved (paste a new one to replace it)");
-        k.setTextColor(TEXT);
-        k.setHintTextColor(FAINT);
-        k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        c.addView(k);
-        TextView note = text("", 13, MUTED);
-        c.addView(note);
-        Runnable check = () -> notionWorker.execute(() -> {
-            String r = syncLists();
-            int n;
-            synchronized (lists) { n = lists.lists.size(); }
-            String said = r == null ? "" : r.isEmpty() ? "Connected: " + n + (n == 1 ? " list" : " lists") + " in Notion now." : "Not yet: " + r + ".";
-            onScreen(x -> { note.setText(said); note.setTextColor(r == null || r.isEmpty() ? MUTED : ERR); });
-        });
-        LinearLayout btns = new LinearLayout(this);
-        Button save = chip("Save");
-        save.setBackground(round(TEXT, 18));
-        save.setTextColor(0xFF111111);
-        save.setOnClickListener(v -> {
-            String s2 = k.getText().toString().trim();
-            if (!s2.startsWith("ntn_") && !s2.startsWith("secret_")) { note.setTextColor(ERR); note.setText("That isn't a Notion key: they start with ntn_"); return; }
-            prefs().notionKey(s2);
-            k.setText("");
-            k.setHint("saved (paste a new one to replace it)");
-            note.setTextColor(MUTED);
-            note.setText("Checking Notion\u2026");
-            check.run();
-        });
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(40));
-        rp.setMargins(dp(10), 0, 0, 0);
-        if (!prefs().notionKey().isEmpty()) {
-            Button test = chip("Check");
-            test.setBackground(round(MINE, 18));
-            test.setTextColor(TEXT);
-            test.setOnClickListener(v -> { note.setTextColor(MUTED); note.setText("Checking Notion\u2026"); check.run(); });
-            btns.addView(test, rp);
-            Button remove = chip("Remove key");
-            remove.setBackground(round(MINE, 18));
-            remove.setTextColor(TEXT);
-            remove.setOnClickListener(v -> { prefs().notionKey(""); listsNote = null; notionCard(); });   // the lists stay on the phone
-            btns.addView(remove, new LinearLayout.LayoutParams(rp));
-        }
-        Button back = chip("Back");
-        back.setBackground(round(MINE, 18));
-        back.setTextColor(TEXT);
-        back.setOnClickListener(v -> render());
-        btns.addView(back, new LinearLayout.LayoutParams(rp));
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(10), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
+    private void notionCard() { new SettingsPage(this).notionCard(); }
 
     private String key() { return testKey != null ? testKey : prefs().activeKey(); }
 
@@ -1816,7 +1498,7 @@ public class MainActivity extends Activity {
     }
 
     /** Runs on the main thread against the screen on show, if there is one. */
-    private static void onScreen(java.util.function.Consumer<MainActivity> f) {
+    static void onScreen(java.util.function.Consumer<MainActivity> f) {
         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { if (current != null) f.accept(current); });
     }
 
@@ -2009,7 +1691,7 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------ his lists in Notion (NotionSync)
     /** The last Notion sync: null = Notion is off (or not checked yet), "" = fine, else what went wrong. */
     static volatile String listsNote;
-    private static final java.util.concurrent.ExecutorService notionWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    static final java.util.concurrent.ExecutorService notionWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     /** Worker threads: sends Notion the phone's changes and reads the lists back. null when Notion is off, "" when it
      * went fine, else why not (the changes wait on the phone for the next one). */
