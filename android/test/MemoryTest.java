@@ -10,6 +10,9 @@ public class MemoryTest {
     }
 
     public static void main(String[] a) throws Exception {
+        // 11-18: the About card said "Goes to Claude with each message" even when the brain was your own server or Qwen
+        eq("the About note names no one brain", Memory.ABOUT_NOTE.contains("Claude"), false);
+        eq("the About note keeps its warning", Memory.ABOUT_NOTE.contains("Never passwords"), true);
         Memory m = new Memory();
         String empty = m.forClaude();
         eq("nothing yet: the block is there anyway (the first note mustn't change the cached part)", empty,

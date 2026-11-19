@@ -158,7 +158,7 @@ final class MemoryPage {
         h.setTypeface(Typeface.DEFAULT_BOLD);
         top.addView(h, new LinearLayout.LayoutParams(0, -2, 1));
         c.addView(top);
-        c.addView(host.text("Goes to Claude with each message. Never passwords, keys, emails or IP addresses.", 14, MainActivity.MUTED));
+        c.addView(host.text(Memory.ABOUT_NOTE, 14, MainActivity.MUTED));
         if (host.editingAbout) {
             EditText e = new EditText(host);
             e.setText(MainActivity.about);

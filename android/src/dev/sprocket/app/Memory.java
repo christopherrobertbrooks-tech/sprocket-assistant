@@ -18,6 +18,9 @@ import java.util.Set;
  * long memory neither crowds every question nor changes the cached part. Plain Java: test/MemoryTest.java.
  */
 final class Memory {
+    /** The About-you card's note (11-18: it said "Goes to Claude" whatever the brain was). */
+    static final String ABOUT_NOTE = "Goes to Sprocket's brain with each message. Never passwords, keys, emails or IP addresses.";
+
     static final int MAX = 2000, LONGEST = 300, PER_QUESTION = 12;
 
     static final class Note {
