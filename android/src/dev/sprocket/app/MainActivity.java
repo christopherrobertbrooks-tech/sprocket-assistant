@@ -51,7 +51,7 @@ import java.util.concurrent.Executors;
  * anywhere but Anthropic) + st_say send one message through the real screen and write files/selftest.json.
  */
 public class MainActivity extends Activity {
-    private static final int BG = 0xFF111214, PANEL = 0xFF1C1D21, MINE = 0xFF2A2B30, TEXT = 0xFFE6E7EA,
+    static final int BG = 0xFF111214, PANEL = 0xFF1C1D21, MINE = 0xFF2A2B30, TEXT = 0xFFE6E7EA,
             MUTED = 0xFF8B8F97, FAINT = 0xFF5D6169, AMBER = 0xFFE3B341, ERR = 0xFFE5786D;
 
     // The conversation and the reply in progress belong to the app, not to one screen: Android can rebuild the screen
@@ -59,8 +59,8 @@ public class MainActivity extends Activity {
     // screen must carry on with the same live conversation.
     private static final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static final HttpURLConnection[] live = new HttpURLConnection[1];
-    private static Chat chat;
-    private static boolean busy, stopped;
+    static Chat chat;
+    static boolean busy, stopped;
     private static Chat.Turn pending;          // the reply streaming in right now
     static Memory memory;                      // phase 3b: what he's had remembered (files/memory.json)
     static Lists lists;                        // his lists (files/lists.json)
@@ -68,23 +68,23 @@ public class MainActivity extends Activity {
     static Goals goals;                        // what he's working toward (files/goals.json)
     static Feed feed;                          // the morning brief: settings, news topics, the last week (files/feed.json)
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
-    private static String attached;            // a photo waiting to go with his next message (its file name)
+    static String attached;            // a photo waiting to go with his next message (its file name)
     private static final ExecutorService photoWork = Executors.newSingleThreadExecutor();
-    private static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
+    static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
     private static final int TAKE_PHOTO = 21, PICK_PHOTO = 22;
-    private boolean showingMemory, showingLists, editingAbout, showingFeed, showingGoals;
-    private final java.util.Set<Long> openDays = new java.util.HashSet<>();   // the Feed screen's opened days
+    boolean showingMemory, showingLists, editingAbout, showingFeed, showingGoals;
+    final java.util.Set<Long> openDays = new java.util.HashSet<>();   // the Feed screen's opened days
     private LinearLayout attachRow;
     static MainActivity current;              // the screen on show, if any (Hands shows its cards there)
     static final int ASK_TOOL_PERMISSION = 8;       // the screen on show, if any
-    private static Context app;                // for saving when no screen is on show
+    static Context app;                // for saving when no screen is on show
     private TextView pendingView;
-    private static String persona = "";
-    private LinearLayout list;
-    private ScrollView scroll;
-    private EditText box;
+    static String persona = "";
+    LinearLayout list;
+    ScrollView scroll;
+    EditText box;
     private Button send;
-    private static boolean harder;
+    static boolean harder;
 
     /** The side-button card (SprocketSession) while it shows: what it hears back about the question it asked. */
     interface Watch {
@@ -95,16 +95,16 @@ public class MainActivity extends Activity {
 
     static volatile Watch watch;
     private static final Listen listen = new Listen();   // phase 4: Talk, and the one follow-up
-    private static boolean spokenTurn;          // the question now being answered was said, not typed
+    static boolean spokenTurn;          // the question now being answered was said, not typed
     static final int ASK_MIC = 9;
     static final int ASK_SETUP = 11;
     private LinearLayout bottomBar;               // hidden on the first-open screen, with the top bar's buttons
     private final java.util.List<View> topButtons = new java.util.ArrayList<>();
     // first-time setup (Setup): the question on show, whether its username is awaited, what this step already tried
     static int setupAt = Setup.OFF;
-    private static boolean setupGithub, setupReturning;
-    private static final java.util.Set<String> setupTried = new java.util.HashSet<>();
-    private static String testKey;     // self-test only: a made-up key, never saved
+    static boolean setupGithub, setupReturning;
+    static final java.util.Set<String> setupTried = new java.util.HashSet<>();
+    static String testKey;     // self-test only: a made-up key, never saved
 
     /** True only in a self-test against the stand-in server: a made-up key, not Claude and not his own server. The self-test's
      * pretend answers (cards that answer themselves, words "heard" without the mic) work only then (Codex 041 #2). */
@@ -343,282 +343,25 @@ public class MainActivity extends Activity {
     }
 
     /** A brief drawn as one card: title, headings, bullets, tables (sideways scrolling) and tappable links. */
-    private static MediaPlayer song;              // the studio song playing from a card (one at a time)
-    private static String songFile;
-    private static TextView songLabel;            // its card's Play/Pause, changed in place (a redraw jumps to the end)
-    private static final java.util.Set<String> lyricsOpen = new java.util.HashSet<>();
+    static MediaPlayer song;              // the studio song playing from a card (one at a time)
+    static String songFile;
+    static TextView songLabel;            // its card's Play/Pause, changed in place (a redraw jumps to the end)
+    static final java.util.Set<String> lyricsOpen = new java.util.HashSet<>();
 
-    /** A studio result: the picture (tap: full screen), the video's first frame (tap: plays full screen), or the song
-     * with Play/Pause and its lyrics on a tap; Save keeps a copy in his Pictures, Movies or Music (a Sprocket folder). */
-    private View studioCard(JSONObject j) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(PANEL, 16));
-        card.setPadding(dp(14), dp(14), dp(14), dp(10));
-        String kind = j.optString("kind"), title = Studio.title(j);
-        File f = new File(StudioService.dir(app), j.optString("file"));
-        if (!f.exists()) {
-            card.addView(text("The studio's " + kind + " isn't on the phone any more.", 14, MUTED));
-            return card;
-        }
-        int wide = Math.round(getResources().getDisplayMetrics().widthPixels * 0.84f) - dp(28);
-        if (kind.equals("song")) {
-            LinearLayout head = new LinearLayout(this);
-            head.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name = text(title.isEmpty() ? "Your song" : title, 17, TEXT);
-            name.setTypeface(Typeface.DEFAULT_BOLD);
-            head.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView play = text(playLabel(f), 14, AMBER);
-            play.setPadding(dp(12), dp(6), 0, dp(6));
-            if (f.getPath().equals(songFile)) songLabel = play;
-            play.setOnClickListener(v -> { playSong(f); songLabel = play; play.setText(playLabel(f)); });
-            head.addView(play);
-            card.addView(head);
-        } else {
-            Bitmap b = studioPicture(f, kind, wide);
-            android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
-            ImageView iv = new ImageView(this);
-            if (b != null) iv.setImageBitmap(b);
-            iv.setAdjustViewBounds(true);                 // its own shape, no taller than about half the screen
-            iv.setMaxWidth(wide);
-            iv.setMaxHeight(Math.round(getResources().getDisplayMetrics().heightPixels * 0.55f));
-            iv.setBackground(round(0xFF000000, 12));
-            iv.setClipToOutline(true);
-            frame.addView(iv, new android.widget.FrameLayout.LayoutParams(-2, -2));
-            if (kind.equals("video")) {
-                TextView playMark = text("\u25B6", 30, TEXT);
-                playMark.setGravity(Gravity.CENTER);
-                playMark.setBackground(round(0x99000000, 32));
-                frame.addView(playMark, new android.widget.FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER));
-            }
-            frame.setContentDescription(kind.equals("video") ? "Play the video" : "Open the picture");
-            frame.setOnClickListener(v -> fullScreen(f, kind.equals("video")));
-            LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-2, -2);
-            fp.gravity = Gravity.CENTER_HORIZONTAL;
-            card.addView(frame, fp);
-        }
-        TextView what = text(j.optString("prompt"), 13, MUTED);
-        what.setMaxLines(3);
-        what.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        what.setPadding(0, dp(8), 0, 0);
-        card.addView(what);
-        LinearLayout actions = new LinearLayout(this);
-        actions.setPadding(0, dp(6), 0, 0);
-        String lyrics = j.optJSONObject("note") == null ? "" : j.optJSONObject("note").optString("lyrics", "");
-        TextView words = text(lyrics.trim(), 14, 0xFFC9CBD0);
-        if (kind.equals("song") && !lyrics.isEmpty()) {
-            boolean open = lyricsOpen.contains(f.getName());
-            TextView lt = text(open ? "Hide lyrics" : "Lyrics", 13, TEXT);
-            lt.setPadding(0, dp(6), dp(18), dp(6));
-            lt.setOnClickListener(v -> {
-                boolean now = !lyricsOpen.remove(f.getName());
-                if (now) lyricsOpen.add(f.getName());
-                words.setVisibility(now ? View.VISIBLE : View.GONE);
-                lt.setText(now ? "Hide lyrics" : "Lyrics");
-            });
-            actions.addView(lt);
-        }
-        if (Build.VERSION.SDK_INT >= 29) {
-            TextView save = text("Save to phone", 13, TEXT);
-            save.setPadding(0, dp(6), 0, dp(6));
-            save.setContentDescription("Save the " + kind + " to the phone");
-            save.setOnClickListener(v -> saveToPhone(f, kind, title));
-            actions.addView(save);
-        }
-        card.addView(actions);
-        if (kind.equals("song") && !lyrics.isEmpty()) {
-            words.setLineSpacing(0, 1.2f);
-            words.setTextIsSelectable(true);
-            words.setPadding(0, dp(6), 0, dp(4));
-            words.setVisibility(lyricsOpen.contains(f.getName()) ? View.VISIBLE : View.GONE);
-            card.addView(words);
-        }
-        return card;
-    }
+    private View studioCard(JSONObject j) { return new ChatCards(this).studioCard(j); }
 
-    private static String studioMeta(JSONObject j) {
-        String kind = j.optString("kind"), q = j.optString("quality");
-        String by = kind.equals("picture") ? "Qwen-Image 2.1" : kind.equals("video") ? (q.equals("draft") ? "FastWan, quick" : "Wan 2.2")
-                : (q.equals("draft") ? "Song Maker, quick" : "Song Maker");
-        int sec = j.optInt("seconds");
-        return "Studio  \u00b7  " + by + (sec > 0 ? "  \u00b7  " + (sec < 90 ? sec + " s" : Math.round(sec / 60.0) + " min") : "");
-    }
+    private static String studioMeta(JSONObject j) { return ChatCards.studioMeta(j); }
 
-    /** The picture, or the video's first frame, at card width (kept, so redrawing the chat doesn't decode it again). */
-    private Bitmap studioPicture(File f, String kind, int px) {
-        String key = "studio:" + f.getName() + px;
-        Bitmap b = thumbs.get(key);
-        if (b != null) return b;
-        try {
-            Bitmap full;
-            if (kind.equals("video")) {
-                android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
-                try { r.setDataSource(f.getPath()); full = r.getFrameAtTime(0); } finally { r.release(); }
-            } else {
-                android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-                o.inJustDecodeBounds = true;
-                android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
-                o.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(1, o.outWidth / px)));
-                o.inJustDecodeBounds = false;
-                full = android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
-            }
-            if (full == null) return null;
-            b = full.getWidth() <= px ? full : Bitmap.createScaledBitmap(full, px, Math.round(full.getHeight() * (px / (float) full.getWidth())), true);
-            thumbs.put(key, b);
-            return b;
-        } catch (Exception e) {
-            android.util.Log.w("Sprocket", "studio picture: " + e);
-            return null;
-        }
-    }
 
-    /** Full screen on black: the picture (tap to close) or the video, playing with the usual controls. */
-    private void fullScreen(File f, boolean video) {
-        android.app.Dialog d = new android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
-        box.setBackgroundColor(0xFF000000);
-        if (video) {
-            if (song != null && song.isPlaying()) { song.pause(); if (songLabel != null) songLabel.setText("\u25B6 Play"); }
-            android.widget.VideoView vv = new android.widget.VideoView(this);
-            android.widget.MediaController mc = new android.widget.MediaController(this);
-            mc.setAnchorView(vv);
-            vv.setMediaController(mc);
-            vv.setVideoPath(f.getPath());
-            vv.setOnPreparedListener(mp -> { mp.setLooping(true); vv.start(); });
-            box.addView(vv, new android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
-        } else {
-            ImageView iv = new ImageView(this);
-            iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(f.getPath()));
-            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setOnClickListener(v -> d.dismiss());
-            box.addView(iv, new android.widget.FrameLayout.LayoutParams(-1, -1));
-        }
-        d.setContentView(box);
-        d.show();
-    }
 
-    private static String playLabel(File f) {
-        return song != null && f.getPath().equals(songFile) && song.isPlaying() ? "\u275A\u275A Pause" : "\u25B6 Play";
-    }
 
-    private void playSong(File f) {
-        try {
-            if (song != null && f.getPath().equals(songFile)) {
-                if (song.isPlaying()) song.pause(); else song.start();
-            } else {
-                if (song != null) song.release();
-                song = new MediaPlayer();
-                songFile = f.getPath();
-                song.setDataSource(songFile);
-                if (songLabel != null) songLabel.setText("\u25B6 Play");   // the song that was playing: stopped
-                song.setOnCompletionListener(mp -> {
-                    mp.release();
-                    song = null;
-                    songFile = null;
-                    if (songLabel != null) songLabel.setText("\u25B6 Play");
-                });
-                song.prepare();
-                song.start();
-            }
-        } catch (Exception e) {
-            note("Couldn't play it: " + e.getMessage());
-            song = null;
-            songFile = null;
-        }
-    }
 
-    /** A copy in his Pictures, Movies or Music, in a Sprocket folder (Android 10+: no permission needed). */
-    private void saveToPhone(File f, String kind, String title) {
-        if (Build.VERSION.SDK_INT < 29) return;
-        new Thread(() -> {
-            try {
-                boolean pic = kind.equals("picture"), vid = kind.equals("video");
-                String folder = pic ? android.os.Environment.DIRECTORY_PICTURES : vid ? android.os.Environment.DIRECTORY_MOVIES
-                        : android.os.Environment.DIRECTORY_MUSIC;
-                String ext = f.getName().substring(f.getName().lastIndexOf('.'));
-                String name = (title.isEmpty() ? "Sprocket " + kind + " " + f.getName().replace(ext, "") : title.replaceAll("[^A-Za-z0-9 _-]", "")) + ext;
-                android.content.ContentValues v = new android.content.ContentValues();
-                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-                v.put(MediaStore.MediaColumns.MIME_TYPE, pic ? "image/png" : vid ? "video/mp4" : "audio/mpeg");
-                v.put(MediaStore.MediaColumns.RELATIVE_PATH, folder + "/Sprocket");
-                v.put(MediaStore.MediaColumns.IS_PENDING, 1);
-                Uri where = pic ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        : vid ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        : MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-                Uri u = getContentResolver().insert(where, v);
-                if (u == null) throw new Exception("Android said no");
-                try (java.io.OutputStream o = getContentResolver().openOutputStream(u)) { Files.copy(f.toPath(), o); }
-                v.clear();
-                v.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                getContentResolver().update(u, v, null, null);
-                runOnUiThread(() -> note("Saved to " + folder + "/Sprocket"));
-            } catch (Exception e) {
-                runOnUiThread(() -> note("Couldn't save it: " + e.getMessage()));
-            }
-        }).start();
-    }
 
-    private View briefCard(Chat.Turn t) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(PANEL, 16));
-        card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        markdownInto(card, t.text);
-        return card;
-    }
+    private View briefCard(Chat.Turn t) { return new ChatCards(this).briefCard(t); }
 
-    /** Markdown drawn into a card: title, headings, bullets, tables and tappable links. */
-    private void markdownInto(LinearLayout card, String md) {
-        for (Markdown.Block b : Markdown.parse(md)) {
-            if (b.kind.equals("rows")) { card.addView(table(b)); continue; }
-            boolean title = b.kind.equals("title"), head = b.kind.equals("heading"), bullet = b.kind.equals("bullet");
-            TextView v = text("", title ? 19 : head ? 16 : 15, title || head ? TEXT : 0xFFC9CBD0);
-            v.setText(styled((bullet ? "\u2022  " : "") + b.text));
-            v.setLineSpacing(0, 1.15f);
-            if (title || head) v.setTypeface(Typeface.DEFAULT_BOLD);
-            v.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
-            v.setLinkTextColor(AMBER);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(bullet ? dp(6) : 0, head ? dp(14) : dp(4), 0, 0);
-            card.addView(v, lp);
-        }
-    }
+    void markdownInto(LinearLayout card, String md) { new ChatCards(this).markdownInto(card, md); }
 
-    private CharSequence styled(String line) {
-        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
-        for (Markdown.Span sp : Markdown.spans(line)) {
-            int a = sb.length();
-            sb.append(sp.text);
-            if (sp.bold) sb.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), a, sb.length(), 0);
-            if (sp.url != null) sb.setSpan(new android.text.style.URLSpan(sp.url), a, sb.length(), 0);
-        }
-        return sb;
-    }
 
-    private View table(Markdown.Block b) {
-        android.widget.HorizontalScrollView sc = new android.widget.HorizontalScrollView(this);
-        android.widget.TableLayout tl = new android.widget.TableLayout(this);
-        for (int r = 0; r < b.rows.size(); r++) {
-            android.widget.TableRow row = new android.widget.TableRow(this);
-            row.setBackgroundColor(r == 0 ? MINE : r % 2 == 0 ? 0xFF222327 : PANEL);
-            for (String cell : b.rows.get(r)) {
-                TextView c = text("", 14, r == 0 ? TEXT : 0xFFC9CBD0);
-                c.setText(styled(cell));
-                c.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
-                c.setLinkTextColor(AMBER);
-                if (r == 0) c.setTypeface(Typeface.DEFAULT_BOLD);
-                c.setPadding(dp(10), dp(7), dp(10), dp(7));
-                c.setMaxWidth(dp(220));
-                row.addView(c);
-            }
-            tl.addView(row);
-        }
-        sc.addView(tl);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(10), 0, dp(4));
-        sc.setLayoutParams(lp);
-        return sc;
-    }
 
     // Back to Sprocket after the hands (the owner 2026-11-10: "if the actual sprocket app was open when this ran it should
     // return to the app"): a question asked on Sprocket's screen that used the screen tool comes back here when it's
@@ -672,7 +415,7 @@ public class MainActivity extends Activity {
         if (current == this) current = null;   // the worker keeps going: the next screen picks the reply up
     }
 
-    private SharedPreferencesLike prefs() { return new SharedPreferencesLike(this); }
+    SharedPreferencesLike prefs() { return new SharedPreferencesLike(this); }
 
     /** Tiny wrapper so the key, the voice switch and nothing else live in one private settings file. */
     static final class SharedPreferencesLike {
@@ -712,16 +455,16 @@ public class MainActivity extends Activity {
         void notionPage(String id) { p.edit().putString("notion_page", id).apply(); }
     }
 
-    private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
+    int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 
-    private GradientDrawable round(int color, int radius) {
+    GradientDrawable round(int color, int radius) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
         g.setCornerRadius(dp(radius));
         return g;
     }
 
-    private TextView text(String t, int sp, int color) {
+    TextView text(String t, int sp, int color) {
         TextView v = new TextView(this);
         v.setText(t);
         v.setTextSize(sp);
@@ -729,7 +472,7 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    private Button chip(String t) {
+    Button chip(String t) {
         Button c = new Button(this);
         c.setText(t);
         c.setAllCaps(false);
@@ -927,7 +670,7 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private void note(String s) { android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show(); }
+    void note(String s) { android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show(); }
 
     /** Think harder is on for the next question only: the text box says so, outlined amber, until it's sent. */
     private void styleHarder() {
@@ -1085,9 +828,9 @@ public class MainActivity extends Activity {
      * away, and Sprocket then said it couldn't use the screen). A save that fails (a bad address) keeps the page open
      * with the reason. Cancel is the way out without saving. Null on every other page.
      */
-    private Runnable backSaves;
+    Runnable backSaves;
 
-    private void render() {
+    void render() {
         backSaves = null;
         list.removeAllViews();
         backSaves = null;   // only Settings and Personality set it again
@@ -1246,57 +989,7 @@ public class MainActivity extends Activity {
 
     private void scrollDown() { scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN)); }
 
-    private void keyCard(boolean replacing) {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text(replacing ? "Claude key" : "Sprocket needs a Claude key", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        c.addView(text(CLAUDE_KEY_HOW, 14, MUTED));
-        EditText k = new EditText(this);
-        k.setHint("sk-ant-...");
-        k.setTextColor(TEXT);
-        k.setHintTextColor(FAINT);
-        k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        c.addView(k);
-        TextView note = text("", 13, ERR);
-        c.addView(note);
-        LinearLayout btns = new LinearLayout(this);
-        Button save = chip("Save");
-        save.setBackground(round(TEXT, 18));
-        save.setTextColor(0xFF111111);
-        save.setOnClickListener(v -> {
-            String s = k.getText().toString().trim();
-            if (!s.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
-            prefs().key(s);
-            render();
-        });
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        if (!prefs().key().isEmpty()) {
-            Button remove = chip("Remove key");
-            remove.setBackground(round(MINE, 18));
-            remove.setTextColor(TEXT);
-            remove.setOnClickListener(v -> { prefs().key(""); render(); });
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(40));
-            rp.setMargins(dp(10), 0, 0, 0);
-            btns.addView(remove, rp);
-            Button back = chip("Back");
-            back.setBackground(round(MINE, 18));
-            back.setTextColor(TEXT);
-            back.setOnClickListener(v -> render());
-            btns.addView(back, new LinearLayout.LayoutParams(rp));
-        }
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(10), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
+    void keyCard(boolean replacing) { new SetupWalkthrough(this).keyCard(replacing); }
 
     // ------------------------------------------------------------------ first open (Setup)
     static final String ADDRESS_HOW = "The go-between's start.py prints exactly what to type here. Its address is a Tailscale one "
@@ -1316,374 +1009,27 @@ public class MainActivity extends Activity {
             + "dollars goes a long way: most questions cost well under a cent). 3. Under API keys, create a key, copy it and "
             + "paste it here. It stays on this phone. What you ask goes to DeepSeek, a company in China.";
 
-    /** A new install's first screen, and what shows whenever there's no brain: pick one, full screen (the owner,
-     * 2026-11-11). Sprocket walks them through everything else in the chat (Setup). */
-    private void welcomeScreen() {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(8), dp(28), dp(8), dp(24));
-        TextView h = text("Hi, I'm Sprocket", 26, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        TextView sub = text("First, pick my brain. I'll walk you through the rest in the chat.", 15, MUTED);
-        sub.setPadding(0, dp(6), 0, 0);
-        c.addView(sub);
+    private void welcomeScreen() { new SetupWalkthrough(this).welcomeScreen(); }
 
-        final boolean[] own = {Config.own};
-        // which card: Claude, DeepSeek (a preset of "your own server": its Claude-style address, no go-between) or own
-        final boolean[] ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};
-        LinearLayout claude = option("Claude", "Anthropic's AI. Needs a Claude key; you pay Anthropic for what you use.");
-        LinearLayout deep = option("DeepSeek", "DeepSeek's AI. Needs a DeepSeek key; you pay DeepSeek for what you use, usually "
-                + "well under a cent a question. Tested with Sprocket's practice set: 68 of 68.");
-        LinearLayout openai = option("OpenAI", "OpenAI's API (not a ChatGPT subscription). Needs an OpenAI API key; you pay "
-                + "OpenAI for what you use. Tested with Sprocket's practice set: 64 of 68.");
-        LinearLayout mine = option("Your own server", "A model you run yourself, through the included go-between or anything "
-                + "that speaks Anthropic's Messages API. Tested with Qwen.");
-        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(-1, -2);
-        first.setMargins(0, dp(22), 0, 0);
-        c.addView(claude, first);
-        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(-1, -2);
-        second.setMargins(0, dp(10), 0, 0);
-        c.addView(deep, second);
-        LinearLayout.LayoutParams third = new LinearLayout.LayoutParams(-1, -2);
-        third.setMargins(0, dp(10), 0, 0);
-        c.addView(openai, third);
-        LinearLayout.LayoutParams fourth = new LinearLayout.LayoutParams(-1, -2);
-        fourth.setMargins(0, dp(10), 0, 0);
-        c.addView(mine, fourth);
 
-        LinearLayout claudeBox = new LinearLayout(this);
-        claudeBox.setOrientation(LinearLayout.VERTICAL);
-        EditText key = field(claudeBox, "Your Claude key", "", "sk-ant-...", true);
-        claudeBox.addView(text(CLAUDE_KEY_HOW, 12, FAINT));
-        TextView console = text("Open the Claude Console", 13, TEXT);
-        console.setPadding(0, dp(8), 0, dp(4));
-        console.setOnClickListener(v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(CONSOLE_KEYS))); } catch (Exception ignored) { }
-        });
-        claudeBox.addView(console);
-        c.addView(claudeBox);
-        LinearLayout deepBox = new LinearLayout(this);
-        deepBox.setOrientation(LinearLayout.VERTICAL);
-        EditText deepKey = field(deepBox, "Your DeepSeek key", "", "sk-...", true);
-        deepBox.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
-        TextView deepSite = text("Open DeepSeek's API keys page", 13, TEXT);
-        deepSite.setPadding(0, dp(8), 0, dp(4));
-        deepSite.setOnClickListener(v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Claude.DEEPSEEK_KEYS))); } catch (Exception ignored) { }
-        });
-        deepBox.addView(deepSite);
-        c.addView(deepBox);
-        LinearLayout oaBox = new LinearLayout(this);
-        oaBox.setOrientation(LinearLayout.VERTICAL);
-        EditText oaKey = field(oaBox, "Your OpenAI API key", "", "sk-...", true);
-        oaBox.addView(text(OPENAI_KEY_HOW, 12, FAINT));
-        TextView oaSite = text("Open OpenAI's API keys page", 13, TEXT);
-        oaSite.setPadding(0, dp(8), 0, dp(4));
-        oaSite.setOnClickListener(v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Claude.OPENAI_KEYS))); } catch (Exception ignored) { }
-        });
-        oaBox.addView(oaSite);
-        c.addView(oaBox);
-        LinearLayout ownBox = new LinearLayout(this);
-        ownBox.setOrientation(LinearLayout.VERTICAL);
-        EditText name = field(ownBox, "Its name (what I call it)", Config.ownName, "Qwen", false);
-        EditText base = field(ownBox, "Its address", Config.ownBase, "https://my-server:8448", false);
-        EditText model = field(ownBox, "Model name (blank if the server has one)", Config.ownModel, "qwen", false);
-        EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", "none", true);
-        ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
-        c.addView(ownBox);
-        TextView note = text("", 13, ERR);
-        note.setPadding(0, dp(8), 0, 0);
-        TextView anyway = text("Start anyway", 13, FAINT);   // after a failed test: their server may just be off right now
-        anyway.setPadding(0, dp(12), 0, 0);
-        anyway.setVisibility(View.GONE);
-        final int[] asked = {0};                              // which check is current: switching brains drops the last one
-        Runnable show = () -> {
-            boolean onMine = own[0] && !ds[0] && !oa[0];
-            pick(claude, !own[0]);
-            pick(deep, own[0] && ds[0]);
-            pick(openai, own[0] && oa[0]);
-            pick(mine, onMine);
-            claudeBox.setVisibility(own[0] ? View.GONE : View.VISIBLE);
-            deepBox.setVisibility(own[0] && ds[0] ? View.VISIBLE : View.GONE);
-            oaBox.setVisibility(own[0] && oa[0] ? View.VISIBLE : View.GONE);
-            ownBox.setVisibility(onMine ? View.VISIBLE : View.GONE);
-        };
-        Runnable switched = () -> {   // the other brain's message would read as this one's (the owner's phone test, 2026-11-12)
-            asked[0]++;
-            note.setText("");
-            anyway.setVisibility(View.GONE);
-            show.run();
-        };
-        claude.setOnClickListener(v -> { if (own[0]) { own[0] = false; switched.run(); } });
-        deep.setOnClickListener(v -> { if (!own[0] || !ds[0]) { own[0] = true; ds[0] = true; oa[0] = false; switched.run(); } });
-        openai.setOnClickListener(v -> { if (!own[0] || !oa[0]) { own[0] = true; oa[0] = true; ds[0] = false; switched.run(); } });
-        mine.setOnClickListener(v -> { if (!own[0] || ds[0] || oa[0]) { own[0] = true; ds[0] = false; oa[0] = false; switched.run(); } });
-        show.run();
 
-        c.addView(note);
-        Button start = button("Start", true);
-        start.setOnClickListener(v -> {
-            final boolean useOwn = own[0], useDeep = own[0] && ds[0], useOa = own[0] && oa[0];
-            final String k = key.getText().toString().trim();
-            final String b = useDeep ? Claude.DEEPSEEK_BASE : useOa ? Claude.OPENAI_BASE : base.getText().toString().trim();
-            final String n = useDeep ? "DeepSeek" : useOa ? "OpenAI" : name.getText().toString().trim();
-            final String m = useDeep ? Claude.DEEPSEEK_MODEL : useOa ? Claude.OPENAI_MODEL : model.getText().toString().trim();
-            final String typed = (useDeep ? deepKey : useOa ? oaKey : ownKey).getText().toString().trim();
-            note.setTextColor(ERR);
-            if (useDeep || useOa) {
-                String who = useDeep ? "DeepSeek" : "OpenAI";
-                if (typed.isEmpty()) { note.setText("Paste your " + who + " key first."); return; }
-                if (typed.startsWith("sk-ant-")) { note.setText("That's a Claude key. Pick Claude above, or paste a " + who + " key."); return; }
-            } else if (useOwn) {
-                if (b.isEmpty()) { note.setText("Your own server needs its address."); return; }
-                String bad = Config.addressProblem(b);
-                if (bad != null) { note.setText(bad); return; }
-            } else if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
-            Runnable go = () -> {
-                synchronized (Claude.class) {   // the whole switch at once: nothing reads half of it (Codex 049 #1)
-                    if (useDeep) prefs().deepKey(typed);       // DeepSeek and OpenAI have their own slots: their server stays as it was
-                    else if (useOa) prefs().openAiKey(typed);
-                    else if (useOwn) {
-                        Config.ownName = n;
-                        Config.ownBase = b;
-                        Config.ownModel = m;
-                        if (!typed.isEmpty()) prefs().ownKey(typed);
-                    } else prefs().key(k);
-                    Config.own = useOwn;
-                    Config.deep = useDeep;
-                    Config.oa = useOa;
-                    prefs().saveConfig();
-                    Claude.useBrain(Config.own);
-                }
-                startSetup();
-                render();
-            };
-            // test it first (Codex's review 2026-11-12): a wrong key or an unreachable server is said here, not mid-setup
-            Claude.Brain test = useOwn ? new Claude.Brain(b.replaceAll("/+$", ""), typed.isEmpty() ? prefs().ownKey() : typed, true,
-                    m.isEmpty() ? "own" : m) : new Claude.Brain(Claude.ANTHROPIC, k, false, "");
-            note.setTextColor(MUTED);
-            note.setText(useDeep ? "Checking the key with DeepSeek..." : useOa ? "Checking the key with OpenAI..." : useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
-            start.setEnabled(false);
-            anyway.setVisibility(View.GONE);
-            final int ticket = ++asked[0];
-            new Thread(() -> {
-                String problem = Claude.check(test);
-                runOnUiThread(() -> {
-                    start.setEnabled(true);
-                    if (ticket != asked[0]) return;   // he switched brains while it checked: this answer is for the other one
-                    if (problem == null) { go.run(); return; }
-                    note.setTextColor(ERR);
-                    note.setText(problem);
-                    anyway.setOnClickListener(x -> go.run());
-                    anyway.setVisibility(View.VISIBLE);
-                });
-            }).start();
-        });
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, dp(44));
-        sp.setMargins(0, dp(12), 0, 0);
-        c.addView(start, sp);
-        c.addView(anyway);
-        list.addView(c, new LinearLayout.LayoutParams(-1, -2));
-    }
+    void startSetup() { new SetupWalkthrough(this).startSetup(); }
 
-    /** One of the two brains on the first screen: a panel to tap. */
-    private LinearLayout option(String title, String what) {
-        LinearLayout o = new LinearLayout(this);
-        o.setOrientation(LinearLayout.VERTICAL);
-        o.setPadding(dp(16), dp(14), dp(16), dp(14));
-        o.setClickable(true);
-        TextView t = text(title, 17, TEXT);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        o.addView(t);
-        TextView w = text(what, 13, MUTED);
-        w.setPadding(0, dp(4), 0, 0);
-        o.addView(w);
-        return o;
-    }
 
-    private void pick(LinearLayout o, boolean picked) {
-        GradientDrawable g = round(PANEL, 16);
-        g.setStroke(dp(2), picked ? TEXT : PANEL);
-        o.setBackground(g);
-    }
+    private void addSetupCard() { new SetupWalkthrough(this).addSetupCard(); }
 
-    /** Only on a brand-new install (a brain removed and put back later doesn't start it again). */
-    private void startSetup() {
-        android.content.SharedPreferences sp = getSharedPreferences("sprocket", Context.MODE_PRIVATE);
-        if (sp.getBoolean("setup_offered", false) || !chat.turns.isEmpty()) return;
-        sp.edit().putBoolean("setup_offered", true).putBoolean("asked_location", true).apply();
-        Config.off.addAll(Setup.features());      // each feature waits for its own Yes (Codex 042 #3)
-        prefs().saveConfig();
-        FeedAlarm.cancel(this);
-        setupGo(0);
-        chat.add("assistant", Setup.HELLO + "\n\n" + Setup.ask(0), System.currentTimeMillis());
-        saveChat();
-    }
 
-    private void setupGo(int at) {
-        setupAt = at;
-        setupGithub = false;
-        setupReturning = false;
-        setupTried.clear();
-        getSharedPreferences("sprocket", Context.MODE_PRIVATE).edit().putInt("setup_at", at).apply();
-    }
+    private boolean setupTyped(String s) { return new SetupWalkthrough(this).setupTyped(s); }
 
-    /** Under the question on show: Yes / Not now (or Skip while a username is awaited), and a way out of setup. */
-    private void addSetupCard() {
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable g = round(PANEL, 16);
-        g.setStroke(dp(1), FAINT);
-        panel.setBackground(g);
-        panel.setPadding(dp(16), dp(12), dp(16), dp(12));
-        Setup.Step st = Setup.STEPS[setupAt];
-        TextView t = text(setupGithub ? "Type your username below, or skip this one." : st.name, 15, setupGithub ? MUTED : TEXT);
-        if (!setupGithub) t.setTypeface(Typeface.DEFAULT_BOLD);
-        panel.addView(t);
-        LinearLayout btns = new LinearLayout(this);
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(42));
-        gap.setMargins(dp(10), 0, 0, 0);
-        if (setupGithub) {
-            Button skip = button("Skip", false);
-            skip.setOnClickListener(v -> setupTapped(false));
-            btns.addView(skip, new LinearLayout.LayoutParams(-2, dp(42)));
-        } else {
-            Button yes = button("Yes", true), no = button("Not now", false);
-            yes.setOnClickListener(v -> setupTapped(true));
-            no.setOnClickListener(v -> setupTapped(false));
-            btns.addView(yes, new LinearLayout.LayoutParams(-2, dp(42)));
-            btns.addView(no, gap);
-        }
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(10), 0, 0);
-        panel.addView(btns, bp);
-        TextView out = text("Start with basic chat (set up the rest later)", 13, FAINT);
-        out.setPadding(0, dp(10), 0, 0);
-        out.setOnClickListener(v -> setupSkipRest());
-        panel.addView(out);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(10), 0, 0);
-        list.addView(panel, lp);
-    }
 
-    private void setupTapped(boolean yes) {
-        if (busy || !Setup.running(setupAt)) return;
-        chat.add("user", yes ? "Yes" : setupGithub ? "Skip" : "Not now", System.currentTimeMillis());
-        if (setupGithub) { Config.off.add("github"); prefs().saveConfig(); setupNext(Setup.ack(Setup.STEPS[setupAt], false)); return; }
-        setupAnswer(yes);
-    }
+    private void setupContinue() { new SetupWalkthrough(this).setupContinue(); }
 
-    /** Typed during setup: true if it answered the question on show; false = a question, for the brain. */
-    private boolean setupTyped(String s) {
-        Boolean yes = Setup.answer(s);
-        if (setupGithub) {
-            String name = yes == Boolean.FALSE ? null : Setup.githubName(s);
-            if (yes != Boolean.FALSE && name == null) return false;
-            chat.add("user", s, System.currentTimeMillis());
-            if (name == null) { Config.off.add("github"); prefs().saveConfig(); setupNext(Setup.ack(Setup.STEPS[setupAt], false)); return true; }
-            Config.github = name;
-            Config.off.remove("github");
-            prefs().saveConfig();
-            setupNext("Got it: " + name + ".");
-            return true;
-        }
-        if (yes == null) return false;
-        chat.add("user", s, System.currentTimeMillis());
-        setupAnswer(yes);
-        return true;
-    }
 
-    private void setupAnswer(boolean yes) {
-        Setup.Step st = Setup.STEPS[setupAt];
-        if (st.feature != null) {
-            if (yes) Config.off.remove(st.feature); else Config.off.add(st.feature);
-            prefs().saveConfig();
-            if (st.feature.equals("brief")) { if (yes) FeedAlarm.schedule(this); else FeedAlarm.cancel(this); }
-        }
-        if (!yes) { setupNext(Setup.ack(st, false)); return; }
-        render();                                 // their Yes on screen before Android's question
-        if (st.way == Setup.Way.GITHUB_NAME) {
-            setupGithub = true;
-            chat.add("assistant", Setup.GITHUB_ASK, System.currentTimeMillis());
-            saveChat();
-            render();
-            return;
-        }
-        setupContinue();
-    }
 
-    /** Asks Android for whatever the step on show still lacks, one thing at a time and each only once, then moves on. */
-    private void setupContinue() {
-        Setup.Step st = Setup.STEPS[setupAt];
-        boolean listener = st.way == Setup.Way.NOTIFICATION_ACCESS || st.way == Setup.Way.BOTH_SWITCHES;
-        boolean screen = st.way == Setup.Way.SCREEN_CONTROL || st.way == Setup.Way.BOTH_SWITCHES;
-        String[] missing = missingPerms(st.perms);
-        if (missing.length > 0 && setupTried.add("perms")) { requestPermissions(missing, ASK_SETUP); return; }
-        if (listener && !MessageListener.on(this) && setupTried.add("listener")) {
-            setupReturning = true;
-            MessageListener.openSwitch(this);
-            return;
-        }
-        if (screen && !ScreenHands.on() && setupTried.add("screen")) {
-            setupReturning = true;
-            startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
-            return;
-        }
-        if (st.way == Setup.Way.ASSISTANT) {     // Android lets no app ask for this role: its own Default apps page
-            if (!isAssistant() && setupTried.add("assistant")) {
-                setupReturning = true;
-                startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
-                return;
-            }
-            setupNext(isAssistant() ? Setup.ack(st, true) : Setup.ASSISTANT_NOT_YET);
-            return;
-        }
-        boolean switches = (!listener || MessageListener.on(this)) && (!screen || ScreenHands.on());
-        if (Place.allowed(this)) Place.refresh(this);
-        setupNext(!switches ? Setup.STILL_OFF : missingPerms(st.perms).length > 0 ? Setup.DENIED : Setup.ack(st, true));
-    }
 
-    /** True when Sprocket is the phone's digital assistant (the side button), as far as this Android can tell. */
-    private boolean isAssistant() {
-        if (Build.VERSION.SDK_INT >= 29) {
-            android.app.role.RoleManager rm = getSystemService(android.app.role.RoleManager.class);
-            return rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
-        }
-        String a = android.provider.Settings.Secure.getString(getContentResolver(), "assistant");
-        return a != null && a.startsWith(getPackageName() + "/");
-    }
-
-    private String[] missingPerms(String[] perms) {
-        java.util.List<String> out = new java.util.ArrayList<>();
-        for (String p : perms) {
-            if (p.equals(Setup.POST) && Build.VERSION.SDK_INT < 33) continue;       // no such question before Android 13
-            if (checkSelfPermission(p) != android.content.pm.PackageManager.PERMISSION_GRANTED) out.add(p);
-        }
-        return out.toArray(new String[0]);
-    }
-
-    private void setupNext(String ack) {
-        int n = Setup.next(setupAt);
-        setupGo(n);
-        chat.add("assistant", ack + "\n\n" + (Setup.running(n) ? Setup.ask(n) : Setup.DONE), System.currentTimeMillis());
-        saveChat();
-        render();
-    }
-
-    private void setupSkipRest() {
-        if (busy) return;
-        setupGo(Setup.OFF);
-        chat.add("assistant", "Okay, that's it for setup. What we didn't get to stays off: switch it on in ⋯ > Settings, "
-                        + "and ask me about any of it.",
-                System.currentTimeMillis());
-        saveChat();
-        render();
-    }
 
     // ------------------------------------------------------------------ settings (Config)
-    private EditText field(LinearLayout c, String label, String value, String hint, boolean secret) {
+    EditText field(LinearLayout c, String label, String value, String hint, boolean secret) {
         TextView l = text(label, 13, MUTED);
         l.setPadding(0, dp(10), 0, 0);
         c.addView(l);
@@ -1698,7 +1044,7 @@ public class MainActivity extends Activity {
         return e;
     }
 
-    private TextView heading(LinearLayout c, String t) {
+    TextView heading(LinearLayout c, String t) {
         TextView h = text(t, 16, TEXT);
         h.setTypeface(Typeface.DEFAULT_BOLD);
         h.setPadding(0, dp(18), 0, dp(2));
@@ -1706,335 +1052,17 @@ public class MainActivity extends Activity {
         return h;
     }
 
-    private Button button(String t, boolean main) {
+    Button button(String t, boolean main) {
         Button b = chip(t);
         b.setBackground(round(main ? TEXT : MINE, 18));
         b.setTextColor(main ? 0xFF111111 : TEXT);
         return b;
     }
 
-    /** ⋯ Settings (the open-source cleanup, 2026-11-11): the brain, voices, features, optional servers, personality. */
-    private void settingsCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Settings", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
+    private void settingsCard() { new SettingsPage(this).settingsCard(); }
 
-        heading(c, "Brain");
-        final boolean[] own = {Config.own}, ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};   // which answers first
-        LinearLayout pick = new LinearLayout(this);
-        Button claude = button("Claude", !own[0]), deep = button("DeepSeek", ds[0]), openai = button("OpenAI", oa[0]),
-                mine = button("Your own server", own[0] && !ds[0] && !oa[0]);
-        pick.addView(claude, new LinearLayout.LayoutParams(-2, dp(38)));
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(38));
-        gap.setMargins(dp(10), 0, 0, 0);
-        pick.addView(deep, gap);
-        LinearLayout.LayoutParams gap2 = new LinearLayout.LayoutParams(-2, dp(38));
-        gap2.setMargins(dp(10), 0, 0, 0);
-        pick.addView(openai, gap2);
-        c.addView(pick);
-        LinearLayout pick2 = new LinearLayout(this);   // a second row: four don't fit across a phone
-        pick2.setPadding(0, dp(8), 0, 0);
-        pick2.addView(mine, new LinearLayout.LayoutParams(-2, dp(38)));
-        c.addView(pick2);
-        TextView backupHow = text("The one you pick answers. Set up the others too, and when it doesn't answer, Sprocket asks "
-                + "on a card whether the next one may take that question: your own server first, then DeepSeek, OpenAI, Claude.", 12, FAINT);
-        backupHow.setPadding(0, dp(6), 0, 0);
-        c.addView(backupHow);
-        TextView deepLabel = text("", 14, MUTED);
-        deepLabel.setPadding(0, dp(10), 0, 0);
-        c.addView(deepLabel);
-        EditText deepKey = field(c, "Its key", "", prefs().deepKey().isEmpty() ? "sk-..." : "saved", true);
-        c.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
-        TextView oaLabel = text("", 14, MUTED);
-        oaLabel.setPadding(0, dp(10), 0, 0);
-        c.addView(oaLabel);
-        EditText oaKey = field(c, "Its key", "", prefs().openAiKey().isEmpty() ? "sk-..." : "saved", true);
-        c.addView(text(OPENAI_KEY_HOW, 12, FAINT));
-        TextView ownLabel = text("", 14, MUTED);
-        ownLabel.setPadding(0, dp(10), 0, 0);
-        c.addView(ownLabel);
-        LinearLayout ownBox = new LinearLayout(this);
-        ownBox.setOrientation(LinearLayout.VERTICAL);
-        EditText name = field(ownBox, "Its name (what Sprocket calls it)", Config.ownName, "Qwen", false);
-        EditText base = field(ownBox, "Its address (speaks Anthropic's Messages API, or the included go-between)", Config.ownBase,
-                "https://my-server:8448", false);
-        EditText model = field(ownBox, "Model name (blank if the server has one)", Config.ownModel, "qwen", false);
-        EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", prefs().ownKey().isEmpty() ? "none" : "saved", true);
-        ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
-        c.addView(ownBox);
-        Button claudeKey = button(prefs().key().isEmpty() ? "Add Claude key" : "Claude key", false);
-        claudeKey.setOnClickListener(v -> keyCard(true));
-        LinearLayout.LayoutParams top = new LinearLayout.LayoutParams(-2, dp(38));
-        top.setMargins(0, dp(8), 0, 0);
-        c.addView(claudeKey, top);
-        final boolean[] hk = {Config.haiku};   // Claude's everyday model (11-16: Haiku passed the practice set, 62 of 68 judged)
-        LinearLayout claudeModel = new LinearLayout(this);
-        claudeModel.setPadding(0, dp(8), 0, 0);
-        Button sonnetB = button("Sonnet", !hk[0]), haikuB = button("Haiku (cheapest)", hk[0]);
-        claudeModel.addView(sonnetB, new LinearLayout.LayoutParams(-2, dp(38)));
-        LinearLayout.LayoutParams gap3 = new LinearLayout.LayoutParams(-2, dp(38));
-        gap3.setMargins(dp(10), 0, 0, 0);
-        claudeModel.addView(haikuB, gap3);
-        c.addView(claudeModel);
-        c.addView(text("Claude's model, same key: Sonnet is smarter; Haiku costs about a twentieth as much. \"Think harder\" "
-                + "always uses Opus.", 12, FAINT));
-        Runnable showModel = () -> {
-            for (Object[] b : new Object[][]{{sonnetB, !hk[0]}, {haikuB, hk[0]}}) {
-                ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
-                ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
-            }
-        };
-        sonnetB.setOnClickListener(v -> { hk[0] = false; showModel.run(); });
-        haikuB.setOnClickListener(v -> { hk[0] = true; showModel.run(); });
-        showModel.run();
-        Runnable showBrain = () -> {                       // all stay on show: the others are the backups (11-13, 11-15)
-            boolean onClaude = !own[0], onDeep = own[0] && ds[0], onOa = own[0] && oa[0], onMine = own[0] && !ds[0] && !oa[0];
-            deepLabel.setText(onDeep ? "DeepSeek" : "DeepSeek, as a backup (optional)");
-            oaLabel.setText(onOa ? "OpenAI" : "OpenAI, as a backup (optional)");
-            ownLabel.setText(onMine ? "Your own server" : "Your own server, as a backup (optional)");
-            boolean noKey = prefs().key().isEmpty();
-            claudeKey.setText(!onClaude ? (noKey ? "Add a Claude key, as a backup (optional)" : "Claude key (backup)")
-                    : (noKey ? "Add Claude key" : "Claude key"));
-            for (Object[] b : new Object[][]{{claude, onClaude}, {deep, onDeep}, {openai, onOa}, {mine, onMine}}) {
-                ((Button) b[0]).setBackground(round((Boolean) b[1] ? TEXT : MINE, 18));
-                ((Button) b[0]).setTextColor((Boolean) b[1] ? 0xFF111111 : TEXT);
-            }
-        };
-        claude.setOnClickListener(v -> { own[0] = false; showBrain.run(); });
-        deep.setOnClickListener(v -> { own[0] = true; ds[0] = true; oa[0] = false; showBrain.run(); });
-        openai.setOnClickListener(v -> { own[0] = true; oa[0] = true; ds[0] = false; showBrain.run(); });
-        mine.setOnClickListener(v -> { own[0] = true; ds[0] = false; oa[0] = false; showBrain.run(); });
-        showBrain.run();
-        c.addView(text("Tested with Claude, DeepSeek, OpenAI, and Qwen through the included go-between. Other models may work if they speak "
-                + "Anthropic's Messages API, or sit behind the go-between (any OpenAI-compatible server).", 12, FAINT));
 
-        heading(c, "Voices");
-        EditText out = field(c, "Voice server (blank = the phone's own voice)", Config.voiceOut, "http://my-server:8472", false);
-        EditText in = field(c, "Speech-to-text server (blank = the phone's own recognizer)", Config.voiceIn, "http://my-server:8080", false);
-        c.addView(text("The voice server takes POST /speak {text, mood} and returns audio. The speech-to-text server takes "
-                + "an OpenAI-style /v1/audio/transcriptions upload (whisper.cpp's server does).", 12, FAINT));
-
-        heading(c, "Features");
-        java.util.Map<String, android.widget.CheckBox> boxes = new java.util.LinkedHashMap<>();
-        for (String[] f : Config.FEATURES) {
-            android.widget.CheckBox b = new android.widget.CheckBox(this);
-            b.setText(f[1]);
-            b.setTextColor(TEXT);
-            b.setChecked(Config.on(f[0]));
-            c.addView(b);
-            TextView d = text(f[2], 12, FAINT);
-            d.setPadding(dp(32), 0, 0, dp(4));
-            c.addView(d);
-            boxes.put(f[0], b);
-        }
-
-        EditText hours = field(c, "Call announcer hours (blank = always)", Config.callHours, "mon-thu 6-23, fri 6-24, sat 0-24, sun 0-23", false);
-
-        heading(c, "Optional servers");
-        EditText gh = field(c, "Your GitHub username", Config.github, "for the GitHub feature", false);
-        EditText dash = field(c, "Home dashboard (/api/state)", Config.homeDash, "blank = off", false);
-        EditText stats = field(c, "Server stats (/stats)", Config.homeStats, "blank = off", false);
-        EditText hands = field(c, "Server job runner", Config.homeHands, "blank = off", false);
-        EditText studio = field(c, "Studio", Config.studio, "blank = off", false);
-
-        heading(c, "More");
-        LinearLayout more = new LinearLayout(this);
-        Button notion = button("Notion key (lists)", false), who = button("Personality", false);
-        notion.setOnClickListener(v -> notionCard());
-        who.setOnClickListener(v -> personaCard());
-        more.addView(notion, new LinearLayout.LayoutParams(-2, dp(38)));
-        more.addView(who, gap);
-        c.addView(more);
-        TextView credits = text("Weather data by Open-Meteo.com (CC BY 4.0); place names from GeoNames. Sprocket is not "
-                + "affiliated with Anthropic or any model maker.", 12, FAINT);
-        credits.setPadding(0, dp(14), 0, 0);
-        c.addView(credits);
-
-        TextView note = text("", 13, ERR);
-        c.addView(note);
-        LinearLayout btns = new LinearLayout(this);
-        Button save = button("Save", true), back = button("Cancel", false);
-        save.setOnClickListener(v -> {
-            if (own[0] && !ds[0] && !oa[0] && base.getText().toString().trim().isEmpty()) { note.setText("Your own server needs its address."); return; }
-            if (own[0] && oa[0] && oaKey.getText().toString().trim().isEmpty() && prefs().openAiKey().isEmpty()) { note.setText("OpenAI needs its key."); return; }
-            if (own[0] && ds[0] && deepKey.getText().toString().trim().isEmpty() && prefs().deepKey().isEmpty()) { note.setText("DeepSeek needs its key."); return; }
-            for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) {
-                String bad = Config.addressProblem(f.getText().toString());
-                if (bad != null) { note.setText(bad + " (" + f.getText().toString().trim() + ")"); f.requestFocus(); return; }
-            }
-            boolean home = false;
-            for (EditText f : new EditText[]{base, out, in, dash, stats, hands, studio}) home |= Config.unencrypted(f.getText().toString());
-            synchronized (Claude.class) {   // the whole switch at once: nothing reads half of it (Codex 049 #1)
-                Config.own = own[0];
-                Config.deep = own[0] && ds[0];
-                Config.oa = own[0] && oa[0];
-                Config.haiku = hk[0];
-                if (!deepKey.getText().toString().trim().isEmpty()) prefs().deepKey(deepKey.getText().toString());
-                if (!oaKey.getText().toString().trim().isEmpty()) prefs().openAiKey(oaKey.getText().toString());
-                Config.ownName = name.getText().toString().trim();
-                Config.ownBase = base.getText().toString().trim();
-                Config.ownModel = model.getText().toString().trim();
-                if (!ownKey.getText().toString().trim().isEmpty()) prefs().ownKey(ownKey.getText().toString());
-                Config.voiceOut = out.getText().toString().trim();
-                Config.voiceIn = in.getText().toString().trim();
-                Config.github = gh.getText().toString().trim();
-                Config.homeDash = dash.getText().toString().trim();
-                Config.homeStats = stats.getText().toString().trim();
-                Config.homeHands = hands.getText().toString().trim();
-                Config.studio = studio.getText().toString().trim();
-                Config.callHours = hours.getText().toString().trim();
-                Config.off.clear();
-                for (java.util.Map.Entry<String, android.widget.CheckBox> e : boxes.entrySet()) if (!e.getValue().isChecked()) Config.off.add(e.getKey());
-                prefs().saveConfig();
-                Claude.useBrain(Config.own);
-            }
-            if (Config.on("brief")) FeedAlarm.schedule(this); else FeedAlarm.cancel(this);
-            VoiceOut.get(this).retryGateway();
-            if (home) android.widget.Toast.makeText(this, "Saved. Home-network http isn't encrypted, and only works at home.", android.widget.Toast.LENGTH_LONG).show();
-            render();
-        });
-        back.setOnClickListener(v -> render());
-        backSaves = save::performClick;
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        btns.addView(back, gap);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(12), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
-
-    /** ⋯ Settings > Personality: his own wording of who Sprocket is, or back to the one the app comes with. */
-    private void personaCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Personality", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        c.addView(text("This goes to the brain with every question: who Sprocket is and how it talks. Change anything.", 13, MUTED));
-        EditText e = new EditText(this);
-        e.setText(persona);
-        e.setTextColor(TEXT);
-        e.setTextSize(13);
-        e.setMinLines(12);
-        e.setGravity(Gravity.TOP);
-        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        c.addView(e);
-        TextView example = text("Want a character? Load the example: a loud robot who is sure he was built for war, and now "
-                + "sets your timers. Then change anything and Save.", 13, MUTED);
-        example.setPadding(0, dp(8), 0, 0);
-        c.addView(example);
-        Button load = button("Load the example", false);
-        load.setOnClickListener(v -> e.setText(examplePersona()));
-        LinearLayout.LayoutParams lp0 = new LinearLayout.LayoutParams(-2, dp(40));
-        lp0.setMargins(0, dp(6), 0, 0);
-        c.addView(load, lp0);
-        LinearLayout btns = new LinearLayout(this);
-        Button save = button("Save", true), reset = button("Use the original", false), back = button("Cancel", false);
-        save.setOnClickListener(v -> {
-            String t = e.getText().toString();
-            if (t.trim().isEmpty()) return;
-            prefs().persona(t.equals(defaultPersona()) ? "" : t);
-            persona = t;
-            settingsCard();
-        });
-        reset.setOnClickListener(v -> { prefs().persona(""); persona = defaultPersona(); personaCard(); });
-        back.setOnClickListener(v -> settingsCard());
-        backSaves = save::performClick;
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(40));
-        gap.setMargins(dp(10), 0, 0, 0);
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        btns.addView(reset, gap);
-        btns.addView(back, new LinearLayout.LayoutParams(gap));
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(12), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
-
-    /** ⋯ Notion key: his "Sprocket" Notion connection's key, so his lists live in Notion (it stays on this phone). */
-    private void notionCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Notion key (lists)", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        c.addView(text("Your lists live in Notion once this is set: one table per list on the \u201cSprocket lists\u201d page. "
-                + "Make the key at notion.so/developers/tokens: New token, name it Sprocket, tick Notion API, Create token. "
-                + "Sprocket only ever touches that one page. The key stays on this phone.", 14, MUTED));
-        EditText k = new EditText(this);
-        k.setHint(prefs().notionKey().isEmpty() ? "ntn_..." : "saved (paste a new one to replace it)");
-        k.setTextColor(TEXT);
-        k.setHintTextColor(FAINT);
-        k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        c.addView(k);
-        TextView note = text("", 13, MUTED);
-        c.addView(note);
-        Runnable check = () -> notionWorker.execute(() -> {
-            String r = syncLists();
-            int n;
-            synchronized (lists) { n = lists.lists.size(); }
-            String said = r == null ? "" : r.isEmpty() ? "Connected: " + n + (n == 1 ? " list" : " lists") + " in Notion now." : "Not yet: " + r + ".";
-            onScreen(x -> { note.setText(said); note.setTextColor(r == null || r.isEmpty() ? MUTED : ERR); });
-        });
-        LinearLayout btns = new LinearLayout(this);
-        Button save = chip("Save");
-        save.setBackground(round(TEXT, 18));
-        save.setTextColor(0xFF111111);
-        save.setOnClickListener(v -> {
-            String s2 = k.getText().toString().trim();
-            if (!s2.startsWith("ntn_") && !s2.startsWith("secret_")) { note.setTextColor(ERR); note.setText("That isn't a Notion key: they start with ntn_"); return; }
-            prefs().notionKey(s2);
-            k.setText("");
-            k.setHint("saved (paste a new one to replace it)");
-            note.setTextColor(MUTED);
-            note.setText("Checking Notion\u2026");
-            check.run();
-        });
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(40));
-        rp.setMargins(dp(10), 0, 0, 0);
-        if (!prefs().notionKey().isEmpty()) {
-            Button test = chip("Check");
-            test.setBackground(round(MINE, 18));
-            test.setTextColor(TEXT);
-            test.setOnClickListener(v -> { note.setTextColor(MUTED); note.setText("Checking Notion\u2026"); check.run(); });
-            btns.addView(test, rp);
-            Button remove = chip("Remove key");
-            remove.setBackground(round(MINE, 18));
-            remove.setTextColor(TEXT);
-            remove.setOnClickListener(v -> { prefs().notionKey(""); listsNote = null; notionCard(); });   // the lists stay on the phone
-            btns.addView(remove, new LinearLayout.LayoutParams(rp));
-        }
-        Button back = chip("Back");
-        back.setBackground(round(MINE, 18));
-        back.setTextColor(TEXT);
-        back.setOnClickListener(v -> render());
-        btns.addView(back, new LinearLayout.LayoutParams(rp));
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(10), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
+    private void notionCard() { new SettingsPage(this).notionCard(); }
 
     private String key() { return testKey != null ? testKey : prefs().activeKey(); }
 
@@ -2045,7 +1073,7 @@ public class MainActivity extends Activity {
     }
 
     /** A brain he can ask: Claude with its key, or his own server with its address (a key only if it wants one). */
-    private boolean ready() {
+    boolean ready() {
         return testKey != null || (Config.own ? (Config.deep ? !prefs().deepKey().isEmpty() : Config.oa ? !prefs().openAiKey().isEmpty()
                 : !Config.ownBase.trim().isEmpty()) : !prefs().key().isEmpty());
     }
@@ -2075,7 +1103,7 @@ public class MainActivity extends Activity {
         ask(s, null);
     }
 
-    private void ask(String said, SelfTest st) {
+    void ask(String said, SelfTest st) {
         String photo = attached;
         attached = null;
         showAttached();
@@ -2213,7 +1241,7 @@ public class MainActivity extends Activity {
     }
 
     /** Runs on the main thread against the screen on show, if there is one. */
-    private static void onScreen(java.util.function.Consumer<MainActivity> f) {
+    static void onScreen(java.util.function.Consumer<MainActivity> f) {
         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { if (current != null) f.accept(current); });
     }
 
@@ -2326,7 +1354,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { return new AppNotes(); }
     }
 
-    private static void saveAppNotes() {
+    static void saveAppNotes() {
         try {
             File tmp = new File(app.getFilesDir(), "app-notes.json.tmp");
             Files.write(tmp.toPath(), appNotes.toJson().getBytes(StandardCharsets.UTF_8));
@@ -2406,7 +1434,7 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------ his lists in Notion (NotionSync)
     /** The last Notion sync: null = Notion is off (or not checked yet), "" = fine, else what went wrong. */
     static volatile String listsNote;
-    private static final java.util.concurrent.ExecutorService notionWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    static final java.util.concurrent.ExecutorService notionWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     /** Worker threads: sends Notion the phone's changes and reads the lists back. null when Notion is off, "" when it
      * went fine, else why not (the changes wait on the phone for the next one). */
@@ -2447,7 +1475,7 @@ public class MainActivity extends Activity {
 
     /** ⋯ Lists: a change made on the phone (or null for none), shown at once, then sent to Notion and read back. On
      * the Notion worker, so a slow Notion never freezes the screen. */
-    private void listChange(Runnable change) {
+    void listChange(Runnable change) {
         notionWorker.execute(() -> {
             if (change != null) {
                 synchronized (lists) { change.run(); saveLists(); }
@@ -2458,9 +1486,9 @@ public class MainActivity extends Activity {
         });
     }
 
-    private static final int SOFT = 0xFFC9CBD0, LINE = 0xFF26272C, INNER = 0xFF17181B;
+    static final int SOFT = 0xFFC9CBD0, LINE = 0xFF26272C, INNER = 0xFF17181B;
 
-    private View divider() {
+    View divider() {
         View d = new View(this);
         d.setBackgroundColor(LINE);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1) / 2 + 1));
@@ -2469,374 +1497,29 @@ public class MainActivity extends Activity {
         return d;
     }
 
-    private void say(String words) {
+    void say(String words) {
         VoiceOut v = VoiceOut.get(this);
         v.stop();
         v.sayThen(words, "deadpan", null);
     }
 
-    /** The morning brief as a card (the mockup he picked): the bottom line, short sections, a line opens to its detail. */
-    private View feedCard(Feed.Brief b) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(PANEL, 16));
-        card.setPadding(dp(14), dp(14), dp(14), dp(10));
-        LinearLayout head = new LinearLayout(this);
-        head.addView(text("Morning brief \u00b7 " + new SimpleDateFormat("EEE MMM d", Locale.US).format(new Date(b.at)), 12, MUTED),
-                new LinearLayout.LayoutParams(0, -2, 1));
-        TextView play = text("\u25B6 Play", 12, TEXT);
-        play.setOnClickListener(v -> say(Feed.spoken(b)));
-        head.addView(play);
-        card.addView(head);
-        TextView label = text("BOTTOM LINE", 11, AMBER);
-        label.setTypeface(Typeface.DEFAULT_BOLD);
-        label.setLetterSpacing(0.06f);
-        label.setPadding(0, dp(8), 0, dp(2));
-        card.addView(label);
-        TextView bl = text(b.bottomLine, 16, TEXT);
-        bl.setLineSpacing(0, 1.15f);
-        card.addView(bl);
-        for (Feed.Section sec : b.sections) {
-            card.addView(divider());
-            TextView name = text(sec.name.toUpperCase(Locale.US), 11, MUTED);
-            name.setTypeface(Typeface.DEFAULT_BOLD);
-            name.setLetterSpacing(0.08f);
-            card.addView(name);
-            boolean alert = sec.name.equalsIgnoreCase("Machines");
-            for (Feed.Item it : sec.items) {
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(4), 0, dp(4));
-                android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
-                if (alert) {
-                    line.append("\u25CF  ");
-                    line.setSpan(new android.text.style.ForegroundColorSpan(AMBER), 0, 1, 0);
-                }
-                line.append(it.line);
-                TextView lt = text("", 14, alert ? TEXT : SOFT);
-                lt.setText(line);
-                lt.setSingleLine(true);
-                lt.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                row.addView(lt, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView chev = text("\u203A", 16, FAINT);
-                chev.setPadding(dp(10), 0, dp(2), 0);
-                row.addView(chev);
-                card.addView(row);
-                LinearLayout open = new LinearLayout(this);       // the detail, shown when he taps the line
-                open.setOrientation(LinearLayout.VERTICAL);
-                open.setBackground(round(INNER, 12));
-                open.setPadding(dp(12), dp(10), dp(12), dp(10));
-                TextView det = text(it.detail.isEmpty() ? it.line : it.detail, 14, SOFT);
-                det.setLineSpacing(0, 1.15f);
-                open.addView(det);
-                if (!it.link.isEmpty()) {
-                    TextView src = text("", 12, FAINT);
-                    android.text.SpannableString ss = new android.text.SpannableString(Claude.site(it.link));
-                    ss.setSpan(new android.text.style.URLSpan(it.link), 0, ss.length(), 0);
-                    src.setText(ss);
-                    src.setLinkTextColor(AMBER);
-                    src.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
-                    src.setPadding(0, dp(6), 0, 0);
-                    open.addView(src);
-                }
-                LinearLayout chips = new LinearLayout(this);
-                Button ask = chip("Ask Sprocket");
-                ask.setBackground(round(TEXT, 16));
-                ask.setTextColor(0xFF111111);
-                ask.setOnClickListener(v -> { if (!busy) ask("Tell me more about this from my morning brief: " + it.line, null); });
-                chips.addView(ask, new LinearLayout.LayoutParams(-2, dp(34)));
-                Button read = chip("Read it out");
-                read.setBackground(round(MINE, 16));
-                read.setTextColor(TEXT);
-                read.setOnClickListener(v -> say(it.line + ". " + it.detail));
-                LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(34));
-                rp.setMargins(dp(8), 0, 0, 0);
-                chips.addView(read, rp);
-                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
-                cp.setMargins(0, dp(10), 0, 0);
-                open.addView(chips, cp);
-                open.setVisibility(View.GONE);
-                LinearLayout.LayoutParams op = new LinearLayout.LayoutParams(-1, -2);
-                op.setMargins(0, dp(4), 0, dp(4));
-                card.addView(open, op);
-                row.setOnClickListener(v -> {
-                    boolean show = open.getVisibility() != View.VISIBLE;
-                    open.setVisibility(show ? View.VISIBLE : View.GONE);
-                    chev.setText(show ? "\u2304" : "\u203A");
-                });
-            }
-        }
-        return card;
-    }
+    private View feedCard(Feed.Brief b) { return new FeedPage(this).feedCard(b); }
 
-    private LinearLayout panelCard(String title, String hint) {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text(title, 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        if (hint != null) {
-            TextView t = text(hint, 14, MUTED);
-            t.setPadding(0, dp(3), 0, dp(4));
-            c.addView(t);
-        }
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(12));
-        c.setLayoutParams(lp);
-        return c;
-    }
+    LinearLayout panelCard(String title, String hint) { return new FeedPage(this).panelCard(title, hint); }
 
-    private Button doneChip(Runnable close) {
-        Button done = chip("Done");
-        done.setBackground(round(TEXT, 18));
-        done.setTextColor(0xFF111111);
-        done.setOnClickListener(v -> close.run());
-        return done;
-    }
+    Button doneChip(Runnable close) { return new FeedPage(this).doneChip(close); }
 
-    /** The Feed screen (the feed icon): when it comes and what's in it, the news topics it follows, the last week. */
-    private void feedScreen() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = panelCard("Every morning at 6:00", "About 5\u201315\u00a2 a day. A notification when it's ready; nothing is "
-                + "said out loud until you press Play.");
-        if (!FeedAlarm.exact(this)) {
-            TextView warn = text("To come right at 6:00, Sprocket needs \u201cAlarms & reminders\u201d switched on.", 14, AMBER);
-            warn.setPadding(0, dp(6), 0, dp(6));
-            c.addView(warn);
-            Button on = chip("Turn it on");
-            on.setBackground(round(MINE, 18));
-            on.setTextColor(TEXT);
-            on.setOnClickListener(v -> FeedAlarm.openSwitch(this));
-            c.addView(on, new LinearLayout.LayoutParams(-2, dp(36)));
-        }
-        for (String[] sec : Feed.SECTIONS) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(6), 0, dp(6));
-            row.addView(text(sec[1], 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-            android.widget.Switch sw = new android.widget.Switch(this);
-            synchronized (feed) { sw.setChecked(feed.on.get(sec[0])); }
-            sw.setThumbDrawable(switchPart(true));      // drawn here, solid like the mockup (Android's track is see-through)
-            sw.setTrackDrawable(switchPart(false));
-            sw.setOnCheckedChangeListener((x, on) -> { synchronized (feed) { feed.on.put(sec[0], on); saveFeed(); } });
-            row.addView(sw);
-            c.addView(row);
-        }
-        Button now = chip("Make one now");
-        now.setBackground(round(MINE, 18));
-        now.setTextColor(TEXT);
-        now.setOnClickListener(v -> { FeedService.start(this); note("Making it: about a minute"); });
-        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-2, dp(36));
-        np.setMargins(0, dp(8), 0, 0);
-        c.addView(now, np);
-        list.addView(c);
+    private void feedScreen() { new FeedPage(this).feedScreen(); }
 
-        LinearLayout w = panelCard("News topics", "What the morning news follows: a team, your town, a hobby. Add your own, "
-                + "or ask Sprocket to follow something. No topics, no news section.");
-        List<String> topics;
-        synchronized (feed) { topics = new ArrayList<>(feed.topics); }
-        for (String t : topics) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            TextView tt = text(t, 15, TEXT);
-            tt.setPadding(0, dp(7), 0, dp(7));
-            row.addView(tt, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView x = text("\u00d7", 20, FAINT);
-            x.setPadding(dp(14), 0, dp(6), 0);
-            x.setOnClickListener(v -> { synchronized (feed) { feed.unwatch(t); saveFeed(); } feedScreen(); });
-            row.addView(x);
-            w.addView(row);
-        }
-        w.addView(adder("Add a topic", words -> { synchronized (feed) { feed.watch(words); saveFeed(); } feedScreen(); }));
-        list.addView(w);
 
-        LinearLayout wk = panelCard("This week", null);
-        List<String> week;
-        synchronized (feed) { week = new ArrayList<>(feed.briefs); }
-        if (week.isEmpty()) wk.addView(text("The first one arrives at 6:00 tomorrow (or tap Make one now).", 14, MUTED));
-        for (int i = week.size() - 1; i >= 0; i--) {
-            Feed.Brief b = Feed.Brief.fromJson(week.get(i));
-            if (b == null) continue;
-            LinearLayout row = new LinearLayout(this);
-            row.setPadding(0, dp(9), 0, dp(9));
-            TextView d = text(new SimpleDateFormat("EEE d", Locale.US).format(new Date(b.at)), 12, MUTED);
-            d.setPadding(0, dp(2), 0, 0);
-            row.addView(d, new LinearLayout.LayoutParams(dp(56), -2));
-            row.addView(text(b.bottomLine, 14, SOFT), new LinearLayout.LayoutParams(0, -2, 1));
-            row.setOnClickListener(v -> { if (!openDays.remove(b.at)) openDays.add(b.at); feedScreen(); });
-            wk.addView(row);
-            if (openDays.contains(b.at)) wk.addView(feedCard(b));
-        }
-        list.addView(wk);
-        list.addView(doneChip(() -> { showingFeed = false; render(); }), new LinearLayout.LayoutParams(-2, dp(40)));
-        scroll.post(() -> scroll.scrollTo(0, 0));
-    }
+    TextView box(boolean done) { return new FeedPage(this).box(done); }
 
-    /** A switch's thumb (a dot: dark when on) or track (a pill: light when on). */
-    private android.graphics.drawable.Drawable switchPart(boolean thumb) {
-        android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
-        for (boolean on : new boolean[]{true, false}) {
-            GradientDrawable g = new GradientDrawable();
-            if (thumb) {
-                g.setShape(GradientDrawable.OVAL);
-                g.setColor(on ? 0xFF111111 : FAINT);
-                g.setSize(dp(16), dp(16));
-            } else {
-                g.setCornerRadius(dp(11));
-                g.setColor(on ? TEXT : MINE);
-                g.setSize(dp(40), dp(22));
-            }
-            android.graphics.drawable.Drawable d = thumb ? new android.graphics.drawable.InsetDrawable(g, dp(3)) : g;
-            s.addState(on ? new int[]{android.R.attr.state_checked} : new int[]{}, d);
-        }
-        return s;
-    }
+    private void goalsScreen() { new GoalsPage(this).goalsScreen(); }
 
-    private TextView box(boolean done) {
-        TextView b = text(done ? "\u2611" : "\u2610", 22, done ? SOFT : MUTED);
-        b.setPadding(0, 0, dp(12), 0);
-        return b;
-    }
-
-    /** The Goals screen (the goals icon): open goals to tick off or talk over, then the done ones. */
-    private void goalsScreen() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = panelCard("Goals", "Say \u201cadd a goal\u2026\u201d or type one. Tap a goal to talk it over; hold one to remove it.");
-        List<Goals.Goal> all;
-        synchronized (goals) { all = new ArrayList<>(goals.goals); }
-        int open = 0, done = 0;
-        for (Goals.Goal g : all) if (g.done) done++; else open++;
-        if (open == 0) c.addView(text("No open goals.", 14, MUTED));
-        LinearLayout doneCard = panelCard("Done (" + done + ")", null);
-        for (Goals.Goal g : all) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(7), 0, dp(7));
-            TextView b = box(g.done);
-            b.setOnClickListener(v -> { synchronized (goals) { goals.toggle(g.id, System.currentTimeMillis()); saveGoals(); } goalsScreen(); });
-            row.addView(b);
-            TextView t = text(g.text, 15, g.done ? FAINT : TEXT);
-            if (g.done) t.setPaintFlags(t.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-            t.setOnClickListener(v -> {
-                if (busy) return;
-                showingGoals = false;
-                render();
-                ask("Let's talk about my goal: " + g.text, null);
-            });
-            t.setOnLongClickListener(v -> {
-                new android.app.AlertDialog.Builder(this).setMessage("Remove \u201c" + g.text + "\u201d?")
-                        .setPositiveButton("Remove", (d, w) -> { synchronized (goals) { goals.delete(g.id); saveGoals(); } goalsScreen(); })
-                        .setNegativeButton("Cancel", null).show();
-                return true;
-            });
-            row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
-            (g.done ? doneCard : c).addView(row);
-        }
-        c.addView(adder("Add a goal", words -> { synchronized (goals) { goals.add(words, System.currentTimeMillis()); saveGoals(); } goalsScreen(); }));
-        list.addView(c);
-        if (done > 0) list.addView(doneCard);
-        list.addView(doneChip(() -> { showingGoals = false; render(); }), new LinearLayout.LayoutParams(-2, dp(40)));
-        scroll.post(() -> scroll.scrollTo(0, 0));
-    }
-
-    /** ⋯ Lists: every list; tap an item to tick it off (or back on), x to take it off, add items or a new list. */
-    private void listsCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Lists", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        if (!prefs().notionKey().isEmpty()) {
-            String n = listsNote;
-            c.addView(text(n == null ? "Checking Notion\u2026" : n.isEmpty() ? "Kept in Notion (Sprocket lists): edit them there too."
-                    : "Notion: " + n + ". Changes wait on the phone until it answers.", 13, n != null && !n.isEmpty() ? ERR : MUTED));
-        }
-        java.util.Map<String, List<Lists.Item>> all;
-        synchronized (lists) { all = new java.util.LinkedHashMap<>(lists.lists); }
-        if (all.isEmpty()) c.addView(text("None yet. Tell them \u201cadd milk to the grocery list\u201d, or make one below.", 14, MUTED));
-        for (java.util.Map.Entry<String, List<Lists.Item>> e : all.entrySet()) {
-            String name = e.getKey();
-            TextView title = text(Character.toUpperCase(name.charAt(0)) + name.substring(1), 16, TEXT);
-            title.setTypeface(Typeface.DEFAULT_BOLD);
-            title.setPadding(0, dp(16), 0, dp(2));
-            c.addView(title);
-            java.util.Map<String, List<Lists.Item>> byAisle;
-            synchronized (lists) { byAisle = lists.groups(name); }
-            List<Object> rows = new ArrayList<>();                    // aisle headings (strings) and items, in order
-            if (byAisle.isEmpty()) rows.addAll(e.getValue());
-            else {
-                for (java.util.Map.Entry<String, List<Lists.Item>> g : byAisle.entrySet()) { rows.add(g.getKey()); rows.addAll(g.getValue()); }
-                for (Lists.Item it : e.getValue()) if (it.done) rows.add(it);
-            }
-            java.time.LocalDate today = java.time.LocalDate.now();
-            for (Object r : rows) {
-                if (r instanceof String) {
-                    TextView ah = text((String) r, 12, MUTED);
-                    ah.setPadding(0, dp(10), 0, 0);
-                    c.addView(ah);
-                    continue;
-                }
-                Lists.Item it = (Lists.Item) r;
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                String when = it.done || it.due.isEmpty() ? "" : "   " + (java.time.LocalDate.parse(it.due).isBefore(today) ? "overdue, " : "")
-                        + java.time.LocalDate.parse(it.due).format(java.time.format.DateTimeFormatter.ofPattern("EEE MMM d", Locale.US));
-                TextView t = text((it.done ? "\u2611  " : "\u2610  ") + it.text + when, 15, it.done ? FAINT : TEXT);
-                if (it.done) t.setPaintFlags(t.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-                t.setPadding(0, dp(8), 0, dp(8));
-                t.setOnClickListener(v -> listChange(() -> lists.check(name, it.text, !it.done)));
-                row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView x = text("\u00d7", 20, FAINT);
-                x.setPadding(dp(14), 0, dp(6), 0);
-                x.setOnClickListener(v -> listChange(() -> lists.remove(name, it.text)));
-                row.addView(x);
-                c.addView(row);
-            }
-            c.addView(adder("Add to " + name, words -> listChange(() -> lists.add(name, new String[]{words}))));
-            LinearLayout btns = new LinearLayout(this);
-            Button clearDone = chip("Clear ticked");
-            clearDone.setBackground(round(MINE, 18));
-            clearDone.setTextColor(TEXT);
-            clearDone.setOnClickListener(v -> listChange(() -> lists.clear(name, true)));
-            btns.addView(clearDone, new LinearLayout.LayoutParams(-2, dp(36)));
-            Button del = chip("Delete list");
-            del.setBackground(round(MINE, 18));
-            del.setTextColor(TEXT);
-            del.setOnClickListener(v -> new android.app.AlertDialog.Builder(this).setMessage("Delete the " + name + " list?")
-                    .setPositiveButton("Delete", (d, w) -> listChange(() -> lists.delete(name)))
-                    .setNegativeButton("Cancel", null).show());
-            LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(-2, dp(36));
-            dp2.setMargins(dp(10), 0, 0, 0);
-            btns.addView(del, dp2);
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-            bp.setMargins(0, dp(6), 0, 0);
-            c.addView(btns, bp);
-        }
-        TextView nl = text("New list", 16, TEXT);
-        nl.setTypeface(Typeface.DEFAULT_BOLD);
-        nl.setPadding(0, dp(18), 0, dp(2));
-        c.addView(nl);
-        c.addView(adder("Its name", words -> listChange(() -> lists.lists.putIfAbsent(Lists.key(words), new ArrayList<>()))));
-        Button done = chip("Done");
-        done.setBackground(round(TEXT, 18));
-        done.setTextColor(0xFF111111);
-        done.setOnClickListener(v -> { showingLists = false; render(); });
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(40));
-        bp.setMargins(0, dp(16), 0, 0);
-        c.addView(done, bp);
-        list.addView(c);
-    }
+    private void listsCard() { new ListsPage(this).listsCard(); }
 
     /** A one-line text box with an Add button. */
-    private View adder(String hint, java.util.function.Consumer<String> onAdd) {
+    View adder(String hint, java.util.function.Consumer<String> onAdd) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         EditText e = new EditText(this);
@@ -2882,7 +1565,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { return new Memory(); }
     }
 
-    private static void saveMemory() {
+    static void saveMemory() {
         try {
             File tmp = new File(app.getFilesDir(), "memory.json.tmp");
             Files.write(tmp.toPath(), memory.toJson().getBytes(StandardCharsets.UTF_8));
@@ -2899,7 +1582,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { return ""; }
     }
 
-    private static boolean saveAbout(String text) {
+    static boolean saveAbout(String text) {
         try {
             File tmp = new File(app.getFilesDir(), "about.md.tmp");
             Files.write(tmp.toPath(), Memory.tidyAbout(text).getBytes(StandardCharsets.UTF_8));
@@ -2927,204 +1610,19 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** ⋯ Memory: his About-you page (Edit), then every note, each with Delete. */
-    private void memoryCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        list.addView(aboutCard());
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.setMargins(0, dp(12), 0, 0);
-        c.setLayoutParams(cp);
-        TextView h = text("What Sprocket remembers", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        int count, pinned = 0;
-        synchronized (memory) { count = memory.notes.size(); for (Memory.Note n : memory.notes) if (n.always) pinned++; }
-        if (count == 0)
-            c.addView(text("Nothing yet. Tell them \u201cremember\u2026\u201d, or just mention something worth keeping.", 14, MUTED));
-        else c.addView(text(count + (count == 1 ? " note" : " notes") + ", " + pinned + " always on. Always-on notes go with every "
-                + "message; the rest go along when they fit what you ask. Tap Always to change that, or Delete.", 14, MUTED));
-        LinearLayout rows = new LinearLayout(this);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        if (count > 0) {
-            EditText find = new EditText(this);
-            find.setHint("Search notes");
-            find.setText(memorySearch);
-            find.setTextColor(TEXT);
-            find.setHintTextColor(FAINT);
-            find.setSingleLine(true);
-            find.addTextChangedListener(new android.text.TextWatcher() {
-                public void beforeTextChanged(CharSequence x, int a, int b, int d) { }
-                public void onTextChanged(CharSequence x, int a, int b, int d) { }
-                public void afterTextChanged(android.text.Editable e) { memorySearch = e.toString(); noteRows(rows); }
-            });
-            c.addView(find);
-        }
-        c.addView(rows);
-        noteRows(rows);
-        List<AppNotes.App> apps = new ArrayList<>();       // app memory for screen control: each fact, with Delete
-        if (appNotes != null) synchronized (appNotes) {
-            for (AppNotes.App a : appNotes.apps) {
-                AppNotes.App copy = new AppNotes.App(a.pkg, a.name);
-                copy.facts.addAll(a.facts);
-                copy.routes.addAll(a.routes);
-                apps.add(copy);
-            }
-        }
-        TextView ah = text("What Sprocket learned about apps", 17, TEXT);
-        ah.setTypeface(Typeface.DEFAULT_BOLD);
-        ah.setPadding(0, dp(20), 0, 0);
-        c.addView(ah);
-        c.addView(text(apps.isEmpty() ? "Nothing yet. When Sprocket finds something in an app for you, it notes where it was, "
-                + "so next time it can go straight there." : "Where things are in your apps, read before Sprocket taps through "
-                + "them. Delete any that are wrong.", 14, MUTED));
-        for (AppNotes.App a : apps) {
-            List<long[]> ids = new ArrayList<>();          // facts and saved ways (routes, 11-13: they weren't listed)
-            List<String> said = new ArrayList<>();
-            for (AppNotes.Fact f : a.facts) { ids.add(new long[]{f.id}); said.add(f.text); }
-            for (AppNotes.Route r : a.routes) { ids.add(new long[]{r.id}); said.add(r.text()); }
-            for (int i = 0; i < ids.size(); i++) {
-                long id = ids.get(i)[0];
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(10), 0, 0);
-                row.addView(text(a.name + ": " + said.get(i), 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-                Button del = chip("Delete");
-                del.setBackground(round(MINE, 18));
-                del.setTextColor(TEXT);
-                del.setOnClickListener(v -> {
-                    synchronized (appNotes) { appNotes.delete(a.pkg, id); saveAppNotes(); }
-                    memoryCard();
-                });
-                LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
-                delp.setMargins(dp(10), 0, 0, 0);
-                row.addView(del, delp);
-                c.addView(row);
-            }
-        }
-        Button done = chip("Done");
-        done.setBackground(round(TEXT, 18));
-        done.setTextColor(0xFF111111);
-        done.setOnClickListener(v -> { showingMemory = false; render(); });
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(40));
-        bp.setMargins(0, dp(16), 0, 0);
-        c.addView(done, bp);
-        list.addView(c);
-    }
+    private void memoryCard() { new MemoryPage(this).memoryCard(); }
 
-    private static String memorySearch = "";
-    private static final int NOTES_SHOWN = 60;   // thousands of notes: the newest 60, or the search's first 60
+    static String memorySearch = "";
+    static final int NOTES_SHOWN = 60;   // thousands of notes: the newest 60, or the search's first 60
 
-    /** The Memory screen's notes, newest first, filtered by his search: each with Always (pin) and Delete. */
-    private void noteRows(LinearLayout rows) {
-        rows.removeAllViews();
-        List<Memory.Note> found;
-        synchronized (memory) { found = memory.search(memorySearch); }
-        for (int i = 0; i < Math.min(NOTES_SHOWN, found.size()); i++) {
-            Memory.Note n = found.get(i);
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(10), 0, 0);
-            row.addView(text(n.text, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-            Button pin = chip("Always");
-            pin.setBackground(round(n.always ? AMBER : MINE, 18));
-            pin.setTextColor(n.always ? 0xFF111111 : TEXT);
-            pin.setOnClickListener(v -> {
-                synchronized (memory) { memory.setAlways(n.id, !n.always); saveMemory(); }
-                memoryCard();
-            });
-            LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-2, dp(36));
-            pp.setMargins(dp(10), 0, 0, 0);
-            row.addView(pin, pp);
-            Button del = chip("Delete");
-            del.setBackground(round(MINE, 18));
-            del.setTextColor(TEXT);
-            del.setOnClickListener(v -> {
-                synchronized (memory) { memory.delete(n.id); saveMemory(); }
-                memoryCard();
-            });
-            LinearLayout.LayoutParams delp = new LinearLayout.LayoutParams(-2, dp(36));
-            delp.setMargins(dp(8), 0, 0, 0);
-            row.addView(del, delp);
-            rows.addView(row);
-        }
-        if (found.size() > NOTES_SHOWN)
-            rows.addView(text((found.size() - NOTES_SHOWN) + " more: search to find them.", 13, FAINT));
-        else if (found.isEmpty() && !memorySearch.trim().isEmpty()) rows.addView(text("No note has those words.", 13, FAINT));
-    }
 
-    /** His About-you page: read (drawn like a brief) with Edit, or a text box with Save and Cancel. */
-    private View aboutCard() {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView h = text("About you", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        top.addView(h, new LinearLayout.LayoutParams(0, -2, 1));
-        c.addView(top);
-        c.addView(text("Goes to Claude with each message. Never passwords, keys, emails or IP addresses.", 14, MUTED));
-        if (editingAbout) {
-            EditText e = new EditText(this);
-            e.setText(about);
-            e.setTextColor(TEXT);
-            e.setTextSize(14);
-            e.setGravity(Gravity.TOP);
-            e.setMinLines(8);
-            e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                    | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-            e.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(Memory.ABOUT_LONGEST)});
-            LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2);
-            ep.setMargins(0, dp(10), 0, 0);
-            c.addView(e, ep);
-            LinearLayout row = new LinearLayout(this);
-            Button save = chip("Save");
-            save.setBackground(round(TEXT, 18));
-            save.setTextColor(0xFF111111);
-            save.setOnClickListener(v -> {
-                if (!saveAbout(e.getText().toString())) { note("Couldn't save it"); return; }
-                editingAbout = false;
-                hideKeyboard(e);
-                render();
-            });
-            Button cancel = chip("Cancel");
-            cancel.setBackground(round(MINE, 18));
-            cancel.setTextColor(TEXT);
-            cancel.setOnClickListener(v -> { editingAbout = false; hideKeyboard(e); render(); });
-            row.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-            LinearLayout.LayoutParams xp = new LinearLayout.LayoutParams(-2, dp(40));
-            xp.setMargins(dp(10), 0, 0, 0);
-            row.addView(cancel, xp);
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
-            rp.setMargins(0, dp(12), 0, 0);
-            c.addView(row, rp);
-            return c;
-        }
-        Button edit = chip("Edit");
-        edit.setBackground(round(MINE, 18));
-        edit.setTextColor(TEXT);
-        edit.setOnClickListener(v -> { editingAbout = true; render(); });
-        top.addView(edit, new LinearLayout.LayoutParams(-2, dp(36)));
-        if (about.isEmpty()) {
-            TextView none = text("Nothing yet. Tap Edit to tell Sprocket about yourself: who you are, your people, your setup.", 15, TEXT);
-            none.setPadding(0, dp(10), 0, 0);
-            c.addView(none);
-        } else markdownInto(c, about);
-        return c;
-    }
 
-    private void hideKeyboard(View v) {
+    void hideKeyboard(View v) {
         android.view.inputmethod.InputMethodManager im = getSystemService(android.view.inputmethod.InputMethodManager.class);
         if (im != null) im.hideSoftInputFromWindow(v.getWindowToken(), 0);
     }
 
-    private static void saveChat() {
+    static void saveChat() {
         try {
             File tmp = new File(app.getFilesDir(), "chat.json.tmp");
             Files.write(tmp.toPath(), chat.toJson().getBytes(StandardCharsets.UTF_8));
@@ -3245,142 +1743,12 @@ public class MainActivity extends Activity {
 
     static Context appContext() { return app; }
 
-    /** His lists, with Notion on: the latest from Notion first (he may have changed them on the PC), the change, then
-     * the change sent to Notion. */
-    private static String listTool(String name, JSONObject in) throws Exception {
-        String before = syncLists();
-        String out = listToolHere(name, in);
-        String after = name.equals("list_show") ? before : syncLists();
-        if (after != null && !after.isEmpty())
-            out += name.equals("list_show") ? " (Notion didn't answer (" + after + "): this is the phone's copy.)"
-                    : " (Notion didn't answer (" + after + "): the change is kept on the phone and goes to Notion next time.)";
-        return out;
-    }
+    private static String listTool(String name, JSONObject in) throws Exception { return ToolsHere.listTool(name, in); }
 
-    /** His lists: each change shown in the chat; emptying a whole list only after he taps Clear on a card. */
-    private static String listToolHere(String name, JSONObject in) throws Exception {
-        String list = in.optString("list");
-        JSONArray arr = in.optJSONArray("items");
-        String[] items = new String[arr == null ? 0 : arr.length()];
-        List<Lists.Item> adds = new ArrayList<>();
-        for (int i = 0; i < items.length; i++) {                // each item: its words, or {text, due, aisle}
-            JSONObject o = arr.optJSONObject(i);
-            items[i] = o != null ? o.optString("text") : arr.optString(i, "");
-            String due = o == null ? "" : o.optString("due");
-            try { if (!due.isEmpty()) java.time.LocalDate.parse(due); } catch (Exception e) { due = ""; }
-            adds.add(new Lists.Item(items[i], false, due, o == null ? "" : o.optString("aisle")));
-        }
-        String k = Lists.key(list);
-        switch (name) {
-            case "list_add": {
-                int n;
-                synchronized (lists) { n = lists.addItems(list, adds); saveLists(); }
-                if (n > 0) Hands.record("Added to " + k + ": " + String.join(", ", items));
-                synchronized (lists) { return (n == items.length ? "Added. " : "Added " + n + " (the rest were on it already). ") + lists.show(list); }
-            }
-            case "list_change": {
-                String it;
-                synchronized (lists) {
-                    it = lists.change(list, in.optString("item"), in.has("due") ? in.optString("due") : null,
-                            in.has("aisle") ? in.optString("aisle") : null);
-                    saveLists();
-                }
-                if (it == null) return "\u201c" + in.optString("item") + "\u201d isn't on the " + k + " list. " + lists.show(list);
-                if (it.equals("bad date")) return "That due date isn't a date (YYYY-MM-DD). Nothing changed.";
-                Hands.record("Changed on " + k + ": " + it);
-                synchronized (lists) { return "Changed. " + lists.show(list); }
-            }
-            case "list_show":
-                synchronized (lists) { return lists.show(list); }
-            case "list_check": {
-                boolean done = !in.has("done") || in.optBoolean("done", true);
-                String it;
-                synchronized (lists) { it = lists.check(list, in.optString("item"), done); saveLists(); }
-                if (it == null) return "\u201c" + in.optString("item") + "\u201d isn't on the " + k + " list. " + lists.show(list);
-                Hands.record((done ? "Ticked off on " : "Back on ") + k + ": " + it);
-                return done ? "Ticked off." : "Back on the list.";
-            }
-            case "list_remove": {
-                List<String> gone = new ArrayList<>(), missing = new ArrayList<>();
-                synchronized (lists) {
-                    for (String i : items) { String g = lists.remove(list, i); if (g == null) missing.add(i); else gone.add(g); }
-                    saveLists();
-                }
-                if (!gone.isEmpty()) Hands.record("Removed from " + k + ": " + String.join(", ", gone));
-                return (gone.isEmpty() ? "Nothing removed." : "Removed " + String.join(", ", gone) + ".")
-                        + (missing.isEmpty() ? "" : " Not on it: " + String.join(", ", missing) + ".");
-            }
-            case "list_clear": {
-                boolean onlyDone = in.optBoolean("only_done", false);
-                int size;
-                synchronized (lists) { size = lists.items(list).size(); }
-                if (size == 0) return "The " + k + " list is empty already.";
-                if (!onlyDone) {
-                    Boolean yes = Hands.confirm("Clear the " + k + " list (" + size + (size == 1 ? " item" : " items") + ")?", "Clear");
-                    if (yes == null || !yes) return "Not cleared: the boss " + (yes == null ? "didn't answer the card." : "cancelled.");
-                }
-                int n;
-                synchronized (lists) { n = lists.clear(list, onlyDone); saveLists(); }
-                Hands.record((onlyDone ? "Cleared ticked-off items from " : "Cleared the ") + k + (onlyDone ? "" : " list") + " (" + n + ")");
-                return "Cleared " + n + ".";
-            }
-            default: throw new Exception("there is no tool called " + name);
-        }
-    }
 
-    private static String goalTool(String name, JSONObject in) throws Exception {
-        long now = System.currentTimeMillis();
-        synchronized (goals) {
-            switch (name) {
-                case "goal_add": {
-                    String g = in.optString("goal").trim();
-                    if (g.isEmpty()) throw new Exception("there's no goal to add");
-                    boolean added = goals.add(g, now);
-                    saveGoals();
-                    if (added) Hands.record("New goal: " + g);
-                    return added ? "Added to their goals." : "They already have that goal (or the list is full).";
-                }
-                case "goal_done": {
-                    boolean done = !in.has("done") || in.optBoolean("done");
-                    String g = goals.done(in.optString("goal"), done, now);
-                    saveGoals();
-                    if (g == null) return "No goal matches that. " + goals.show();
-                    Hands.record((done ? "Goal done: " : "Goal back on: ") + g);
-                    return (done ? "Ticked off: " : "Back on: ") + g;
-                }
-                case "goal_remove": {
-                    String g = goals.remove(in.optString("goal"));
-                    saveGoals();
-                    if (g == null) return "No goal matches that. " + goals.show();
-                    Hands.record("Goal removed: " + g);
-                    return "Removed: " + g;
-                }
-                default: return goals.show();
-            }
-        }
-    }
+    private static String goalTool(String name, JSONObject in) throws Exception { return ToolsHere.goalTool(name, in); }
 
-    /** The morning brief's news topics: added when they ask (they see and remove them on the Feed screen). */
-    private static String watchTool(JSONObject in) throws Exception {
-        String action = in.optString("action"), topic = in.optString("topic").trim();
-        synchronized (feed) {
-            if (action.equals("add")) {
-                if (topic.isEmpty()) return "No topic was given.";
-                boolean added = feed.watch(topic);
-                saveFeed();
-                if (added) Hands.record("Following in the morning news: " + topic);
-                return added ? "Watching for news on " + topic + "." : "Already watching that (or 30 topics already).";
-            }
-            if (action.equals("remove")) {
-                String gone = feed.unwatch(topic);
-                saveFeed();
-                if (gone == null) return "Not watching anything like that. Watching: " + String.join("; ", feed.topics) + ".";
-                Hands.record("Stopped watching: " + gone);
-                return "Stopped watching " + gone + ".";
-            }
-            return feed.topics.isEmpty() ? "No news topics yet." : "Following in the morning news: " + String.join("; ", feed.topics) + ".";
-        }
-    }
+    private static String watchTool(JSONObject in) throws Exception { return ToolsHere.watchTool(in); }
 
     private static String read(String name) {
         try { return new String(Files.readAllBytes(new File(app.getFilesDir(), name).toPath()), StandardCharsets.UTF_8); }
@@ -3401,54 +1769,13 @@ public class MainActivity extends Activity {
 
     static void saveFeed() { try { write("feed.json", feed.toJson()); } catch (Exception e) { android.util.Log.w("Sprocket", "feed: " + e); } }
 
-    /** Phase 3b: a note saved or deleted, each shown in the chat. */
-    private static String remember(String name, JSONObject input) throws Exception {
-        if (name.equals("remember")) {
-            String note = input.optString("note").trim();
-            if (note.isEmpty()) throw new Exception("there was nothing to remember");
-            boolean added, always = input.optBoolean("always");
-            synchronized (memory) { added = memory.add(note, System.currentTimeMillis(), always); saveMemory(); }
-            if (added) Hands.record((always ? "Always remembering: " : "Remembered: ") + note);
-            return added ? "Saved." : "Already saved.";
-        }
-        List<String> gone;
-        synchronized (memory) { gone = memory.forget(input.optString("about")); saveMemory(); }
-        for (String g : gone) Hands.record("Forgot: " + g);
-        return gone.isEmpty() ? "No saved note matches that." : "Deleted: " + String.join(" / ", gone);
-    }
+    private static String remember(String name, JSONObject input) throws Exception { return ToolsHere.remember(name, input); }
 
     void renderNow() { render(); }
 
-    /** Main thread: a real action Sprocket did, recorded above the reply that is still coming in (Hands.record). */
-    /** His texts (caught by MessageListener): who has new ones, or the words to read out. */
-    private static String texts(String name, JSONObject input) {
-        if (!MessageListener.on(app)) {
-            MessageListener.openSwitch(app);
-            return "Sprocket can't see their texts yet: they need to switch on Sprocket's notification access (that switch is "
-                    + "open on their screen now). Only texts that arrive after that can be read.";
-        }
-        Messages m = MessageListener.texts(app);
-        String out;
-        long now = System.currentTimeMillis();
-        synchronized (m) {
-            out = name.equals("check_texts") ? m.news(now, TimeZone.getDefault())
-                    : m.read(input.optString("from"), input.optInt("count", 0), now, TimeZone.getDefault());
-        }
-        if (name.equals("read_texts")) MessageListener.save(app);   // what was read is no longer new
-        return out;
-    }
+    private static String texts(String name, JSONObject input) { return ToolsHere.texts(name, input); }
 
-    /** What his notifications say right now (email included): nothing is kept. */
-    private static String notices(String which) {
-        if (!MessageListener.on(app)) {
-            MessageListener.openSwitch(app);
-            return "Sprocket can't see their notifications yet: they need to switch on Sprocket's notification access (that "
-                    + "switch is open on their screen now).";
-        }
-        List<Notices.Notice> showing = MessageListener.showing(app);
-        if (showing == null) return "The notification reader is still starting; ask again in a few seconds.";
-        return Notices.describe(showing, which, System.currentTimeMillis(), TimeZone.getDefault());
-    }
+    private static String notices(String which) { return ToolsHere.notices(which); }
 
     static void addAction(String what) {
         Chat.Turn t = new Chat.Turn("action", what, System.currentTimeMillis());
@@ -3477,128 +1804,5 @@ public class MainActivity extends Activity {
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) talk(false);
     }
 
-    private void selfTest(Intent test) {
-        if (test == null) return;
-        String cards = test.getStringExtra("st_test_cards");   // Sprocket Test only: "no" = Send/Call cards cancel themselves
-        if (cards != null && getPackageName().endsWith(".test")) { Hands.testCards = cards; return; }
-        String call = test.getStringExtra("st_fake_call");   // Sprocket Test only: a pretend ringing call, "Name|number"
-        if (call != null && getPackageName().endsWith(".test")) {
-            String heard = test.getStringExtra("st_call_hear");   // what the listens "hear" in turn ("~4000" = silence); else the mic
-            Listen.script = heard == null ? null : new java.util.ArrayDeque<>(java.util.Arrays.asList(heard.split("\\|")));
-            CallAnnouncer.testCalls = true;
-            CallAnnouncer.pretend(this, call);
-            return;
-        }
-        if (test.getBooleanExtra("st_clear_lists", false) && getPackageName().endsWith(".test")) {   // test leftovers out
-            synchronized (lists) { lists = new Lists(); saveLists(); }
-            render();
-            android.util.Log.i("PA-REPLY", "LISTS cleared");
-            return;
-        }
-        if (test.getBooleanExtra("st_brief_now", false) && getPackageName().endsWith(".test")) {   // a real brief now, his brain
-            FeedService.start(this);
-            return;
-        }
-        String qk = test.getStringExtra("st_qwen_key");   // stage 2: Qwen's access code, only ever over adb
-        if (qk != null) { synchronized (Claude.class) { prefs().ownKey(qk); Claude.choose(true, false, false); prefs().saveConfig(); } Claude.useBrain(true); render(); return; }
-        String cfg = test.getStringExtra("st_config");   // his settings (Config JSON, plus own_key), only ever over adb
-        if (cfg != null) {
-            synchronized (Claude.class) {   // the whole switch at once (Codex 049 #1)
-                Config.fromJson(cfg);
-                try {
-                    JSONObject o = new JSONObject(cfg);
-                    if (!o.optString("own_key", "").isEmpty()) prefs().ownKey(o.optString("own_key"));
-                    if (!o.optString("deepseek_key", "").isEmpty()) prefs().deepKey(o.optString("deepseek_key"));
-                    if (!o.optString("openai_key", "").isEmpty()) prefs().openAiKey(o.optString("openai_key"));
-                    if (o.has("persona")) { prefs().persona(o.optString("persona")); persona = o.optString("persona").trim().isEmpty() ? defaultPersona() : o.optString("persona"); }
-                } catch (Exception ignored) { }
-                prefs().saveConfig();
-                Claude.useBrain(Config.own);
-            }
-            if (ready()) startSetup();           // a coding agent set the brain up (AGENTS.md): the walkthrough still runs
-            render();
-            return;
-        }
-        // stage 1: run tools directly, results to logcat (tag PA-TOOL). st_steps is a JSON array of
-        // {"tool": name, "input": {...}, "wait": ms before it}, run in order, so a test can leave Phone Assistant first.
-        String tool = test.getStringExtra("st_tool"), steps = test.getStringExtra("st_steps");
-        if (tool != null || steps != null) {
-            String input = test.getStringExtra("st_input");
-            new Thread(() -> {
-                try {
-                    org.json.JSONArray list = steps != null ? new org.json.JSONArray(steps) : new org.json.JSONArray()
-                            .put(new org.json.JSONObject().put("tool", tool).put("input", new org.json.JSONObject(input == null ? "{}" : input)));
-                    for (int i = 0; i < list.length(); i++) {
-                        org.json.JSONObject s = list.getJSONObject(i);
-                        Thread.sleep(s.optLong("wait", 0));
-                        String out;
-                        try { out = Phone.run(this, s.getString("tool"), s.optJSONObject("input") == null ? new org.json.JSONObject() : s.getJSONObject("input")); }
-                        catch (Exception e) { out = "error: " + e.getMessage(); }
-                        android.util.Log.i("PA-TOOL", "step " + (i + 1) + " " + s.getString("tool") + ": " + out);
-                    }
-                    android.util.Log.i("PA-TOOL", "done");
-                } catch (Exception e) {
-                    android.util.Log.i("PA-TOOL", "bad steps: " + e.getMessage());
-                }
-            }).start();
-            return;
-        }
-        String bg = test.getStringExtra("st_bg");   // stage 3 over adb: "pair" (waits for the pairing window) or "start"
-        if (bg != null) {
-            new Thread(() -> {
-                String r;
-                try { r = bg.equals("pair") ? BgSetup.pair(app, 180_000) : BgSetup.startHelper(app); }
-                catch (Exception e) { r = "error: " + e; }
-                android.util.Log.i("PA-REPLY", "BG " + bg + " -> " + r);
-            }, "sprocket-bg-setup").start();
-            return;
-        }
-        String say = test.getStringExtra("st_say"), base = test.getStringExtra("st_base"), k = test.getStringExtra("st_key");
-        if (test.getBooleanExtra("st_feed_now", false) && base != null && k != null
-                && k.startsWith("sk-standin")) {               // the morning brief, now, against the stand-in
-            Claude.base = base;
-            testKey = k;
-            FeedService.start(this);
-            return;
-        }
-        if (say == null) return;
-        // A stand-in server only ever gets a made-up key: the saved real key is never sent anywhere but Anthropic.
-        if (base != null) {
-            if (k == null || !k.startsWith("sk-standin")) return;
-            Claude.base = base;
-            Studio.base = base;
-            testKey = k;
-            Hands.autoAnswer = test.getStringExtra("st_confirm");   // "yes" / "no": the card answers itself after 5 s
-            Hands.testHeard = test.getStringExtra("st_card_heard");  // or the card "hears" these words (no mic here)
-            testFaults = PhoneTools.faults(test.getStringExtra("st_fault"));   // practice only: "send_text:refused;add_event:no_confirm"
-        }
-        if (test.getBooleanExtra("st_new", false)) { chat = new Chat(); saveChat(); }
-        if (test.getBooleanExtra("st_fresh", false) && standIn()) {   // practice only: nothing carried over from the last test
-            synchronized (lists) { lists = new Lists(); saveLists(); }
-            memory = new Memory(); saveMemory();
-            appNotes = new AppNotes(); saveAppNotes();
-            File cardLog = new File(getExternalFilesDir(null), "cards.txt");
-            if (cardLog.exists() && !cardLog.delete()) android.util.Log.w("Sprocket", "practice: cards.txt stayed");
-        }
-        String pic = test.getStringExtra("st_photo");          // a test picture in the app's own external folder
-        if (pic != null) {
-            try { attached = Photo.save(app, Uri.fromFile(new File(getExternalFilesDir(null), pic))); }
-            catch (Exception e) { android.util.Log.w("Sprocket", "test photo: " + e); }
-        }
-        harder = test.getBooleanExtra("st_harder", false);
-        render();
-        SelfTest st = new SelfTest();
-        VoiceOut.get(this).watch = (text, mood, how, ms) -> {
-            try { st.voiced.add(new JSONObject().put("text", text).put("mood", mood).put("how", how).put("fetch_ms", ms)); }
-            catch (Exception ignored) { }
-        };
-        spokenTurn = test.getBooleanExtra("st_spoken", false);   // as if he had said it (the mic can't be tested here)
-        String hear = test.getStringExtra("st_hear");           // what the listens after the answer "hear" (no mic here)
-        Listen.script = hear == null || hear.isEmpty() || base == null ? null : new java.util.ArrayDeque<>(java.util.Arrays.asList(hear.split("\\|")));
-        if (test.getStringExtra("st_card_say") != null) {     // the card's next "heard" words (stand-in only)
-            SprocketSession.testHeard = test.getStringExtra("st_card_say");
-            return;
-        }
-        ask(say, st);
-    }
+    private void selfTest(Intent test) { new TestHooks(this).selfTest(test); }
 }

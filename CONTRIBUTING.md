@@ -12,6 +12,24 @@ Thanks for wanting to help.
 Sprocket controls a phone, so changes that send, call, buy, delete or switch something on without the owner's yes
 won't be merged.
 
+## Where things are
+The app is plain Java in `android/src/dev/sprocket/app/`, one job per file:
+
+- **The chat screen:** `MainActivity.java` (the screen, sending a question, showing the reply). Its pages each have
+  their own file: `SettingsPage`, `MemoryPage`, `ListsPage`, `GoalsPage`, `FeedPage`, the first-run walkthrough
+  `SetupWalkthrough` (its words and steps are in `Setup`), and the special chat cards `ChatCards` (Studio, the
+  morning brief).
+- **Talking to the brain:** `Claude.java` (requests, tools, replies; also DeepSeek, OpenAI and your own server).
+- **Phone tools:** `PhoneTools.java` (what the brain can ask for) and `Phone.java` (doing it); tools that live inside
+  the app (lists, goals, memory, texts) are in `ToolsHere.java`.
+- **Screen control and its safety rules:** `ScreenHands.java` (reading and tapping) and `Screen.java` (what needs a
+  yes, what's off limits).
+- **Texts and calls:** `Messages.java`, `Calls.java`, `CallAnnouncer.java`. **Voice:** `Listen.java`, `VoiceOut.java`,
+  `Speech.java`. **The side-button card:** `SprocketSession.java`.
+- **Background work:** `BgScreen.java`, `BgSetup.java` and `adb/` (ported from Mika).
+- **Tests:** `android/test/`, run with `scripts/test.sh`. The adb-only test door is `TestHooks.java`.
+- **The go-between** (for your own model): `go-between/`.
+
 ## Using an AI coding agent
 AI help is welcome: Sprocket itself is built with one. Because it controls a phone, the bar is the same as for any
 change, and these points matter most:
