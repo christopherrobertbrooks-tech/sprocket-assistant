@@ -221,6 +221,10 @@ Your phone has to be able to reach the computer running the [go-between](go-betw
 3. In Sprocket, the address is `https://<computer-name>.<your-tailnet>.ts.net:8448`. Both names are in the
    Tailscale app, under the computer.
 
+If your phone's internet stops working when it leaves Wi-Fi (web pages and apps can't connect on mobile data),
+Tailscale's phone app can be the cause: turn Tailscale off in its app until you're back on Wi-Fi. While it's off,
+Sprocket can't reach your own server.
+
 **2. A tunnel (an https address on the internet, no Tailscale app on the phone)**
 Cloudflare's free `cloudflared` is one: install it on the computer, then
 `cloudflared tunnel --url http://localhost:8048` prints an `https://....trycloudflare.com` address to use in
