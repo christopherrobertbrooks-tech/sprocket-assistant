@@ -1732,7 +1732,7 @@ public class MainActivity extends Activity {
 
     /** ⋯ Lists: a change made on the phone (or null for none), shown at once, then sent to Notion and read back. On
      * the Notion worker, so a slow Notion never freezes the screen. */
-    private void listChange(Runnable change) {
+    void listChange(Runnable change) {
         notionWorker.execute(() -> {
             if (change != null) {
                 synchronized (lists) { change.run(); saveLists(); }
@@ -1773,97 +1773,7 @@ public class MainActivity extends Activity {
 
     private void goalsScreen() { new GoalsPage(this).goalsScreen(); }
 
-    /** ⋯ Lists: every list; tap an item to tick it off (or back on), x to take it off, add items or a new list. */
-    private void listsCard() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text("Lists", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        if (!prefs().notionKey().isEmpty()) {
-            String n = listsNote;
-            c.addView(text(n == null ? "Checking Notion\u2026" : n.isEmpty() ? "Kept in Notion (Sprocket lists): edit them there too."
-                    : "Notion: " + n + ". Changes wait on the phone until it answers.", 13, n != null && !n.isEmpty() ? ERR : MUTED));
-        }
-        java.util.Map<String, List<Lists.Item>> all;
-        synchronized (lists) { all = new java.util.LinkedHashMap<>(lists.lists); }
-        if (all.isEmpty()) c.addView(text("None yet. Tell them \u201cadd milk to the grocery list\u201d, or make one below.", 14, MUTED));
-        for (java.util.Map.Entry<String, List<Lists.Item>> e : all.entrySet()) {
-            String name = e.getKey();
-            TextView title = text(Character.toUpperCase(name.charAt(0)) + name.substring(1), 16, TEXT);
-            title.setTypeface(Typeface.DEFAULT_BOLD);
-            title.setPadding(0, dp(16), 0, dp(2));
-            c.addView(title);
-            java.util.Map<String, List<Lists.Item>> byAisle;
-            synchronized (lists) { byAisle = lists.groups(name); }
-            List<Object> rows = new ArrayList<>();                    // aisle headings (strings) and items, in order
-            if (byAisle.isEmpty()) rows.addAll(e.getValue());
-            else {
-                for (java.util.Map.Entry<String, List<Lists.Item>> g : byAisle.entrySet()) { rows.add(g.getKey()); rows.addAll(g.getValue()); }
-                for (Lists.Item it : e.getValue()) if (it.done) rows.add(it);
-            }
-            java.time.LocalDate today = java.time.LocalDate.now();
-            for (Object r : rows) {
-                if (r instanceof String) {
-                    TextView ah = text((String) r, 12, MUTED);
-                    ah.setPadding(0, dp(10), 0, 0);
-                    c.addView(ah);
-                    continue;
-                }
-                Lists.Item it = (Lists.Item) r;
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                String when = it.done || it.due.isEmpty() ? "" : "   " + (java.time.LocalDate.parse(it.due).isBefore(today) ? "overdue, " : "")
-                        + java.time.LocalDate.parse(it.due).format(java.time.format.DateTimeFormatter.ofPattern("EEE MMM d", Locale.US));
-                TextView t = text((it.done ? "\u2611  " : "\u2610  ") + it.text + when, 15, it.done ? FAINT : TEXT);
-                if (it.done) t.setPaintFlags(t.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-                t.setPadding(0, dp(8), 0, dp(8));
-                t.setOnClickListener(v -> listChange(() -> lists.check(name, it.text, !it.done)));
-                row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView x = text("\u00d7", 20, FAINT);
-                x.setPadding(dp(14), 0, dp(6), 0);
-                x.setOnClickListener(v -> listChange(() -> lists.remove(name, it.text)));
-                row.addView(x);
-                c.addView(row);
-            }
-            c.addView(adder("Add to " + name, words -> listChange(() -> lists.add(name, new String[]{words}))));
-            LinearLayout btns = new LinearLayout(this);
-            Button clearDone = chip("Clear ticked");
-            clearDone.setBackground(round(MINE, 18));
-            clearDone.setTextColor(TEXT);
-            clearDone.setOnClickListener(v -> listChange(() -> lists.clear(name, true)));
-            btns.addView(clearDone, new LinearLayout.LayoutParams(-2, dp(36)));
-            Button del = chip("Delete list");
-            del.setBackground(round(MINE, 18));
-            del.setTextColor(TEXT);
-            del.setOnClickListener(v -> new android.app.AlertDialog.Builder(this).setMessage("Delete the " + name + " list?")
-                    .setPositiveButton("Delete", (d, w) -> listChange(() -> lists.delete(name)))
-                    .setNegativeButton("Cancel", null).show());
-            LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(-2, dp(36));
-            dp2.setMargins(dp(10), 0, 0, 0);
-            btns.addView(del, dp2);
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-            bp.setMargins(0, dp(6), 0, 0);
-            c.addView(btns, bp);
-        }
-        TextView nl = text("New list", 16, TEXT);
-        nl.setTypeface(Typeface.DEFAULT_BOLD);
-        nl.setPadding(0, dp(18), 0, dp(2));
-        c.addView(nl);
-        c.addView(adder("Its name", words -> listChange(() -> lists.lists.putIfAbsent(Lists.key(words), new ArrayList<>()))));
-        Button done = chip("Done");
-        done.setBackground(round(TEXT, 18));
-        done.setTextColor(0xFF111111);
-        done.setOnClickListener(v -> { showingLists = false; render(); });
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(40));
-        bp.setMargins(0, dp(16), 0, 0);
-        c.addView(done, bp);
-        list.addView(c);
-    }
+    private void listsCard() { new ListsPage(this).listsCard(); }
 
     /** A one-line text box with an Add button. */
     View adder(String hint, java.util.function.Consumer<String> onAdd) {
