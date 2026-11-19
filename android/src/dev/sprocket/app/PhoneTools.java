@@ -164,6 +164,15 @@ final class PhoneTools {
     }
 
     /** He asked to see or open something ("show me my photos", "open Maps"): after the hands, stay on it. */
+    /** A food ask (an order, a delivery app, "my usual"): it carries the food rules (Claude.FOOD_NOTE). */
+    static boolean foodAsk(String said) {
+        String t = " " + (said == null ? "" : said.toLowerCase(java.util.Locale.US)) + " ";
+        return t.replaceAll("\\bin order to\\b", " ").matches("(?s).*\\b(order|orders|ordering|doordash|door dash|uber eats|ubereats|grubhub|"
+                + "instacart|eats|cart|checkout|my usual|usual from|hungry|lunch|dinner|breakfast|takeout|take out|delivery|food|"
+                + "eat|eating|safe for me|allergic|allergy|allergen|allergens|ingredients|menu|restaurant)\\b.*")
+                || t.matches("(?s).*\\b(get|grab|bring) me\\b.*\\bfrom\\b.*");
+    }
+
     static boolean wantsToSee(String said) {
         String t = " " + (said == null ? "" : said.toLowerCase(java.util.Locale.US)) + " ";
         for (String w : new String[]{" show me ", " show my ", " pull up ", " take me to ", " let me see ", " bring up ", " go to "})
@@ -173,8 +182,46 @@ final class PhoneTools {
         String noInOrder = t.replaceAll("\\bin order to\\b", " ");
         if (noInOrder.matches("(?s).*\\b(order|orders|ordering|doordash|door dash|uber eats|ubereats|grubhub|instacart|eats|cart|checkout)\\b.*")
                 || noInOrder.matches("(?s).*\\b(get|grab|bring) me\\b.*\\bfrom\\b.*")) return true;
+        // "open X and tell me / read / check ..." opens it to get an answer, not to look at it (11-18: Sprocket said "I'm
+        // not leaving it open" and then YouTube landed on his screen anyway)
+        if (t.matches("(?s).*\\bopen\\b.*\\band\\s+(tell|read|check|find|say|count|look up|let me know|what|how|which|who|whether|if|is|are|does|do)\\b.*"))
+            return false;
         // "open" as an ask ("open Firefox", "can you open my photos"), not "how many open tabs" (Codex 041 #5)
         return t.matches("(?s)(\\s*|.*([.,!?;:]\\s*|\\b(and|then|please|pls|you|just|now|also|go|to|quickly)\\s+))open\\b.*");
+    }
+
+    /**
+     * The phone's settings as they really are, sent with every question (11-18: Sprocket said "it's already at 20, boss"
+     * from the chat while the volume was at 0). volume/brightness in percent; ringer normal, vibrate or silent.
+     */
+    static String settingsLine(int volume, int brightness, boolean autoBrightness, boolean dnd, String ringer) {
+        return "Right now on the phone (read just now; earlier messages may be out of date): media volume " + volume
+                + "%, screen brightness " + brightness + "%" + (autoBrightness ? " (automatic)" : "") + ", Do Not Disturb "
+                + (dnd ? "on" : "off") + ", ringer " + ringer + ".";
+    }
+
+    /**
+     * What Background work says when it's on, plus a tip while USB debugging is off (11-18 test: wireless debugging stops
+     * when Wi-Fi goes away and takes the hidden screen with it, but with USB debugging on it kept working on 5G). The
+     * switch is his to flip; Sprocket never flips it.
+     */
+    static String bgOn(String said, boolean usbDebugging) {
+        if (usbDebugging) return said;
+        return said + " To keep it working when you leave Wi-Fi, also turn on USB debugging: Settings, Developer options, "
+                + "USB debugging. (If you ever plug your phone into a computer you don't know, tap Deny when it asks.)";
+    }
+
+    /**
+     * Added to an app-opening tool's answer while Sprocket works on the hidden screen, so its reply says what really
+     * happens next (11-18: it said "I'm not leaving it open" and the app then moved onto his screen). hidden: working on
+     * the hidden screen; shown: wantsToSee() says it moves onto his real screen when the answer is done.
+     */
+    static String whereItEnds(boolean hidden, boolean shown) {
+        if (!hidden) return "";
+        return shown ? " It's on Sprocket's hidden screen; when you finish answering it moves onto his real screen, because he "
+                + "asked to see it, so it's left open for him. Don't tell him it was closed or hidden."
+                : " It's on Sprocket's hidden screen, out of his sight, and stays there when you finish, so he won't see it "
+                + "(the screen tool's stay puts it on his screen, if he wants it).";
     }
 
     /**

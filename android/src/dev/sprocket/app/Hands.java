@@ -137,5 +137,11 @@ final class Hands {
     }
 
     /** A real action, recorded in the chat above the reply that tells him about it. */
-    static void record(String what) { onMain(() -> MainActivity.addAction(what)); }
+    static void record(String what) { record(what, UndoLog.INFO, null, null); }
+
+    /** The same, with how "undo that" puts it back (UndoLog's kinds; tool + input: the reverse call for AUTO). */
+    static void record(String what, String kind, String tool, org.json.JSONObject undoInput) {
+        MainActivity.logStep(what, kind, tool, undoInput);   // right away, on this thread: an undo's own steps are skipped
+        onMain(() -> MainActivity.addAction(what));
+    }
 }

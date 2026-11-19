@@ -292,6 +292,15 @@ final class Claude {
      */
     /** Where Sprocket is working and whether they can see it (Screen.situation), set when a question starts; "" = normal. */
     static volatile String situation = "";
+    /** The phone's real settings, read when the question starts (PhoneTools.settingsLine); "" = not read. */
+    static volatile String phoneNow = "";
+    /** This question is about food (PhoneTools.foodAsk): it carries FOOD_NOTE. */
+    static volatile boolean foodNow;
+    static final String FOOD_NOTE = "Food: his usual orders (\u201cUsual at <place>: ...\u201d) and allergies are in his notes. "
+            + "For \u201cmy usual\u201d, order his saved usual for that place. Check every item against his allergies using the "
+            + "app's ingredient or allergen notes where it shows them; when the app doesn't say, tell him you can't tell, and "
+            + "never call something safe on a guess (menus can be wrong: he checks anything serious himself). When a cart is "
+            + "filled, save it with remember as \u201cUsual at <place>: <items, sizes, changes>\u201d (it replaces the old one).";
 
     static JSONObject request(String persona, String about, String memory, String now, Where where, List<Chat.Turn> history,
                               boolean harder) throws Exception {
@@ -333,7 +342,8 @@ final class Claude {
                 content.put(new JSONObject().put("type", "text").put("text", "(From the app, not the boss: it is " + now
                         + (where.town().isEmpty() ? "" : ", near " + where.town()) + "."
                         + (harder ? " The boss pressed THINK HARDER: take the time to get this one right." : "")
-                        + " " + brainNow(harder) + (situation.isEmpty() ? "" : " " + situation) + ")"));
+                        + " " + brainNow(harder) + (situation.isEmpty() ? "" : " " + situation)
+                        + (phoneNow.isEmpty() ? "" : " " + phoneNow) + (foodNow ? " " + FOOD_NOTE : "") + ")"));
             }
             messages.put(new JSONObject().put("role", "user").put("content", content));
         }
@@ -375,6 +385,8 @@ final class Claude {
         all.put(Feed.watchTool());
         JSONArray lists = Lists.definitions();
         for (int i = 0; i < lists.length(); i++) all.put(lists.getJSONObject(i));
+        JSONArray undo = UndoLog.definitions();
+        for (int i = 0; i < undo.length(); i++) all.put(undo.getJSONObject(i));
         all.put(Research.definition());
         for (int i = 0; i < mem.length(); i++) all.put(mem.getJSONObject(i));
         return Config.allowed(all);                 // without what he switched off or hasn't set up

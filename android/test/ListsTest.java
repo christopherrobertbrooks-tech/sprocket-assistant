@@ -10,6 +10,52 @@ public class ListsTest {
     }
 
     public static void main(String[] a) throws Exception {
+        // Codex 054 #2 (11-18): an item removed and put back by undo kept its words but lost its Notion row
+        Lists nl = new Lists();
+        nl.add("grocery", new String[]{"milk"});
+        nl.copyOf("grocery");
+        nl.lists.get("grocery").get(0).id = "page-1";            // as if Notion had it
+        java.util.List<Lists.Item> nb = nl.copyOf("grocery");
+        nl.remove("grocery", "milk");                              // queued to be deleted in Notion
+        String said = nl.applyPatch(Lists.patch("grocery", nb, nl.copyOf("grocery")));
+        eq("put back before Notion heard: same row", nl.lists.get("grocery").get(0).id, "page-1");
+        eq("and Notion won't delete it", nl.goneItems.contains("page-1"), false);
+        Lists nl2 = new Lists();
+        nl2.add("grocery", new String[]{"milk"});
+        nl2.lists.get("grocery").get(0).id = "page-2";
+        java.util.List<Lists.Item> nb2 = nl2.copyOf("grocery");
+        nl2.remove("grocery", "milk");
+        nl2.goneItems.clear();                                     // Notion already deleted that row
+        String said2 = nl2.applyPatch(Lists.patch("grocery", nb2, nl2.copyOf("grocery")));
+        eq("after Notion deleted it: back as a new row, said plainly", said2.contains("new row in Notion"), true);
+        // Codex 053 #1 (11-18): milk was on the list, "add milk and eggs", undo took BOTH off. Undo now puts back exactly
+        // what changed, by the exact item, never by similar words.
+        Lists un = new Lists();
+        un.add("grocery", new String[]{"milk", "chocolate milk"});
+        un.check("grocery", "chocolate milk", true);
+        java.util.List<Lists.Item> before = un.copyOf("grocery");
+        un.add("grocery", new String[]{"milk", "eggs", "chocolate milk"});   // eggs new; chocolate milk comes back on
+        org.json.JSONObject p = Lists.patch("grocery", before, un.copyOf("grocery"));
+        un.applyPatch(p);
+        eq("undo keeps what was there before", un.items("grocery"), java.util.Arrays.asList("milk", "chocolate milk"));
+        eq("undo puts a ticked item back as ticked", un.copyOf("grocery").get(1).done, true);
+        // an exact item only: the new milk already gone, the older chocolate milk is never taken instead (053b)
+        Lists un2 = new Lists();
+        un2.add("grocery", new String[]{"chocolate milk"});
+        java.util.List<Lists.Item> b2 = un2.copyOf("grocery");
+        un2.add("grocery", new String[]{"milk"});
+        org.json.JSONObject p2 = Lists.patch("grocery", b2, un2.copyOf("grocery"));
+        un2.remove("grocery", "milk");
+        un2.applyPatch(p2);
+        eq("undo never takes a similar item instead", un2.items("grocery"), java.util.Arrays.asList("chocolate milk"));
+        // clearing a list can be undone too
+        Lists un3 = new Lists();
+        un3.add("todo", new String[]{"call the vet", "buy crickets"});
+        java.util.List<Lists.Item> b3 = un3.copyOf("todo");
+        un3.clear("todo", false);
+        un3.applyPatch(Lists.patch("todo", b3, un3.copyOf("todo")));
+        eq("a cleared list comes back", un3.items("todo"), java.util.Arrays.asList("call the vet", "buy crickets"));
+        eq("nothing changed: nothing to undo", Lists.patch("todo", b3, b3), null);
         eq("names are forgiving", Lists.key("My Grocery List") + "|" + Lists.key("groceries") + "|" + Lists.key("the grocery"),
                 "grocery|grocery|grocery");
         eq("to-do in any spelling", Lists.key("todo") + "|" + Lists.key("To Do list") + "|" + Lists.key("to-do"), "to-do|to-do|to-do");

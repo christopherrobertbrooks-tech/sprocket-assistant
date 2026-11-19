@@ -10,6 +10,17 @@ public class GoalsTest {
     }
 
     public static void main(String[] a) throws Exception {
+        // Codex 053b (11-18): "Run marathon" added, undo deleted the older "Run a marathon in Boston". Now by exact id.
+        Goals gu = new Goals();
+        gu.add("Run a marathon in Boston", 1);
+        java.util.List<Goals.Goal> gb = gu.copy();
+        gu.add("Run marathon", 2);
+        gu.applyPatch(Goals.patch(gb, gu.copy()));
+        eq("undo removes the goal just added, not an older similar one", gu.copy().size() == 1 && gu.copy().get(0).text.contains("Boston"), true);
+        java.util.List<Goals.Goal> gb2 = gu.copy();
+        gu.remove("marathon");
+        gu.applyPatch(Goals.patch(gb2, gu.copy()));
+        eq("a removed goal comes back with its id", gu.copy().get(0).id, gb2.get(0).id);
         Goals g = new Goals();
         eq("none yet: nothing for Claude", g.forClaude() + " | " + g.show(), "null | No goals yet.");
         eq("a goal", g.add("Test Sprocket for a few days", 1), true);

@@ -87,6 +87,44 @@ final class Goals {
 
     boolean delete(long id) { return goals.removeIf(g -> g.id == id); }
 
+    /** The goals as they are now, copied (undo takes one before a change; 11-18, Codex 053b). */
+    List<Goal> copy() {
+        List<Goal> out = new ArrayList<>();
+        for (Goal g : goals) out.add(new Goal(g.id, g.text, g.done, g.doneAt));
+        return out;
+    }
+
+    /** What undo needs: the goals added since (by id) and the ones removed or changed (as they were). null = no change. */
+    static JSONObject patch(List<Goal> before, List<Goal> after) throws Exception {
+        java.util.Map<Long, Goal> b = new java.util.LinkedHashMap<>(), a = new java.util.LinkedHashMap<>();
+        for (Goal g : before) b.put(g.id, g);
+        for (Goal g : after) a.put(g.id, g);
+        JSONArray off = new JSONArray(), back = new JSONArray();
+        for (Long id : a.keySet()) if (!b.containsKey(id)) off.put(String.valueOf(id));
+        for (Goal was : b.values()) {
+            Goal now = a.get(was.id);
+            if (now == null || now.done != was.done || !now.text.equals(was.text))
+                back.put(new JSONObject().put("id", was.id).put("text", was.text).put("done", was.done).put("done_at", was.doneAt));
+        }
+        if (off.length() == 0 && back.length() == 0) return null;
+        return new JSONObject().put("off", off).put("back", back);
+    }
+
+    /** Applies patch() by exact id. */
+    String applyPatch(JSONObject p) throws Exception {
+        JSONArray off = p.optJSONArray("off"), back = p.optJSONArray("back");
+        for (int i = 0; off != null && i < off.length(); i++) { long id = Long.parseLong(off.getString(i)); goals.removeIf(g -> g.id == id); }
+        for (int i = 0; back != null && i < back.length(); i++) {
+            JSONObject o = back.getJSONObject(i);
+            Goal g = new Goal(o.getLong("id"), o.getString("text"), o.optBoolean("done"), o.optLong("done_at"));
+            int at = -1;
+            for (int j = 0; j < goals.size(); j++) if (goals.get(j).id == g.id) at = j;
+            if (at >= 0) goals.set(at, g); else goals.add(g);
+            nextId = Math.max(nextId, g.id + 1);
+        }
+        return "his goals are back as they were";
+    }
+
     boolean toggle(long id, long at) {
         for (Goal g : goals) if (g.id == id) { g.done = !g.done; g.doneAt = g.done ? at : 0; return true; }
         return false;

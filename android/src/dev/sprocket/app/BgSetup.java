@@ -65,10 +65,10 @@ final class BgSetup {
      * say() reports each step to them. True when the hidden screen is up.
      */
     static boolean setup(Context c, java.util.function.Consumer<String> say) throws Exception {
-        if (BgScreen.on()) { say.accept("Background work is already on."); return true; }
+        if (BgScreen.on()) { say.accept(PhoneTools.bgOn("Background work is already on.", usbDebugging(c))); return true; }
         if (wirelessDebuggingOn(c) || android.provider.Settings.Global.getInt(c.getContentResolver(), "adb_wifi_enabled", 0) == 1) {
             String r = startHelper(c);   // paired before: just start it
-            if (r.equals("started")) { say.accept("Background work is on."); return true; }
+            if (r.equals("started")) { say.accept(PhoneTools.bgOn("Background work is on.", usbDebugging(c))); return true; }
         }
         if (android.provider.Settings.Global.getInt(c.getContentResolver(), android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 1) {
             say.accept("First turn on Developer options: Settings, About phone, Software information, tap Build number seven times. Then tap Background work again.");
@@ -99,8 +99,12 @@ final class BgSetup {
         String r = startHelper(c);
         if (!r.equals("started")) { say.accept("Paired, but the helper didn't start: " + r); return false; }
         c.startActivity(new android.content.Intent(c, MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
-        say.accept("Background work is on. I'll work on a hidden screen from now on, so you can keep using your phone.");
+        say.accept(PhoneTools.bgOn("Background work is on. I'll work on a hidden screen from now on, so you can keep using your phone.", usbDebugging(c)));
         return true;
+    }
+
+    private static boolean usbDebugging(Context c) {
+        return android.provider.Settings.Global.getInt(c.getContentResolver(), android.provider.Settings.Global.ADB_ENABLED, 0) == 1;
     }
 
     private static final java.util.concurrent.atomic.AtomicBoolean starting = new java.util.concurrent.atomic.AtomicBoolean();

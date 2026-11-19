@@ -10,6 +10,40 @@ public class MemoryTest {
     }
 
     public static void main(String[] a) throws Exception {
+        // Codex 053 #2 (11-18): undoing a new note deleted an older similar one; undoing a new usual left none
+        Memory mu = new Memory();
+        mu.add("Peanut allergy; carries an epipen", 1);
+        java.util.List<Memory.Note> mb = mu.copy();
+        mu.add("Peanut allergy", 2);
+        mu.applyPatch(Memory.patch(mb, mu.copy()));
+        eq("undo removes only the new note", mu.notes.size() == 1 && mu.notes.get(0).text.contains("epipen"), true);
+        mu.add("Usual at Cafe: tea", 3);
+        java.util.List<Memory.Note> mb2 = mu.copy();
+        mu.add("Usual at Cafe: coffee", 4);
+        mu.applyPatch(Memory.patch(mb2, mu.copy()));
+        boolean tea = false; for (Memory.Note n : mu.notes) tea |= n.text.equals("Usual at Cafe: tea");
+        eq("undoing a new usual brings the old one back", tea && mu.notes.size() == 2, true);
+        // Codex 053 #5: allergy notes saved before this update (version 2, not always on) are pinned once
+        Memory v2 = Memory.fromJson("{\"version\":2,\"notes\":[{\"id\":5,\"text\":\"He is allergic to shellfish\",\"always\":false}]}");
+        eq("an older allergy note is now always on", v2.notes.get(0).always, true);
+        Memory again = new Memory();
+        again.add("likes tea", 1);
+        eq("saying it again with always pins it", again.add("likes tea", 2, true) && again.notes.get(0).always, true);
+        // 11-18 roadmap "Remembers your food": allergies are always on, never pushed out; one usual per place
+        Memory food = new Memory();
+        food.add("He's allergic to peanuts", 1);
+        eq("an allergy is always on, even when saved plainly", food.notes.get(0).always, true);
+        food.add("Usual at Hardee's: a Monster Thickburger, no onions, large fries", 2);
+        food.add("Usual at Hardee's: two Frisco burgers", 3);
+        int hardees = 0; for (Memory.Note n : food.notes) if (n.text.startsWith("Usual at Hardee's")) hardees++;
+        eq("a new usual replaces the old one at the same place", hardees, 1);
+        eq("and it's the new one", food.notes.get(food.notes.size() - 1).text, "Usual at Hardee's: two Frisco burgers");
+        food.add("Usual at Taco Bell: a Crunchwrap Supreme", 4);
+        eq("other places keep their own usual", food.notes.size(), 3);
+        for (int i = 0; i < Memory.MAX + 5; i++) food.add("filler note number " + i, 10 + i);
+        eq("a full notebook never pushes an allergy out", food.notes.get(0).text, "He's allergic to peanuts");
+        eq("allergy words", Memory.allergy("celiac, no gluten") && Memory.allergy("I have a shellfish intolerance")
+                && !Memory.allergy("he likes peanuts"), true);
         // 11-18: the About card said "Goes to Claude with each message" even when the brain was your own server or Qwen
         eq("the About note names no one brain", Memory.ABOUT_NOTE.contains("Claude"), false);
         eq("the About note keeps its warning", Memory.ABOUT_NOTE.contains("Never passwords"), true);

@@ -385,7 +385,7 @@ public class ScreenHands extends AccessibilityService {
         lastPackage = String.valueOf(root.getPackageName());
         if (Screen.blockedApp(lastPackage)) return "The screen shows an app that is off limits (money or passwords): not read.";
         walk(root, 0, false);
-        return Screen.describe(appName(lastPackage), lastItems) + (keyboardUp() ? Screen.KEYBOARD : "")
+        return Screen.describe(appName(lastPackage), lastItems) + Screen.cameraNote(lastPackage, lastItems) + (keyboardUp() ? Screen.KEYBOARD : "")
                 + (mine(lastPackage) ? Screen.OWN_SCREEN : "") + MainActivity.appNotesFor(lastPackage);
     }
 
@@ -553,11 +553,13 @@ public class ScreenHands extends AccessibilityService {
         if (no != null) throw new Exception(no);
         stillThere(n, 0);
         if (!onTop(n)) throw new Exception("item " + item + Screen.COVERED);
+        boolean carded = false;
         if (Screen.needsCard(lastPackage, it)) {   // stage 3: pay, delete, send, call... only after his OK on a card
             Boolean yes = askOnScreen(Screen.tapCard(appName(lastPackage), it, Screen.sends(it) ? typedNow() : null), "Tap it");
             if (yes == null) return "Not tapped: the boss didn't answer the card.";
             if (!yes) return "Not tapped: the boss cancelled.";
             stillThere(n, 1500);   // his yes was for this screen; the card going away can take a moment
+            carded = true;
         }
         AccessibilityNodeInfo target = n;
         while (target != null && !target.isClickable()) target = target.getParent();   // a label inside a clickable row
@@ -574,9 +576,13 @@ public class ScreenHands extends AccessibilityService {
         }
         if (!done) throw new Exception("the tap didn't go through");
         String screen = settleAndRead();
+        String label = it.label.isEmpty() ? it.role : it.label;
+        if (carded) Hands.record(appName(lastPackage) + ": tapped \u201c" + label + "\u201d (after his yes)", UndoLog.NEVER, null, null);
         if (sw != null) {
-            String label = it.label.isEmpty() ? it.role : it.label;
-            String note = Screen.switchNote(label, swBefore, sw.refresh() ? sw.isChecked() : null);
+            Boolean swAfter = sw.refresh() ? sw.isChecked() : null;
+            if (swAfter != null && swAfter != swBefore)   // "what did you just do? undo that": offered, flipped back only on his yes
+                Hands.record(appName(lastPackage) + ": turned \u201c" + label + "\u201d " + (swAfter ? "on" : "off"), UndoLog.SCREEN, null, null);
+            String note = Screen.switchNote(label, swBefore, swAfter);
             if (note != null) {
                 android.util.Log.i("Sprocket", "switch unchanged after a tap (kinds only)");
                 return note + "\n" + screen;
@@ -1056,7 +1062,8 @@ public class ScreenHands extends AccessibilityService {
             f.write(lastShot);   // saved where the brain's pictures come from, so the answer carries the picture itself
         }
         return Claude.PICTURE + SHOT_FILE + "]]Screenshot taken (" + lastShot.length / 1024 + " KB, " + SHOT_WIDTH + " pixels wide), shown above. "
-                + "Tap by item number when the screen list has the item; otherwise tap_point with x and y in this picture's pixels.";
+                + "Tap by item number when the screen list has the item; otherwise tap_point with x and y in this picture's pixels."
+                + Screen.cameraNote(pkg, pkg.equals(lastPackage) ? lastItems : java.util.Collections.<Screen.Item>emptyList());
     }
 
     /** look on the hidden screen: the helper's snapshot, made small the same way. */
@@ -1075,7 +1082,8 @@ public class ScreenHands extends AccessibilityService {
         shotPackage = pkg;
         try (java.io.FileOutputStream f = new java.io.FileOutputStream(new java.io.File(Photo.dir(this), SHOT_FILE))) { f.write(lastShot); }
         return Claude.PICTURE + SHOT_FILE + "]]Screenshot taken (" + lastShot.length / 1024 + " KB, " + SHOT_WIDTH + " pixels wide), shown above. "
-                + "Tap by item number when the screen list has the item; otherwise tap_point with x and y in this picture's pixels.";
+                + "Tap by item number when the screen list has the item; otherwise tap_point with x and y in this picture's pixels."
+                + Screen.cameraNote(pkg, pkg.equals(lastPackage) ? lastItems : java.util.Collections.<Screen.Item>emptyList());
     }
 
     static final int SHOT_WIDTH = 720;

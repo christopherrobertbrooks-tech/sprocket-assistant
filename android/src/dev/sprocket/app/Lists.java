@@ -223,6 +223,77 @@ final class Lists {
         return lists.remove(key(list)) != null;
     }
 
+    /** The list's items as they are now, copied (undo takes one before a change; 11-18, Codex 053 #1). */
+    List<Item> copyOf(String list) {
+        List<Item> out = new ArrayList<>();
+        for (Item it : lists.getOrDefault(key(list), new ArrayList<>())) {
+            Item c = new Item(it.text, it.done, it.due, it.aisle);
+            c.id = it.id;
+            out.add(c);
+        }
+        return out;
+    }
+
+    /**
+     * What undo needs to put a list back exactly: the items added since (taken off by their exact words) and the items
+     * removed or changed since (put back as they were). null when nothing changed. Never fuzzy: "milk" never takes
+     * "chocolate milk" with it (Codex 053 #1, 053b).
+     */
+    static org.json.JSONObject patch(String list, List<Item> before, List<Item> after) throws Exception {
+        java.util.Map<String, Item> b = new java.util.LinkedHashMap<>(), a = new java.util.LinkedHashMap<>();
+        for (Item it : before) b.putIfAbsent(phrase(it.text), it);
+        for (Item it : after) a.putIfAbsent(phrase(it.text), it);
+        org.json.JSONArray off = new org.json.JSONArray(), back = new org.json.JSONArray();
+        for (java.util.Map.Entry<String, Item> e : a.entrySet()) if (!b.containsKey(e.getKey())) off.put(e.getValue().text);
+        for (java.util.Map.Entry<String, Item> e : b.entrySet()) {
+            Item was = e.getValue(), now = a.get(e.getKey());
+            if (now == null || now.done != was.done || !now.due.equals(was.due) || !now.aisle.equals(was.aisle))
+                back.put(new org.json.JSONObject().put("text", was.text).put("done", was.done).put("due", was.due)
+                        .put("aisle", was.aisle).put("id", was.id));
+        }
+        if (off.length() == 0 && back.length() == 0) return null;
+        return new org.json.JSONObject().put("list", list).put("off", off).put("back", back);
+    }
+
+    /** Applies patch(): exact words only; an item already gone stays gone. What it did, for the undo report. */
+    String applyPatch(org.json.JSONObject p) throws Exception {
+        String list = p.getString("list");
+        List<Item> l = lists.computeIfAbsent(key(list), k -> new ArrayList<>());
+        int off = 0, back = 0, newRow = 0;
+        org.json.JSONArray o = p.optJSONArray("off"), b = p.optJSONArray("back");
+        for (int i = 0; o != null && i < o.length(); i++) {
+            String want = phrase(o.getString(i));
+            for (java.util.Iterator<Item> it = l.iterator(); it.hasNext(); ) {
+                Item x = it.next();
+                if (phrase(x.text).equals(want)) { it.remove(); forget(x); off++; break; }
+            }
+        }
+        for (int i = 0; b != null && i < b.length(); i++) {
+            org.json.JSONObject w = b.getJSONObject(i);
+            Item have = null;
+            for (Item x : l) if (phrase(x.text).equals(phrase(w.getString("text")))) { have = x; break; }
+            String id = w.optString("id");
+            if (have == null) {
+                have = new Item(w.getString("text"), w.optBoolean("done"), w.optString("due"), w.optString("aisle"));
+                if (!id.isEmpty()) {   // its Notion row (Codex 054 #2): kept if Notion hasn't deleted it yet, else a new row
+                    if (goneItems.remove(id)) { have.id = id; have.dirty = true; } else newRow++;
+                }
+                l.add(have);
+            } else {
+                if (have.id.isEmpty() && !id.isEmpty() && goneItems.remove(id)) have.id = id;
+                have.done = w.optBoolean("done");
+                have.due = w.optString("due");
+                have.aisle = Lists.aisle(w.optString("aisle"));
+                have.dirty = true;
+            }
+            back++;
+        }
+        if (l.isEmpty()) lists.remove(key(list));
+        return "the " + key(list) + " list is back as it was (" + off + " taken off, " + back + " put back)"
+                + (newRow > 0 ? "; " + newRow + (newRow == 1 ? " item is" : " items are") + " back as a new row in Notion (the old "
+                + "row was already deleted there)" : "");
+    }
+
     List<String> items(String list) {
         List<String> out = new ArrayList<>();
         for (Item it : lists.getOrDefault(key(list), new ArrayList<>())) out.add(it.text);

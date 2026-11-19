@@ -154,6 +154,39 @@ public class PhoneToolsTest {
         eq("an order stays on the cart", PhoneTools.wantsToSee("i need some food, lets order doordash, put 42 hashbrowns from mcdonalds"), true);
         eq("put it in my cart stays", PhoneTools.wantsToSee("put a veggie burrito from Casa Verde in my Eats cart"), true);
         eq("get me food from a place stays", PhoneTools.wantsToSee("get me a burger and fries from Rosie's"), true);
+        // 11-18 off Wi-Fi: "Open YouTube and tell me the first video" -- Sprocket said "I'm not leaving it open", then the
+        // open rule moved YouTube onto his screen anyway. Opening to get an answer is asking for the answer.
+        eq("open X and tell me comes back", PhoneTools.wantsToSee("Open YouTube and tell me the first video on the home page"), false);
+        eq("open X and read me comes back", PhoneTools.wantsToSee("open my notes and read me the grocery list"), false);
+        eq("open X and check comes back", PhoneTools.wantsToSee("can you open the weather app and check if it'll rain"), false);
+        eq("open X and show me still stays", PhoneTools.wantsToSee("open Maps and show me the way home"), true);
+        eq("open X and play still stays", PhoneTools.wantsToSee("open YouTube and play lofi"), true);
+        // and whatever happens, Sprocket hears it before answering, so its words match what he sees
+        eq("shown: told it goes onto his screen", PhoneTools.whereItEnds(true, true).contains("moves onto his real screen"), true);
+        eq("not shown: told it stays out of sight", PhoneTools.whereItEnds(true, false).contains("he won't see it"), true);
+        eq("not on the hidden screen: nothing added", PhoneTools.whereItEnds(false, true), "");
+        // 11-18: with USB debugging on, the hidden screen kept working on 5G after Wi-Fi went away (the owner: "add the usb
+        // debugging line to setup")
+        eq("background on, USB debugging off: the tip", PhoneTools.bgOn("Background work is on.", false).contains("USB debugging"), true);
+        eq("background on, USB debugging on: just the news", PhoneTools.bgOn("Background work is on.", true), "Background work is on.");
+        // 11-18 roadmap "Talk with your headset button": earbuds, headsets and cars ask the phone for a voice assistant
+        // with one of these (a long press, or the car's voice button); Sprocket answers all three with its listening card
+        String manifest = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/AndroidManifest.xml")));
+        int at = manifest.indexOf("android:name=\".HeadsetActivity\"");
+        String headset = at < 0 ? "" : manifest.substring(at, manifest.indexOf("</activity>", at));
+        eq("a door for the headset button", at >= 0, true);
+        for (String act : new String[]{"android.intent.action.VOICE_COMMAND", "android.speech.action.VOICE_SEARCH_HANDS_FREE",
+                "android.speech.action.WEB_SEARCH"})
+            eq("headset asks with " + act, headset.contains("\"" + act + "\""), true);
+        eq("it shows nothing of its own", headset.contains("Theme.NoDisplay"), true);
+        // the owner 11-18: "how do we disable other apps from opening the feature" -- only Android's own Bluetooth and media
+        // button parts hold this permission; an ordinary app opening the door is refused
+        eq("only Android itself may press it", headset.contains("android:permission=\"android.permission.BLUETOOTH_PRIVILEGED\""), true);
+        eq("my usual is a food ask", PhoneTools.foodAsk("get my usual from Hardee's"), true);
+        eq("an order is a food ask", PhoneTools.foodAsk("order me a burger on DoorDash"), true);
+        eq("the weather isn't", PhoneTools.foodAsk("what's the weather tomorrow"), false);
+        eq("can I eat this is a food ask (Codex 053b)", PhoneTools.foodAsk("Can I eat this?"), true);
+        eq("is this safe for me is a food ask", PhoneTools.foodAsk("Is this sandwich safe for me?"), true);
         eq("'in order to' isn't an order", PhoneTools.wantsToSee("turn on battery saver in order to save power"), false);
         eq("his own voice keeps going when Sprocket opens an app mid-question", PhoneTools.stopVoiceOnLeave(true, true), false);
         eq("he left on his own: quiet", PhoneTools.stopVoiceOnLeave(true, false), true);
