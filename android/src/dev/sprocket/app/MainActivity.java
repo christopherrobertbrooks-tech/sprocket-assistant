@@ -70,14 +70,14 @@ public class MainActivity extends Activity {
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
     private static String attached;            // a photo waiting to go with his next message (its file name)
     private static final ExecutorService photoWork = Executors.newSingleThreadExecutor();
-    private static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
+    static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
     private static final int TAKE_PHOTO = 21, PICK_PHOTO = 22;
     boolean showingMemory, showingLists, editingAbout, showingFeed, showingGoals;
     final java.util.Set<Long> openDays = new java.util.HashSet<>();   // the Feed screen's opened days
     private LinearLayout attachRow;
     static MainActivity current;              // the screen on show, if any (Hands shows its cards there)
     static final int ASK_TOOL_PERMISSION = 8;       // the screen on show, if any
-    private static Context app;                // for saving when no screen is on show
+    static Context app;                // for saving when no screen is on show
     private TextView pendingView;
     static String persona = "";
     LinearLayout list;
@@ -343,282 +343,25 @@ public class MainActivity extends Activity {
     }
 
     /** A brief drawn as one card: title, headings, bullets, tables (sideways scrolling) and tappable links. */
-    private static MediaPlayer song;              // the studio song playing from a card (one at a time)
-    private static String songFile;
-    private static TextView songLabel;            // its card's Play/Pause, changed in place (a redraw jumps to the end)
-    private static final java.util.Set<String> lyricsOpen = new java.util.HashSet<>();
+    static MediaPlayer song;              // the studio song playing from a card (one at a time)
+    static String songFile;
+    static TextView songLabel;            // its card's Play/Pause, changed in place (a redraw jumps to the end)
+    static final java.util.Set<String> lyricsOpen = new java.util.HashSet<>();
 
-    /** A studio result: the picture (tap: full screen), the video's first frame (tap: plays full screen), or the song
-     * with Play/Pause and its lyrics on a tap; Save keeps a copy in his Pictures, Movies or Music (a Sprocket folder). */
-    private View studioCard(JSONObject j) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(PANEL, 16));
-        card.setPadding(dp(14), dp(14), dp(14), dp(10));
-        String kind = j.optString("kind"), title = Studio.title(j);
-        File f = new File(StudioService.dir(app), j.optString("file"));
-        if (!f.exists()) {
-            card.addView(text("The studio's " + kind + " isn't on the phone any more.", 14, MUTED));
-            return card;
-        }
-        int wide = Math.round(getResources().getDisplayMetrics().widthPixels * 0.84f) - dp(28);
-        if (kind.equals("song")) {
-            LinearLayout head = new LinearLayout(this);
-            head.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name = text(title.isEmpty() ? "Your song" : title, 17, TEXT);
-            name.setTypeface(Typeface.DEFAULT_BOLD);
-            head.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView play = text(playLabel(f), 14, AMBER);
-            play.setPadding(dp(12), dp(6), 0, dp(6));
-            if (f.getPath().equals(songFile)) songLabel = play;
-            play.setOnClickListener(v -> { playSong(f); songLabel = play; play.setText(playLabel(f)); });
-            head.addView(play);
-            card.addView(head);
-        } else {
-            Bitmap b = studioPicture(f, kind, wide);
-            android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
-            ImageView iv = new ImageView(this);
-            if (b != null) iv.setImageBitmap(b);
-            iv.setAdjustViewBounds(true);                 // its own shape, no taller than about half the screen
-            iv.setMaxWidth(wide);
-            iv.setMaxHeight(Math.round(getResources().getDisplayMetrics().heightPixels * 0.55f));
-            iv.setBackground(round(0xFF000000, 12));
-            iv.setClipToOutline(true);
-            frame.addView(iv, new android.widget.FrameLayout.LayoutParams(-2, -2));
-            if (kind.equals("video")) {
-                TextView playMark = text("\u25B6", 30, TEXT);
-                playMark.setGravity(Gravity.CENTER);
-                playMark.setBackground(round(0x99000000, 32));
-                frame.addView(playMark, new android.widget.FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER));
-            }
-            frame.setContentDescription(kind.equals("video") ? "Play the video" : "Open the picture");
-            frame.setOnClickListener(v -> fullScreen(f, kind.equals("video")));
-            LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-2, -2);
-            fp.gravity = Gravity.CENTER_HORIZONTAL;
-            card.addView(frame, fp);
-        }
-        TextView what = text(j.optString("prompt"), 13, MUTED);
-        what.setMaxLines(3);
-        what.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        what.setPadding(0, dp(8), 0, 0);
-        card.addView(what);
-        LinearLayout actions = new LinearLayout(this);
-        actions.setPadding(0, dp(6), 0, 0);
-        String lyrics = j.optJSONObject("note") == null ? "" : j.optJSONObject("note").optString("lyrics", "");
-        TextView words = text(lyrics.trim(), 14, 0xFFC9CBD0);
-        if (kind.equals("song") && !lyrics.isEmpty()) {
-            boolean open = lyricsOpen.contains(f.getName());
-            TextView lt = text(open ? "Hide lyrics" : "Lyrics", 13, TEXT);
-            lt.setPadding(0, dp(6), dp(18), dp(6));
-            lt.setOnClickListener(v -> {
-                boolean now = !lyricsOpen.remove(f.getName());
-                if (now) lyricsOpen.add(f.getName());
-                words.setVisibility(now ? View.VISIBLE : View.GONE);
-                lt.setText(now ? "Hide lyrics" : "Lyrics");
-            });
-            actions.addView(lt);
-        }
-        if (Build.VERSION.SDK_INT >= 29) {
-            TextView save = text("Save to phone", 13, TEXT);
-            save.setPadding(0, dp(6), 0, dp(6));
-            save.setContentDescription("Save the " + kind + " to the phone");
-            save.setOnClickListener(v -> saveToPhone(f, kind, title));
-            actions.addView(save);
-        }
-        card.addView(actions);
-        if (kind.equals("song") && !lyrics.isEmpty()) {
-            words.setLineSpacing(0, 1.2f);
-            words.setTextIsSelectable(true);
-            words.setPadding(0, dp(6), 0, dp(4));
-            words.setVisibility(lyricsOpen.contains(f.getName()) ? View.VISIBLE : View.GONE);
-            card.addView(words);
-        }
-        return card;
-    }
+    private View studioCard(JSONObject j) { return new ChatCards(this).studioCard(j); }
 
-    private static String studioMeta(JSONObject j) {
-        String kind = j.optString("kind"), q = j.optString("quality");
-        String by = kind.equals("picture") ? "Qwen-Image 2.1" : kind.equals("video") ? (q.equals("draft") ? "FastWan, quick" : "Wan 2.2")
-                : (q.equals("draft") ? "Song Maker, quick" : "Song Maker");
-        int sec = j.optInt("seconds");
-        return "Studio  \u00b7  " + by + (sec > 0 ? "  \u00b7  " + (sec < 90 ? sec + " s" : Math.round(sec / 60.0) + " min") : "");
-    }
+    private static String studioMeta(JSONObject j) { return ChatCards.studioMeta(j); }
 
-    /** The picture, or the video's first frame, at card width (kept, so redrawing the chat doesn't decode it again). */
-    private Bitmap studioPicture(File f, String kind, int px) {
-        String key = "studio:" + f.getName() + px;
-        Bitmap b = thumbs.get(key);
-        if (b != null) return b;
-        try {
-            Bitmap full;
-            if (kind.equals("video")) {
-                android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
-                try { r.setDataSource(f.getPath()); full = r.getFrameAtTime(0); } finally { r.release(); }
-            } else {
-                android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-                o.inJustDecodeBounds = true;
-                android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
-                o.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(1, o.outWidth / px)));
-                o.inJustDecodeBounds = false;
-                full = android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
-            }
-            if (full == null) return null;
-            b = full.getWidth() <= px ? full : Bitmap.createScaledBitmap(full, px, Math.round(full.getHeight() * (px / (float) full.getWidth())), true);
-            thumbs.put(key, b);
-            return b;
-        } catch (Exception e) {
-            android.util.Log.w("Sprocket", "studio picture: " + e);
-            return null;
-        }
-    }
 
-    /** Full screen on black: the picture (tap to close) or the video, playing with the usual controls. */
-    private void fullScreen(File f, boolean video) {
-        android.app.Dialog d = new android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
-        box.setBackgroundColor(0xFF000000);
-        if (video) {
-            if (song != null && song.isPlaying()) { song.pause(); if (songLabel != null) songLabel.setText("\u25B6 Play"); }
-            android.widget.VideoView vv = new android.widget.VideoView(this);
-            android.widget.MediaController mc = new android.widget.MediaController(this);
-            mc.setAnchorView(vv);
-            vv.setMediaController(mc);
-            vv.setVideoPath(f.getPath());
-            vv.setOnPreparedListener(mp -> { mp.setLooping(true); vv.start(); });
-            box.addView(vv, new android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
-        } else {
-            ImageView iv = new ImageView(this);
-            iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(f.getPath()));
-            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setOnClickListener(v -> d.dismiss());
-            box.addView(iv, new android.widget.FrameLayout.LayoutParams(-1, -1));
-        }
-        d.setContentView(box);
-        d.show();
-    }
 
-    private static String playLabel(File f) {
-        return song != null && f.getPath().equals(songFile) && song.isPlaying() ? "\u275A\u275A Pause" : "\u25B6 Play";
-    }
 
-    private void playSong(File f) {
-        try {
-            if (song != null && f.getPath().equals(songFile)) {
-                if (song.isPlaying()) song.pause(); else song.start();
-            } else {
-                if (song != null) song.release();
-                song = new MediaPlayer();
-                songFile = f.getPath();
-                song.setDataSource(songFile);
-                if (songLabel != null) songLabel.setText("\u25B6 Play");   // the song that was playing: stopped
-                song.setOnCompletionListener(mp -> {
-                    mp.release();
-                    song = null;
-                    songFile = null;
-                    if (songLabel != null) songLabel.setText("\u25B6 Play");
-                });
-                song.prepare();
-                song.start();
-            }
-        } catch (Exception e) {
-            note("Couldn't play it: " + e.getMessage());
-            song = null;
-            songFile = null;
-        }
-    }
 
-    /** A copy in his Pictures, Movies or Music, in a Sprocket folder (Android 10+: no permission needed). */
-    private void saveToPhone(File f, String kind, String title) {
-        if (Build.VERSION.SDK_INT < 29) return;
-        new Thread(() -> {
-            try {
-                boolean pic = kind.equals("picture"), vid = kind.equals("video");
-                String folder = pic ? android.os.Environment.DIRECTORY_PICTURES : vid ? android.os.Environment.DIRECTORY_MOVIES
-                        : android.os.Environment.DIRECTORY_MUSIC;
-                String ext = f.getName().substring(f.getName().lastIndexOf('.'));
-                String name = (title.isEmpty() ? "Sprocket " + kind + " " + f.getName().replace(ext, "") : title.replaceAll("[^A-Za-z0-9 _-]", "")) + ext;
-                android.content.ContentValues v = new android.content.ContentValues();
-                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-                v.put(MediaStore.MediaColumns.MIME_TYPE, pic ? "image/png" : vid ? "video/mp4" : "audio/mpeg");
-                v.put(MediaStore.MediaColumns.RELATIVE_PATH, folder + "/Sprocket");
-                v.put(MediaStore.MediaColumns.IS_PENDING, 1);
-                Uri where = pic ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        : vid ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                        : MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-                Uri u = getContentResolver().insert(where, v);
-                if (u == null) throw new Exception("Android said no");
-                try (java.io.OutputStream o = getContentResolver().openOutputStream(u)) { Files.copy(f.toPath(), o); }
-                v.clear();
-                v.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                getContentResolver().update(u, v, null, null);
-                runOnUiThread(() -> note("Saved to " + folder + "/Sprocket"));
-            } catch (Exception e) {
-                runOnUiThread(() -> note("Couldn't save it: " + e.getMessage()));
-            }
-        }).start();
-    }
 
-    private View briefCard(Chat.Turn t) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(PANEL, 16));
-        card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        markdownInto(card, t.text);
-        return card;
-    }
+    private View briefCard(Chat.Turn t) { return new ChatCards(this).briefCard(t); }
 
-    /** Markdown drawn into a card: title, headings, bullets, tables and tappable links. */
-    void markdownInto(LinearLayout card, String md) {
-        for (Markdown.Block b : Markdown.parse(md)) {
-            if (b.kind.equals("rows")) { card.addView(table(b)); continue; }
-            boolean title = b.kind.equals("title"), head = b.kind.equals("heading"), bullet = b.kind.equals("bullet");
-            TextView v = text("", title ? 19 : head ? 16 : 15, title || head ? TEXT : 0xFFC9CBD0);
-            v.setText(styled((bullet ? "\u2022  " : "") + b.text));
-            v.setLineSpacing(0, 1.15f);
-            if (title || head) v.setTypeface(Typeface.DEFAULT_BOLD);
-            v.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
-            v.setLinkTextColor(AMBER);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(bullet ? dp(6) : 0, head ? dp(14) : dp(4), 0, 0);
-            card.addView(v, lp);
-        }
-    }
+    void markdownInto(LinearLayout card, String md) { new ChatCards(this).markdownInto(card, md); }
 
-    private CharSequence styled(String line) {
-        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
-        for (Markdown.Span sp : Markdown.spans(line)) {
-            int a = sb.length();
-            sb.append(sp.text);
-            if (sp.bold) sb.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), a, sb.length(), 0);
-            if (sp.url != null) sb.setSpan(new android.text.style.URLSpan(sp.url), a, sb.length(), 0);
-        }
-        return sb;
-    }
 
-    private View table(Markdown.Block b) {
-        android.widget.HorizontalScrollView sc = new android.widget.HorizontalScrollView(this);
-        android.widget.TableLayout tl = new android.widget.TableLayout(this);
-        for (int r = 0; r < b.rows.size(); r++) {
-            android.widget.TableRow row = new android.widget.TableRow(this);
-            row.setBackgroundColor(r == 0 ? MINE : r % 2 == 0 ? 0xFF222327 : PANEL);
-            for (String cell : b.rows.get(r)) {
-                TextView c = text("", 14, r == 0 ? TEXT : 0xFFC9CBD0);
-                c.setText(styled(cell));
-                c.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
-                c.setLinkTextColor(AMBER);
-                if (r == 0) c.setTypeface(Typeface.DEFAULT_BOLD);
-                c.setPadding(dp(10), dp(7), dp(10), dp(7));
-                c.setMaxWidth(dp(220));
-                row.addView(c);
-            }
-            tl.addView(row);
-        }
-        sc.addView(tl);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(10), 0, dp(4));
-        sc.setLayoutParams(lp);
-        return sc;
-    }
 
     // Back to Sprocket after the hands (the owner 2026-11-10: "if the actual sprocket app was open when this ran it should
     // return to the app"): a question asked on Sprocket's screen that used the screen tool comes back here when it's
