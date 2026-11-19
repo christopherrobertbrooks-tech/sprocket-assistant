@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
     private static final android.util.LruCache<String, Bitmap> thumbs = new android.util.LruCache<>(12);
     private static final int TAKE_PHOTO = 21, PICK_PHOTO = 22;
     boolean showingMemory, showingLists, editingAbout, showingFeed, showingGoals;
-    private final java.util.Set<Long> openDays = new java.util.HashSet<>();   // the Feed screen's opened days
+    final java.util.Set<Long> openDays = new java.util.HashSet<>();   // the Feed screen's opened days
     private LinearLayout attachRow;
     static MainActivity current;              // the screen on show, if any (Hands shows its cards there)
     static final int ASK_TOOL_PERMISSION = 8;       // the screen on show, if any
@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
     private TextView pendingView;
     static String persona = "";
     LinearLayout list;
-    private ScrollView scroll;
+    ScrollView scroll;
     private EditText box;
     private Button send;
     private static boolean harder;
@@ -1360,7 +1360,7 @@ public class MainActivity extends Activity {
         ask(s, null);
     }
 
-    private void ask(String said, SelfTest st) {
+    void ask(String said, SelfTest st) {
         String photo = attached;
         attached = null;
         showAttached();
@@ -1743,9 +1743,9 @@ public class MainActivity extends Activity {
         });
     }
 
-    private static final int SOFT = 0xFFC9CBD0, LINE = 0xFF26272C, INNER = 0xFF17181B;
+    static final int SOFT = 0xFFC9CBD0, LINE = 0xFF26272C, INNER = 0xFF17181B;
 
-    private View divider() {
+    View divider() {
         View d = new View(this);
         d.setBackgroundColor(LINE);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1) / 2 + 1));
@@ -1754,237 +1754,22 @@ public class MainActivity extends Activity {
         return d;
     }
 
-    private void say(String words) {
+    void say(String words) {
         VoiceOut v = VoiceOut.get(this);
         v.stop();
         v.sayThen(words, "deadpan", null);
     }
 
-    /** The morning brief as a card (the mockup he picked): the bottom line, short sections, a line opens to its detail. */
-    private View feedCard(Feed.Brief b) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(PANEL, 16));
-        card.setPadding(dp(14), dp(14), dp(14), dp(10));
-        LinearLayout head = new LinearLayout(this);
-        head.addView(text("Morning brief \u00b7 " + new SimpleDateFormat("EEE MMM d", Locale.US).format(new Date(b.at)), 12, MUTED),
-                new LinearLayout.LayoutParams(0, -2, 1));
-        TextView play = text("\u25B6 Play", 12, TEXT);
-        play.setOnClickListener(v -> say(Feed.spoken(b)));
-        head.addView(play);
-        card.addView(head);
-        TextView label = text("BOTTOM LINE", 11, AMBER);
-        label.setTypeface(Typeface.DEFAULT_BOLD);
-        label.setLetterSpacing(0.06f);
-        label.setPadding(0, dp(8), 0, dp(2));
-        card.addView(label);
-        TextView bl = text(b.bottomLine, 16, TEXT);
-        bl.setLineSpacing(0, 1.15f);
-        card.addView(bl);
-        for (Feed.Section sec : b.sections) {
-            card.addView(divider());
-            TextView name = text(sec.name.toUpperCase(Locale.US), 11, MUTED);
-            name.setTypeface(Typeface.DEFAULT_BOLD);
-            name.setLetterSpacing(0.08f);
-            card.addView(name);
-            boolean alert = sec.name.equalsIgnoreCase("Machines");
-            for (Feed.Item it : sec.items) {
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(4), 0, dp(4));
-                android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
-                if (alert) {
-                    line.append("\u25CF  ");
-                    line.setSpan(new android.text.style.ForegroundColorSpan(AMBER), 0, 1, 0);
-                }
-                line.append(it.line);
-                TextView lt = text("", 14, alert ? TEXT : SOFT);
-                lt.setText(line);
-                lt.setSingleLine(true);
-                lt.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                row.addView(lt, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView chev = text("\u203A", 16, FAINT);
-                chev.setPadding(dp(10), 0, dp(2), 0);
-                row.addView(chev);
-                card.addView(row);
-                LinearLayout open = new LinearLayout(this);       // the detail, shown when he taps the line
-                open.setOrientation(LinearLayout.VERTICAL);
-                open.setBackground(round(INNER, 12));
-                open.setPadding(dp(12), dp(10), dp(12), dp(10));
-                TextView det = text(it.detail.isEmpty() ? it.line : it.detail, 14, SOFT);
-                det.setLineSpacing(0, 1.15f);
-                open.addView(det);
-                if (!it.link.isEmpty()) {
-                    TextView src = text("", 12, FAINT);
-                    android.text.SpannableString ss = new android.text.SpannableString(Claude.site(it.link));
-                    ss.setSpan(new android.text.style.URLSpan(it.link), 0, ss.length(), 0);
-                    src.setText(ss);
-                    src.setLinkTextColor(AMBER);
-                    src.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
-                    src.setPadding(0, dp(6), 0, 0);
-                    open.addView(src);
-                }
-                LinearLayout chips = new LinearLayout(this);
-                Button ask = chip("Ask Sprocket");
-                ask.setBackground(round(TEXT, 16));
-                ask.setTextColor(0xFF111111);
-                ask.setOnClickListener(v -> { if (!busy) ask("Tell me more about this from my morning brief: " + it.line, null); });
-                chips.addView(ask, new LinearLayout.LayoutParams(-2, dp(34)));
-                Button read = chip("Read it out");
-                read.setBackground(round(MINE, 16));
-                read.setTextColor(TEXT);
-                read.setOnClickListener(v -> say(it.line + ". " + it.detail));
-                LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(34));
-                rp.setMargins(dp(8), 0, 0, 0);
-                chips.addView(read, rp);
-                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
-                cp.setMargins(0, dp(10), 0, 0);
-                open.addView(chips, cp);
-                open.setVisibility(View.GONE);
-                LinearLayout.LayoutParams op = new LinearLayout.LayoutParams(-1, -2);
-                op.setMargins(0, dp(4), 0, dp(4));
-                card.addView(open, op);
-                row.setOnClickListener(v -> {
-                    boolean show = open.getVisibility() != View.VISIBLE;
-                    open.setVisibility(show ? View.VISIBLE : View.GONE);
-                    chev.setText(show ? "\u2304" : "\u203A");
-                });
-            }
-        }
-        return card;
-    }
+    private View feedCard(Feed.Brief b) { return new FeedPage(this).feedCard(b); }
 
-    private LinearLayout panelCard(String title, String hint) {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text(title, 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        if (hint != null) {
-            TextView t = text(hint, 14, MUTED);
-            t.setPadding(0, dp(3), 0, dp(4));
-            c.addView(t);
-        }
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(12));
-        c.setLayoutParams(lp);
-        return c;
-    }
+    private LinearLayout panelCard(String title, String hint) { return new FeedPage(this).panelCard(title, hint); }
 
-    private Button doneChip(Runnable close) {
-        Button done = chip("Done");
-        done.setBackground(round(TEXT, 18));
-        done.setTextColor(0xFF111111);
-        done.setOnClickListener(v -> close.run());
-        return done;
-    }
+    private Button doneChip(Runnable close) { return new FeedPage(this).doneChip(close); }
 
-    /** The Feed screen (the feed icon): when it comes and what's in it, the news topics it follows, the last week. */
-    private void feedScreen() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = panelCard("Every morning at 6:00", "About 5\u201315\u00a2 a day. A notification when it's ready; nothing is "
-                + "said out loud until you press Play.");
-        if (!FeedAlarm.exact(this)) {
-            TextView warn = text("To come right at 6:00, Sprocket needs \u201cAlarms & reminders\u201d switched on.", 14, AMBER);
-            warn.setPadding(0, dp(6), 0, dp(6));
-            c.addView(warn);
-            Button on = chip("Turn it on");
-            on.setBackground(round(MINE, 18));
-            on.setTextColor(TEXT);
-            on.setOnClickListener(v -> FeedAlarm.openSwitch(this));
-            c.addView(on, new LinearLayout.LayoutParams(-2, dp(36)));
-        }
-        for (String[] sec : Feed.SECTIONS) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(6), 0, dp(6));
-            row.addView(text(sec[1], 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
-            android.widget.Switch sw = new android.widget.Switch(this);
-            synchronized (feed) { sw.setChecked(feed.on.get(sec[0])); }
-            sw.setThumbDrawable(switchPart(true));      // drawn here, solid like the mockup (Android's track is see-through)
-            sw.setTrackDrawable(switchPart(false));
-            sw.setOnCheckedChangeListener((x, on) -> { synchronized (feed) { feed.on.put(sec[0], on); saveFeed(); } });
-            row.addView(sw);
-            c.addView(row);
-        }
-        Button now = chip("Make one now");
-        now.setBackground(round(MINE, 18));
-        now.setTextColor(TEXT);
-        now.setOnClickListener(v -> { FeedService.start(this); note("Making it: about a minute"); });
-        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-2, dp(36));
-        np.setMargins(0, dp(8), 0, 0);
-        c.addView(now, np);
-        list.addView(c);
+    private void feedScreen() { new FeedPage(this).feedScreen(); }
 
-        LinearLayout w = panelCard("News topics", "What the morning news follows: a team, your town, a hobby. Add your own, "
-                + "or ask Sprocket to follow something. No topics, no news section.");
-        List<String> topics;
-        synchronized (feed) { topics = new ArrayList<>(feed.topics); }
-        for (String t : topics) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            TextView tt = text(t, 15, TEXT);
-            tt.setPadding(0, dp(7), 0, dp(7));
-            row.addView(tt, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView x = text("\u00d7", 20, FAINT);
-            x.setPadding(dp(14), 0, dp(6), 0);
-            x.setOnClickListener(v -> { synchronized (feed) { feed.unwatch(t); saveFeed(); } feedScreen(); });
-            row.addView(x);
-            w.addView(row);
-        }
-        w.addView(adder("Add a topic", words -> { synchronized (feed) { feed.watch(words); saveFeed(); } feedScreen(); }));
-        list.addView(w);
 
-        LinearLayout wk = panelCard("This week", null);
-        List<String> week;
-        synchronized (feed) { week = new ArrayList<>(feed.briefs); }
-        if (week.isEmpty()) wk.addView(text("The first one arrives at 6:00 tomorrow (or tap Make one now).", 14, MUTED));
-        for (int i = week.size() - 1; i >= 0; i--) {
-            Feed.Brief b = Feed.Brief.fromJson(week.get(i));
-            if (b == null) continue;
-            LinearLayout row = new LinearLayout(this);
-            row.setPadding(0, dp(9), 0, dp(9));
-            TextView d = text(new SimpleDateFormat("EEE d", Locale.US).format(new Date(b.at)), 12, MUTED);
-            d.setPadding(0, dp(2), 0, 0);
-            row.addView(d, new LinearLayout.LayoutParams(dp(56), -2));
-            row.addView(text(b.bottomLine, 14, SOFT), new LinearLayout.LayoutParams(0, -2, 1));
-            row.setOnClickListener(v -> { if (!openDays.remove(b.at)) openDays.add(b.at); feedScreen(); });
-            wk.addView(row);
-            if (openDays.contains(b.at)) wk.addView(feedCard(b));
-        }
-        list.addView(wk);
-        list.addView(doneChip(() -> { showingFeed = false; render(); }), new LinearLayout.LayoutParams(-2, dp(40)));
-        scroll.post(() -> scroll.scrollTo(0, 0));
-    }
-
-    /** A switch's thumb (a dot: dark when on) or track (a pill: light when on). */
-    private android.graphics.drawable.Drawable switchPart(boolean thumb) {
-        android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
-        for (boolean on : new boolean[]{true, false}) {
-            GradientDrawable g = new GradientDrawable();
-            if (thumb) {
-                g.setShape(GradientDrawable.OVAL);
-                g.setColor(on ? 0xFF111111 : FAINT);
-                g.setSize(dp(16), dp(16));
-            } else {
-                g.setCornerRadius(dp(11));
-                g.setColor(on ? TEXT : MINE);
-                g.setSize(dp(40), dp(22));
-            }
-            android.graphics.drawable.Drawable d = thumb ? new android.graphics.drawable.InsetDrawable(g, dp(3)) : g;
-            s.addState(on ? new int[]{android.R.attr.state_checked} : new int[]{}, d);
-        }
-        return s;
-    }
-
-    private TextView box(boolean done) {
-        TextView b = text(done ? "\u2611" : "\u2610", 22, done ? SOFT : MUTED);
-        b.setPadding(0, 0, dp(12), 0);
-        return b;
-    }
+    private TextView box(boolean done) { return new FeedPage(this).box(done); }
 
     /** The Goals screen (the goals icon): open goals to tick off or talk over, then the done ones. */
     private void goalsScreen() {
@@ -2121,7 +1906,7 @@ public class MainActivity extends Activity {
     }
 
     /** A one-line text box with an Add button. */
-    private View adder(String hint, java.util.function.Consumer<String> onAdd) {
+    View adder(String hint, java.util.function.Consumer<String> onAdd) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         EditText e = new EditText(this);
