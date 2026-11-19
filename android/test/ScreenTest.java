@@ -16,6 +16,20 @@ public class ScreenTest {
     static Screen.Item button(String label) { return new Screen.Item("button", label, true, false, false, false, false); }
 
     public static void main(String[] a) {
+        // 11-18 "check on the snakes": Sprocket looked at Arlo's saved snapshot (Play button, "3m ago") and called it live,
+        // and read "3m ago · Spider · Motion Trigger Armed" as motion 3 minutes ago. Camera apps now carry a rule.
+        java.util.List<Screen.Item> arlo = java.util.Arrays.asList(button("3m ago \u00b7 Spider \u00b7 Motion Trigger Armed"), button("Play"));
+        String cam = Screen.cameraNote("com.arlo.app", arlo);
+        eq("a camera app gets the rule", cam.contains("saved snapshot, not live"), true);
+        eq("the snapshot's age is pointed out", cam.contains("\u201c3m ago\u201d"), true);
+        eq("armed is a setting, not an event", cam.contains("Armed"), true);
+        // 11-18: it called his bearded dragon's tank "the snake enclosure" because an earlier message asked about snakes
+        eq("what the chat or the camera's name suggests isn't proof", cam.contains("isn't proof"), true);
+        eq("other apps get nothing", Screen.cameraNote("com.android.settings", arlo), "");
+        eq("an offline camera is said plainly", Screen.cameraNote("com.ringapp",
+                java.util.Arrays.asList(button("Front Door \u00b7 Offline"))).contains("offline"), true);
+        eq("live video (no Play, no age): just the rule", Screen.cameraNote("com.arlo.app",
+                java.util.Arrays.asList(button("Spider"), button("Mute"))).contains("time-stamped"), false);
         // 11-16: cloud brains tapped Dark mode / Bigger text / Battery saver and believed they'd changed; they hadn't
         eq("a switch that changed: no note", Screen.switchNote("Dark mode", false, true), null);
         eq("a switch that didn't change: said plainly", Screen.switchNote("Dark mode", false, false),

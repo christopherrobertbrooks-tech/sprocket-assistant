@@ -40,6 +40,38 @@ final class Screen {
         }
     }
 
+    /** Camera apps (security cameras, doorbells, baby monitors...): their screens and pictures carry cameraNote(). */
+    static final java.util.Set<String> CAMERA_APPS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "com.arlo.app", "com.roku.rokuhome", "com.ringapp", "com.hualai", "com.immediasemi.android.blink",
+            "com.google.android.apps.chromecast.app", "com.nest.android", "com.oceanwing.battery.cam", "com.simplisafe.mobile",
+            "com.tplink.iot", "com.mcu.reolink", "com.tplink.kasa_android", "com.xiaomi.smarthome", "com.wyze.wyzeapp"));
+    private static final java.util.regex.Pattern AGO = java.util.regex.Pattern.compile(
+            "\\b\\d+\\s*(s|sec|secs|seconds?|m|min|mins|minutes?|h|hr|hrs|hours?|d|days?)\\s+ago\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * The camera rule (11-18: Sprocket looked at Arlo's saved snapshot -- Play button, "3m ago" -- and told him the camera
+     * was live, and read "3m ago · Spider · Motion Trigger Armed" as motion three minutes ago). "" outside camera apps.
+     */
+    static String cameraNote(String pkg, List<Item> items) {
+        if (pkg == null || !CAMERA_APPS.contains(pkg)) return "";
+        String age = null;
+        boolean offline = false;
+        for (Item it : items) {
+            java.util.regex.Matcher m = AGO.matcher(it.label);
+            if (age == null && m.find()) age = m.group();
+            String l = it.label.toLowerCase(java.util.Locale.US);
+            if (l.contains("offline") || l.contains("unavailable") || l.contains("disconnected") || l.contains("camera is off")) offline = true;
+        }
+        StringBuilder b = new StringBuilder("\n(Camera app: a picture with a Play button or a time on it is a saved snapshot, not live "
+                + "video. To see now, tap Play or the picture, wait until it's playing, then look again. If it won't play, say it's a "
+                + "snapshot and how old. Words like Armed or Motion Trigger are settings, not something that happened. Describe "
+                + "only what's in the picture; never guess what's behind it. What earlier messages or the camera's name suggest "
+                + "isn't proof: don't name an animal, a person or a room you can't see in this picture.)");
+        if (age != null) b.append("\n(This screen shows a picture time-stamped \u201c").append(age).append("\u201d: that is its age, not an event.)");
+        if (offline) b.append("\n(A camera here shows as offline: tell him which one, and don't describe its old picture as now.)");
+        return b.toString();
+    }
+
     static final int MAX_ITEMS = 120;
     private static final int MAX_LABEL = 80;
 

@@ -40,11 +40,14 @@ final class ToolsHere {
             adds.add(new Lists.Item(items[i], false, due, o == null ? "" : o.optString("aisle")));
         }
         String k = Lists.key(list);
+        List<Lists.Item> before;
+        synchronized (MainActivity.lists) { before = MainActivity.lists.copyOf(list); }   // undo puts back exactly this
         switch (name) {
             case "list_add": {
                 int n;
                 synchronized (MainActivity.lists) { n = MainActivity.lists.addItems(list, adds); MainActivity.saveLists(); }
-                if (n > 0) Hands.record("Added to " + k + ": " + String.join(", ", items));
+                if (n > 0) MainActivity.recordList("Added to " + k + ": " + String.join(", ", items), list, before);
+                else MainActivity.recordListIfChanged("Back on " + k + ": " + String.join(", ", items), list, before);
                 synchronized (MainActivity.lists) { return (n == items.length ? "Added. " : "Added " + n + " (the rest were on it already). ") + MainActivity.lists.show(list); }
             }
             case "list_change": {
@@ -56,7 +59,7 @@ final class ToolsHere {
                 }
                 if (it == null) return "\u201c" + in.optString("item") + "\u201d isn't on the " + k + " list. " + MainActivity.lists.show(list);
                 if (it.equals("bad date")) return "That due date isn't a date (YYYY-MM-DD). Nothing changed.";
-                Hands.record("Changed on " + k + ": " + it);
+                MainActivity.recordList("Changed on " + k + ": " + it, list, before);
                 synchronized (MainActivity.lists) { return "Changed. " + MainActivity.lists.show(list); }
             }
             case "list_show":
@@ -66,7 +69,7 @@ final class ToolsHere {
                 String it;
                 synchronized (MainActivity.lists) { it = MainActivity.lists.check(list, in.optString("item"), done); MainActivity.saveLists(); }
                 if (it == null) return "\u201c" + in.optString("item") + "\u201d isn't on the " + k + " list. " + MainActivity.lists.show(list);
-                Hands.record((done ? "Ticked off on " : "Back on ") + k + ": " + it);
+                MainActivity.recordList((done ? "Ticked off on " : "Back on ") + k + ": " + it, list, before);
                 return done ? "Ticked off." : "Back on the list.";
             }
             case "list_remove": {
@@ -75,7 +78,7 @@ final class ToolsHere {
                     for (String i : items) { String g = MainActivity.lists.remove(list, i); if (g == null) missing.add(i); else gone.add(g); }
                     MainActivity.saveLists();
                 }
-                if (!gone.isEmpty()) Hands.record("Removed from " + k + ": " + String.join(", ", gone));
+                if (!gone.isEmpty()) MainActivity.recordList("Removed from " + k + ": " + String.join(", ", gone), list, before);
                 return (gone.isEmpty() ? "Nothing removed." : "Removed " + String.join(", ", gone) + ".")
                         + (missing.isEmpty() ? "" : " Not on it: " + String.join(", ", missing) + ".");
             }
@@ -90,7 +93,7 @@ final class ToolsHere {
                 }
                 int n;
                 synchronized (MainActivity.lists) { n = MainActivity.lists.clear(list, onlyDone); MainActivity.saveLists(); }
-                Hands.record((onlyDone ? "Cleared ticked-off items from " : "Cleared the ") + k + (onlyDone ? "" : " list") + " (" + n + ")");
+                MainActivity.recordList((onlyDone ? "Cleared ticked-off items from " : "Cleared the ") + k + (onlyDone ? "" : " list") + " (" + n + ")", list, before);
                 return "Cleared " + n + ".";
             }
             default: throw new Exception("there is no tool called " + name);
@@ -100,13 +103,14 @@ final class ToolsHere {
     static String goalTool(String name, JSONObject in) throws Exception {
         long now = System.currentTimeMillis();
         synchronized (MainActivity.goals) {
+            List<Goals.Goal> before = MainActivity.goals.copy();   // undo puts back exactly this, by id
             switch (name) {
                 case "goal_add": {
                     String g = in.optString("goal").trim();
                     if (g.isEmpty()) throw new Exception("there's no goal to add");
                     boolean added = MainActivity.goals.add(g, now);
                     MainActivity.saveGoals();
-                    if (added) Hands.record("New goal: " + g);
+                    if (added) MainActivity.recordGoal("New goal: " + g, before);
                     return added ? "Added to their goals." : "They already have that goal (or the list is full).";
                 }
                 case "goal_done": {
@@ -114,14 +118,14 @@ final class ToolsHere {
                     String g = MainActivity.goals.done(in.optString("goal"), done, now);
                     MainActivity.saveGoals();
                     if (g == null) return "No goal matches that. " + MainActivity.goals.show();
-                    Hands.record((done ? "Goal done: " : "Goal back on: ") + g);
+                    MainActivity.recordGoal((done ? "Goal done: " : "Goal back on: ") + g, before);
                     return (done ? "Ticked off: " : "Back on: ") + g;
                 }
                 case "goal_remove": {
                     String g = MainActivity.goals.remove(in.optString("goal"));
                     MainActivity.saveGoals();
                     if (g == null) return "No goal matches that. " + MainActivity.goals.show();
-                    Hands.record("Goal removed: " + g);
+                    MainActivity.recordGoal("Goal removed: " + g, before);
                     return "Removed: " + g;
                 }
                 default: return MainActivity.goals.show();
@@ -157,13 +161,15 @@ final class ToolsHere {
             String note = input.optString("note").trim();
             if (note.isEmpty()) throw new Exception("there was nothing to remember");
             boolean added, always = input.optBoolean("always");
-            synchronized (MainActivity.memory) { added = MainActivity.memory.add(note, System.currentTimeMillis(), always); MainActivity.saveMemory(); }
-            if (added) Hands.record((always ? "Always remembering: " : "Remembered: ") + note);
+            List<Memory.Note> before;
+            synchronized (MainActivity.memory) { before = MainActivity.memory.copy(); added = MainActivity.memory.add(note, System.currentTimeMillis(), always); MainActivity.saveMemory(); }
+            if (added) MainActivity.recordMemory((always ? "Always remembering: " : "Remembered: ") + note, before);
             return added ? "Saved." : "Already saved.";
         }
         List<String> gone;
-        synchronized (MainActivity.memory) { gone = MainActivity.memory.forget(input.optString("about")); MainActivity.saveMemory(); }
-        for (String g : gone) Hands.record("Forgot: " + g);
+        List<Memory.Note> before;
+        synchronized (MainActivity.memory) { before = MainActivity.memory.copy(); gone = MainActivity.memory.forget(input.optString("about")); MainActivity.saveMemory(); }
+        if (!gone.isEmpty()) MainActivity.recordMemory("Forgot: " + String.join(" / ", gone), before);
         return gone.isEmpty() ? "No saved note matches that." : "Deleted: " + String.join(" / ", gone);
     }
 

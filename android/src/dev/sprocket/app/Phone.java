@@ -124,7 +124,7 @@ final class Phone {
         if (!label.isEmpty()) i.putExtra(AlarmClock.EXTRA_MESSAGE, label);
         start(c, i);
         String what = "Timer: " + length(secs) + (label.isEmpty() ? "" : ", " + label);
-        Hands.record(what);
+        Hands.record(what, UndoLog.SCREEN, null, null);
         return what + " (started in the Clock app).";
     }
 
@@ -137,7 +137,7 @@ final class Phone {
         StringBuilder rep = new StringBuilder();
         for (int d : days) rep.append(rep.length() > 0 ? ", " : "").append(PhoneTools.DAY_NAMES[d - 1].substring(0, 3));
         String what = "Alarm: " + clock(h, m) + (label.isEmpty() ? "" : ", " + label) + (days.isEmpty() ? "" : " (every " + rep + ")");
-        Hands.record(what);
+        Hands.record(what, UndoLog.SCREEN, null, null);
         return what + " (set in the Clock app).";
     }
 
@@ -233,7 +233,8 @@ final class Phone {
         String result = sms(c, w[1], message);
         if (UNCONFIRMED.equals(result)) throw new Exception(PhoneTools.unconfirmed(w[0]));
         if (result == null) {
-            Hands.record(recordAs != null ? recordAs + " " + w[0] : "Texted " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")") + ": “" + message + "”");
+            Hands.record(recordAs != null ? recordAs + " " + w[0] : "Texted " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")") + ": “" + message + "”",
+                    UndoLog.NEVER, null, null);
             return "Sent to " + w[0] + ".";
         }
         throw new Exception("the text did not go: " + result);
@@ -275,7 +276,7 @@ final class Phone {
         if (yes == null) return "No call: the boss didn't answer the card.";
         if (!yes) return "No call: the boss cancelled.";
         start(c, new Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(w[1]))));
-        Hands.record("Called " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")"));
+        Hands.record("Called " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")"), UndoLog.NEVER, null, null);
         return "Calling " + w[0] + " now.";
     }
 
@@ -378,7 +379,7 @@ final class Phone {
         }
         String what = (alert ? "Reminder (calendar): " : "Calendar: ") + title.trim() + ", " + local.format(DAY)
                 + (allDay ? ", all day" : " " + local.format(TIME));
-        Hands.record(what);
+        Hands.record(what, UndoLog.SCREEN, null, null);
         return what + (alert ? ", with an alert at that time." : ".");
     }
 
@@ -410,8 +411,14 @@ final class Phone {
                     Integer facing = ch.get(CameraCharacteristics.LENS_FACING);
                     if (Boolean.TRUE.equals(ch.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)) && facing != null
                             && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                        watchTorch(c);
+                        Boolean was = torchOn;   // what it really was (Codex 053 #4: it guessed the opposite of the ask)
                         cm.setTorchMode(id, in.optBoolean("on"));
-                        Hands.record("Flashlight " + (in.optBoolean("on") ? "on" : "off"));
+                        String fl = "Flashlight " + (in.optBoolean("on") ? "on" : "off");
+                        if (was == null) Hands.record(fl + " (what it was before isn't known, so undo won't guess)",
+                                UndoLog.NEVER, null, null);   // Codex 054 #4: unknown is never the opposite of the ask
+                        else if (was == in.optBoolean("on")) Hands.record(fl + " (already)");
+                        else Hands.record(fl, UndoLog.AUTO, "phone_control", new JSONObject().put("setting", "flashlight").put("on", was));
                         return "Flashlight " + (in.optBoolean("on") ? "on." : "off.");
                     }
                 }
@@ -426,7 +433,8 @@ final class Phone {
                         : Math.max(0, Math.min(100, in.optInt("percent", 50)));
                 am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(am.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * pct / 100f),
                         AudioManager.FLAG_SHOW_UI);
-                Hands.record("Media volume " + pct + "%");
+                if (pct == now) Hands.record("Media volume " + pct + "% (already)");
+                else Hands.record("Media volume " + pct + "%", UndoLog.AUTO, "phone_control", new JSONObject().put("setting", "volume").put("percent", now));
                 return "Media volume set to " + pct + "%.";
             }
             case "do_not_disturb": case "ringer": {
@@ -437,19 +445,66 @@ final class Phone {
                             + "the boss turns Sprocket on there, then asks again");
                 }
                 if (in.optString("setting").equals("do_not_disturb")) {
-                    nm.setInterruptionFilter(in.optBoolean("on") ? NotificationManager.INTERRUPTION_FILTER_PRIORITY
-                            : NotificationManager.INTERRUPTION_FILTER_ALL);
-                    Hands.record("Do Not Disturb " + (in.optBoolean("on") ? "on" : "off"));
+                    int was = nm.getCurrentInterruptionFilter();   // the exact mode (none, alarms, priority, all), not on/off (053 #4)
+                    if (in.has("filter")) {   // undo putting back that exact mode
+                        nm.setInterruptionFilter(in.optInt("filter"));
+                        Hands.record("Do Not Disturb back as it was");
+                        return "Do Not Disturb is back as it was.";
+                    }
+                    int want = in.optBoolean("on") ? NotificationManager.INTERRUPTION_FILTER_PRIORITY : NotificationManager.INTERRUPTION_FILTER_ALL;
+                    if (in.optBoolean("on") && was != NotificationManager.INTERRUPTION_FILTER_ALL) want = was;   // already on in some mode: keep it
+                    nm.setInterruptionFilter(want);
+                    if (want == was) Hands.record("Do Not Disturb " + (in.optBoolean("on") ? "on" : "off") + " (already)");
+                    else Hands.record("Do Not Disturb " + (in.optBoolean("on") ? "on" : "off"), UndoLog.AUTO, "phone_control",
+                            new JSONObject().put("setting", "do_not_disturb").put("filter", was));
                     return "Do Not Disturb is " + (in.optBoolean("on") ? "on." : "off.");
                 }
                 String mode = in.optString("mode", "normal");
+                int was = c.getSystemService(AudioManager.class).getRingerMode();
+                String wasMode = was == AudioManager.RINGER_MODE_SILENT ? "silent" : was == AudioManager.RINGER_MODE_VIBRATE ? "vibrate" : "normal";
                 c.getSystemService(AudioManager.class).setRingerMode(mode.equals("silent") ? AudioManager.RINGER_MODE_SILENT
                         : mode.equals("vibrate") ? AudioManager.RINGER_MODE_VIBRATE : AudioManager.RINGER_MODE_NORMAL);
-                Hands.record("Ringer: " + mode);
+                if (mode.equals(wasMode)) Hands.record("Ringer: " + mode + " (already)");
+                else Hands.record("Ringer: " + mode, UndoLog.AUTO, "phone_control", new JSONObject().put("setting", "ringer").put("mode", wasMode));
                 return "Ringer set to " + mode + ".";
             }
             default: throw new Exception("unknown setting " + in.optString("setting"));
         }
+    }
+
+    /** The flashlight as it really is (Android says when it changes); null until it has said once. */
+    private static volatile Boolean torchOn;
+    private static volatile boolean torchWatched;
+
+    static void watchTorch(Context c) {
+        if (torchWatched) return;
+        torchWatched = true;
+        try {
+            CameraManager cm = c.getSystemService(CameraManager.class);
+            cm.registerTorchCallback(new CameraManager.TorchCallback() {
+                @Override public void onTorchModeChanged(String id, boolean enabled) {
+                    try {
+                        Integer facing = cm.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
+                        if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) torchOn = enabled;
+                    } catch (Exception ignored) { }
+                }
+            }, new android.os.Handler(android.os.Looper.getMainLooper()));
+        } catch (Exception e) { android.util.Log.w("Sprocket", "torch watch: " + e); }
+    }
+
+    /** PhoneTools.settingsLine for the phone as it is now; "" if a setting can't be read. */
+    static String settingsNow(Context c) {
+        try {
+            AudioManager am = c.getSystemService(AudioManager.class);
+            int vol = Math.round(am.getStreamVolume(AudioManager.STREAM_MUSIC) * 100f / am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            ContentResolver r = c.getContentResolver();
+            boolean auto = Settings.System.getInt(r, Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
+            int bright = PhoneTools.percent(Settings.System.getInt(r, Settings.System.SCREEN_BRIGHTNESS, 128));
+            boolean dnd = c.getSystemService(NotificationManager.class).getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_ALL;
+            int ring = am.getRingerMode();
+            return PhoneTools.settingsLine(vol, bright, auto, dnd, ring == AudioManager.RINGER_MODE_SILENT ? "silent"
+                    : ring == AudioManager.RINGER_MODE_VIBRATE ? "vibrate" : "normal");
+        } catch (Exception e) { return ""; }
     }
 
     /** Screen brightness: needs his "Modify system settings" switch for Sprocket (opened for him the first time). */
@@ -460,17 +515,26 @@ final class Phone {
                     + "turns it on for Sprocket, then asks again");
         }
         ContentResolver r = c.getContentResolver();
+        boolean wasAuto = Settings.System.getInt(r, Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
+        int wasPct = PhoneTools.percent(Settings.System.getInt(r, Settings.System.SCREEN_BRIGHTNESS, 128));
+        JSONObject putBack = wasAuto ? new JSONObject().put("setting", "brightness").put("auto", true)
+                : new JSONObject().put("setting", "brightness").put("auto", false).put("percent", wasPct);
         if (in.has("auto")) {
             boolean auto = in.optBoolean("auto");
             Settings.System.putInt(r, Settings.System.SCREEN_BRIGHTNESS_MODE, auto ? Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
                     : Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
-            if (auto) { Hands.record("Brightness: automatic"); return "Brightness is automatic."; }
+            if (auto) {
+                if (wasAuto) Hands.record("Brightness: automatic (already)");
+                else Hands.record("Brightness: automatic", UndoLog.AUTO, "phone_control", putBack);
+                return "Brightness is automatic.";
+            }
         }
         int now = PhoneTools.percent(Settings.System.getInt(r, Settings.System.SCREEN_BRIGHTNESS, 128));
         int pct = in.has("direction") ? PhoneTools.step(now, in.optString("direction")) : Math.max(0, Math.min(100, in.optInt("percent", now)));
         Settings.System.putInt(r, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
         Settings.System.putInt(r, Settings.System.SCREEN_BRIGHTNESS, PhoneTools.brightness(pct));
-        Hands.record("Brightness " + pct + "%");
+        if (!wasAuto && pct == wasPct) Hands.record("Brightness " + pct + "% (already)");
+        else Hands.record("Brightness " + pct + "%", UndoLog.AUTO, "phone_control", putBack);
         return "Brightness set to " + pct + "% (automatic brightness off).";
     }
 

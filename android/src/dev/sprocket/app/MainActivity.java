@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
     static Lists lists;                        // his lists (files/lists.json)
     static AppNotes appNotes;                  // app memory for screen control (files/app-notes.json)
     static Goals goals;                        // what he's working toward (files/goals.json)
+    static UndoLog undoLog = new UndoLog();    // what Sprocket did for each request, and how to put it back (files/undo.json)
     static Feed feed;                          // the morning brief: settings, news topics, the last week (files/feed.json)
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
     static String attached;            // a photo waiting to go with his next message (its file name)
@@ -148,6 +149,8 @@ public class MainActivity extends Activity {
         lists = loadLists();
         appNotes = loadAppNotes();
         goals = Goals.fromJson(read("goals.json"));
+        undoLog = UndoLog.fromJson(read("undo.json"));
+        Phone.watchTorch(app);                  // the flashlight's real state, for undo
         feed = Feed.fromJson(read("feed.json"));
         FeedService.channels(app);
         StudioService.channels(app);
@@ -1120,6 +1123,9 @@ public class MainActivity extends Activity {
         pending = reply;
         startedInApp = resumed;
         askedNow = said == null ? "" : said;
+        undoLog.begin(askedNow, System.currentTimeMillis());   // "undo that" goes back one of these at a time
+        Claude.phoneNow = standIn() ? "" : Phone.settingsNow(app);   // the real settings, not what the chat last said
+        Claude.foodNow = PhoneTools.foodAsk(askedNow);                // food rules: usuals and allergies
         {   // can they see the screen? (locked, on the hidden screen, it said the screen was left up for them)
             android.app.KeyguardManager km = (android.app.KeyguardManager) app.getSystemService(KEYGUARD_SERVICE);
             android.os.PowerManager pm = (android.os.PowerManager) app.getSystemService(POWER_SERVICE);
@@ -1669,7 +1675,10 @@ public class MainActivity extends Activity {
                 try { runTool(name, input); } catch (Exception ignored) { }   // (in the practice box a text can't really go)
                 throw new Exception(PhoneTools.FAULT_NO_CONFIRM);
             }
-            return runTool(name, input);
+            String out = runTool(name, input);
+            if (name.equals("open_app") || name.equals("open_screen") || name.equals("go_to"))   // so the reply says where it ends up
+                out += PhoneTools.whereItEnds(BgScreen.on(), ScreenHands.stay || PhoneTools.wantsToSee(askedNow));
+            return out;
         }
 
         private String runTool(String name, JSONObject input) throws Exception {
@@ -1680,6 +1689,9 @@ public class MainActivity extends Activity {
             if (name.equals("open_screen")) ScreenHands.opened("open_screen", input.optString("screen"));
             if (name.equals("go_to")) { usedHands = true; ScreenHands.glow(true); return goTo(input.optString("place")); }
             if (name.equals("remember") || name.equals("forget")) return remember(name, input);
+            if (name.equals("what_i_did")) return undoLog.whatIDid(input.optInt("requests", 1), System.currentTimeMillis(), java.util.TimeZone.getDefault());
+            if (name.equals("undo")) return undo();
+            if (name.equals("undo_patch")) return undoPatch(input);
             if (name.startsWith("list_")) return listTool(name, input);
             if (name.startsWith("goal")) return goalTool(name, input);
             if (name.equals("watch_news")) return watchTool(input);
@@ -1763,6 +1775,77 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             android.util.Log.w("Sprocket", name + " not saved: " + e);
         }
+    }
+
+    /** Any thread: one thing Sprocket did, into the undo log (see Hands.record). */
+    static void logStep(String what, String kind, String tool, JSONObject undoInput) {
+        undoLog.add(what, kind, tool, undoInput, System.currentTimeMillis());
+        saveUndo();
+    }
+
+    static void saveUndo() { try { write("undo.json", undoLog.toJson().toString()); } catch (Exception e) { android.util.Log.w("Sprocket", "undo: " + e); } }
+
+    /** A list change for the undo log: exactly what to put back (Lists.patch), or nothing if the list didn't change. */
+    static void recordList(String what, String list, List<Lists.Item> before) throws Exception {
+        JSONObject p;
+        synchronized (lists) { p = Lists.patch(list, before, lists.copyOf(list)); }
+        if (p == null) Hands.record(what);
+        else Hands.record(what, UndoLog.AUTO, "undo_patch", new JSONObject().put("kind", "lists").put("patch", p));
+    }
+
+    /** recordList, but only when the list really changed (an item already there, ticked off, came back on). */
+    static void recordListIfChanged(String what, String list, List<Lists.Item> before) throws Exception {
+        JSONObject p;
+        synchronized (lists) { p = Lists.patch(list, before, lists.copyOf(list)); }
+        if (p != null) Hands.record(what, UndoLog.AUTO, "undo_patch", new JSONObject().put("kind", "lists").put("patch", p));
+    }
+
+    static void recordGoal(String what, List<Goals.Goal> before) throws Exception {
+        JSONObject p = Goals.patch(before, goals.copy());
+        if (p == null) Hands.record(what);
+        else Hands.record(what, UndoLog.AUTO, "undo_patch", new JSONObject().put("kind", "goals").put("patch", p));
+    }
+
+    static void recordMemory(String what, List<Memory.Note> before) throws Exception {
+        JSONObject p;
+        synchronized (memory) { p = Memory.patch(before, memory.copy()); }
+        if (p == null) Hands.record(what);
+        else Hands.record(what, UndoLog.AUTO, "undo_patch", new JSONObject().put("kind", "memory").put("patch", p));
+    }
+
+    /** undo's own step: a list, goal or memory change put back exactly. Only while an undo runs (never a brain tool). */
+    private static String undoPatch(JSONObject in) throws Exception {
+        if (!undoLog.undoing) throw new Exception("there is no tool called undo_patch");
+        JSONObject p = in.getJSONObject("patch");
+        String r;
+        switch (in.optString("kind")) {
+            case "lists": synchronized (lists) { r = lists.applyPatch(p); saveLists(); } syncLists(); return r;
+            case "goals": synchronized (goals) { r = goals.applyPatch(p); saveGoals(); } return r;
+            case "memory": synchronized (memory) { r = memory.applyPatch(p); saveMemory(); } return r;
+            default: throw new Exception("nothing to put back");
+        }
+    }
+
+    /** The undo tool: runs the last request's reverse calls through the same tools, then says what went back. */
+    private static String undo() {
+        UndoLog.Entry e = undoLog.toUndo();
+        if (e == null) return UndoLog.NOTHING;
+        List<String> back = new ArrayList<>(), failed = new ArrayList<>(), screen = new ArrayList<>(), never = new ArrayList<>();
+        undoLog.undoing = true;
+        try {
+            for (int i = e.steps.size() - 1; i >= 0; i--) {   // last change first; a step already back is never replayed
+                UndoLog.Step s = e.steps.get(i);
+                if (s.done) continue;
+                if (s.kind.equals(UndoLog.AUTO) && s.tool != null) {
+                    try { back.add(UndoLog.undid(s.did, TOOLS.run(s.tool, s.input == null ? new JSONObject() : new JSONObject(s.input.toString())))); s.done = true; }
+                    catch (Exception x) { failed.add(s.did + " (" + x.getMessage() + ")"); }   // stays, for the next "undo that"
+                } else if (s.kind.equals(UndoLog.SCREEN)) { if (!s.offered) screen.add(s.did); s.offered = true; }   // offered, not done
+                else if (s.kind.equals(UndoLog.NEVER)) { never.add(s.did); s.done = true; }
+            }
+        } finally { undoLog.undoing = false; }
+        undoLog.finish(e);
+        saveUndo();
+        return UndoLog.report(e.asked, back, failed, screen, never);
     }
 
     static void saveGoals() { try { write("goals.json", goals.toJson()); } catch (Exception e) { android.util.Log.w("Sprocket", "goals: " + e); } }

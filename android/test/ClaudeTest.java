@@ -53,6 +53,25 @@ public class ClaudeTest {
         c.add("user", "and tomorrow?", 3);
         JSONObject r = Claude.request("PERSONA", null, null, "Friday, October 17, 2026, 3:10 AM", HERE, c.window(24), false);
         eq("normal = Sonnet", r.getString("model"), Claude.SONNET);
+        // 11-18 on his phone: "it's already at 20, boss" -- the volume was at 0; it went by the chat. Every question now
+        // carries the phone's real settings, read when he asks.
+        Claude.phoneNow = PhoneTools.settingsLine(0, 40, true, false, "normal");
+        JSONObject live = Claude.request("PERSONA", null, null, "now", HERE, c.window(24), false);
+        Claude.phoneNow = "";
+        Claude.foodNow = true;
+        JSONObject fo = Claude.request("PERSONA", null, null, "now", HERE, c.window(24), false);
+        Claude.foodNow = false;
+        String foodNote = fo.getJSONArray("messages").getJSONObject(fo.getJSONArray("messages").length() - 1).getJSONArray("content").toString();
+        eq("a food ask carries the food rules", foodNote.contains("allerg") && foodNote.contains("Usual at"), true);
+        String lastNote = live.getJSONArray("messages").getJSONObject(live.getJSONArray("messages").length() - 1)
+                .getJSONArray("content").toString();
+        eq("the real settings ride with his question", lastNote.contains("media volume 0%, screen brightness 40% (automatic), "
+                + "Do Not Disturb off, ringer normal"), true);
+        eq("and the chat is said to be older than that", lastNote.contains("earlier messages may be out of date"), true);
+        eq("other asks don't carry the food rules", lastNote.contains("Usual at"), false);
+        eq("manual brightness, Do Not Disturb on", PhoneTools.settingsLine(75, 10, false, true, "vibrate"),
+                "Right now on the phone (read just now; earlier messages may be out of date): media volume 75%, screen "
+                + "brightness 10%, Do Not Disturb on, ringer vibrate.");
         // 11-16 Haiku 5.5 as a Claude choice (passed the practice set 63/68): same key, cheapest; think harder stays Opus
         Config.haiku = true;
         eq("haiku chosen: normal = Haiku", Claude.request("P", null, null, "now", HERE, c.window(24), false).getString("model"), "claude-haiku-5-5");

@@ -43,12 +43,36 @@ final class Memory {
         String t = text.trim().replaceAll("\\s+", " ");
         if (t.isEmpty()) return false;
         if (t.length() > LONGEST) t = t.substring(0, LONGEST);
-        for (Note n : notes) if (norm(n.text).equals(norm(t))) return false;
+        for (Note n : notes)
+            if (norm(n.text).equals(norm(t))) {   // already there: said again with always (or an allergy), it's pinned (053 #5)
+                if ((always || allergy(t)) && !n.always) { n.always = true; return true; }
+                return false;
+            }
+        if (allergy(t)) always = true;               // an allergy goes with every message (roadmap "Remembers your food")
+        String place = usualPlace(t);                // one usual per place: the new one replaces the old
+        if (place != null) notes.removeIf(n -> place.equals(usualPlace(n.text)));
         long id = Math.max(nextId, at);              // unique, and rising: a note's id is when it was made, or after
         nextId = id + 1;
         notes.add(new Note(id, t, always));
-        while (notes.size() > MAX) notes.remove(0);
+        while (notes.size() > MAX) {                 // the oldest go, but never an allergy
+            int drop = 0;
+            while (drop < notes.size() - 1 && allergy(notes.get(drop).text)) drop++;
+            notes.remove(drop);
+        }
         return true;
+    }
+
+    private static final java.util.regex.Pattern ALLERGY = java.util.regex.Pattern.compile(
+            "\\b(allerg\\w*|intoleran\\w*|celiac|coeliac|anaphyla\\w*|epipen|epi-pen)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** A note about an allergy or intolerance: always on, and never the one pushed out of a full notebook. */
+    static boolean allergy(String note) { return ALLERGY.matcher(note).find(); }
+
+    /** "Usual at Hardee's: ..." -> "hardee's" (the place, for one usual per place); null for any other note. */
+    static String usualPlace(String note) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^usual (?:order )?at ([^:]+):", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(note.trim());
+        return m.find() ? m.group(1).trim().toLowerCase(java.util.Locale.US) : null;
     }
 
     private static final Set<String> SMALL = new HashSet<>(Arrays.asList("a", "an", "the", "his", "her", "he", "she", "is",
@@ -81,6 +105,49 @@ final class Memory {
 
     /** His delete, from the Memory screen. */
     boolean delete(long id) { return notes.removeIf(n -> n.id == id); }
+
+    /** The notes as they are now, copied (undo takes one before a change; 11-18, Codex 053 #2). */
+    List<Note> copy() {
+        List<Note> out = new ArrayList<>();
+        for (Note n : notes) out.add(new Note(n.id, n.text, n.always));
+        return out;
+    }
+
+    /** What undo needs: notes added since (by id) and notes removed or re-pinned (as they were). null = no change. */
+    static JSONObject patch(List<Note> before, List<Note> after) throws Exception {
+        java.util.Map<Long, Note> b = new java.util.LinkedHashMap<>(), a = new java.util.LinkedHashMap<>();
+        for (Note n : before) b.put(n.id, n);
+        for (Note n : after) a.put(n.id, n);
+        JSONArray off = new JSONArray(), back = new JSONArray();
+        for (Long id : a.keySet()) if (!b.containsKey(id)) off.put(String.valueOf(id));
+        for (Note was : b.values()) {
+            Note now = a.get(was.id);
+            if (now == null || now.always != was.always)
+                back.put(new JSONObject().put("id", was.id).put("text", was.text).put("always", was.always));
+        }
+        if (off.length() == 0 && back.length() == 0) return null;
+        return new JSONObject().put("off", off).put("back", back);
+    }
+
+    /** Applies patch() by exact id: never a fuzzy forget (that took an older similar note with it). */
+    String applyPatch(JSONObject p) throws Exception {
+        JSONArray off = p.optJSONArray("off"), back = p.optJSONArray("back");
+        for (int i = 0; off != null && i < off.length(); i++) { long id = Long.parseLong(off.getString(i)); notes.removeIf(n -> n.id == id); }
+        for (int i = 0; back != null && i < back.length(); i++) {
+            JSONObject o = back.getJSONObject(i);
+            Note n = new Note(o.getLong("id"), o.getString("text"), o.optBoolean("always"));
+            int at = -1;
+            for (int j = 0; j < notes.size(); j++) if (notes.get(j).id == n.id) at = j;
+            if (at >= 0) notes.set(at, n);
+            else {   // back where it was, by id order (ids rise with time)
+                int k = 0;
+                while (k < notes.size() && notes.get(k).id < n.id) k++;
+                notes.add(k, n);
+            }
+            nextId = Math.max(nextId, n.id + 1);
+        }
+        return "his notes are back as they were";
+    }
 
     /** His pin, from the Memory screen: always-on or only when it fits. */
     boolean setAlways(long id, boolean always) {
@@ -177,7 +244,7 @@ final class Memory {
     String toJson() throws Exception {
         JSONArray a = new JSONArray();
         for (Note n : notes) a.put(new JSONObject().put("id", n.id).put("text", n.text).put("always", n.always));
-        return new JSONObject().put("version", 2).put("notes", a).toString();
+        return new JSONObject().put("version", 3).put("notes", a).toString();
     }
 
     static Memory fromJson(String s) {
@@ -185,10 +252,13 @@ final class Memory {
         try {
             JSONObject j = new JSONObject(s);
             JSONArray a = j.getJSONArray("notes");
-            boolean before = j.optInt("version", 1) < 2;   // notes from before the bigger memory all went every time: still do
+            int version = j.optInt("version", 1);
+            boolean before = version < 2;   // notes from before the bigger memory all went every time: still do
+            boolean pinAllergies = version < 3;   // once, on the update (Codex 053 #5); after that his own pin choice stands
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
-                Note n = new Note(o.getLong("id"), o.getString("text"), before || o.optBoolean("always"));
+                String text = o.getString("text");
+                Note n = new Note(o.getLong("id"), text, before || o.optBoolean("always") || (pinAllergies && allergy(text)));
                 m.notes.add(n);
                 m.nextId = Math.max(m.nextId, n.id + 1);
             }

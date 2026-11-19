@@ -191,7 +191,8 @@ final class CallAnnouncer {
             try {
                 String failed = Phone.sms(c, w[1], words);
                 if (failed == null) {
-                    Hands.record("Texted " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")") + ": \u201c" + words + "\u201d");
+                    Hands.record("Texted " + w[0] + (w[0].equals(w[1]) ? "" : " (" + w[1] + ")") + ": \u201c" + words + "\u201d",
+                            UndoLog.NEVER, null, null);
                     said = "Sent.";
                 } else if (Phone.UNCONFIRMED.equals(failed)) said = "The phone never confirmed it went out. It may have gone anyway, so check your messages.";
                 else said = "The text didn't go: " + failed + ".";
