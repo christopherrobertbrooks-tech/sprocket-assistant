@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
     static String persona = "";
     LinearLayout list;
     ScrollView scroll;
-    private EditText box;
+    EditText box;
     private Button send;
     private static boolean harder;
 
@@ -1762,56 +1762,16 @@ public class MainActivity extends Activity {
 
     private View feedCard(Feed.Brief b) { return new FeedPage(this).feedCard(b); }
 
-    private LinearLayout panelCard(String title, String hint) { return new FeedPage(this).panelCard(title, hint); }
+    LinearLayout panelCard(String title, String hint) { return new FeedPage(this).panelCard(title, hint); }
 
-    private Button doneChip(Runnable close) { return new FeedPage(this).doneChip(close); }
+    Button doneChip(Runnable close) { return new FeedPage(this).doneChip(close); }
 
     private void feedScreen() { new FeedPage(this).feedScreen(); }
 
 
-    private TextView box(boolean done) { return new FeedPage(this).box(done); }
+    TextView box(boolean done) { return new FeedPage(this).box(done); }
 
-    /** The Goals screen (the goals icon): open goals to tick off or talk over, then the done ones. */
-    private void goalsScreen() {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = panelCard("Goals", "Say \u201cadd a goal\u2026\u201d or type one. Tap a goal to talk it over; hold one to remove it.");
-        List<Goals.Goal> all;
-        synchronized (goals) { all = new ArrayList<>(goals.goals); }
-        int open = 0, done = 0;
-        for (Goals.Goal g : all) if (g.done) done++; else open++;
-        if (open == 0) c.addView(text("No open goals.", 14, MUTED));
-        LinearLayout doneCard = panelCard("Done (" + done + ")", null);
-        for (Goals.Goal g : all) {
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(7), 0, dp(7));
-            TextView b = box(g.done);
-            b.setOnClickListener(v -> { synchronized (goals) { goals.toggle(g.id, System.currentTimeMillis()); saveGoals(); } goalsScreen(); });
-            row.addView(b);
-            TextView t = text(g.text, 15, g.done ? FAINT : TEXT);
-            if (g.done) t.setPaintFlags(t.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-            t.setOnClickListener(v -> {
-                if (busy) return;
-                showingGoals = false;
-                render();
-                ask("Let's talk about my goal: " + g.text, null);
-            });
-            t.setOnLongClickListener(v -> {
-                new android.app.AlertDialog.Builder(this).setMessage("Remove \u201c" + g.text + "\u201d?")
-                        .setPositiveButton("Remove", (d, w) -> { synchronized (goals) { goals.delete(g.id); saveGoals(); } goalsScreen(); })
-                        .setNegativeButton("Cancel", null).show();
-                return true;
-            });
-            row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
-            (g.done ? doneCard : c).addView(row);
-        }
-        c.addView(adder("Add a goal", words -> { synchronized (goals) { goals.add(words, System.currentTimeMillis()); saveGoals(); } goalsScreen(); }));
-        list.addView(c);
-        if (done > 0) list.addView(doneCard);
-        list.addView(doneChip(() -> { showingGoals = false; render(); }), new LinearLayout.LayoutParams(-2, dp(40)));
-        scroll.post(() -> scroll.scrollTo(0, 0));
-    }
+    private void goalsScreen() { new GoalsPage(this).goalsScreen(); }
 
     /** ⋯ Lists: every list; tap an item to tick it off (or back on), x to take it off, add items or a new list. */
     private void listsCard() {
