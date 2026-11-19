@@ -59,8 +59,8 @@ public class MainActivity extends Activity {
     // screen must carry on with the same live conversation.
     private static final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static final HttpURLConnection[] live = new HttpURLConnection[1];
-    private static Chat chat;
-    private static boolean busy, stopped;
+    static Chat chat;
+    static boolean busy, stopped;
     private static Chat.Turn pending;          // the reply streaming in right now
     static Memory memory;                      // phase 3b: what he's had remembered (files/memory.json)
     static Lists lists;                        // his lists (files/lists.json)
@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private final java.util.List<View> topButtons = new java.util.ArrayList<>();
     // first-time setup (Setup): the question on show, whether its username is awaited, what this step already tried
     static int setupAt = Setup.OFF;
-    private static boolean setupGithub, setupReturning;
-    private static final java.util.Set<String> setupTried = new java.util.HashSet<>();
+    static boolean setupGithub, setupReturning;
+    static final java.util.Set<String> setupTried = new java.util.HashSet<>();
     private static String testKey;     // self-test only: a made-up key, never saved
 
     /** True only in a self-test against the stand-in server: a made-up key, not Claude and not his own server. The self-test's
@@ -672,7 +672,7 @@ public class MainActivity extends Activity {
         if (current == this) current = null;   // the worker keeps going: the next screen picks the reply up
     }
 
-    private SharedPreferencesLike prefs() { return new SharedPreferencesLike(this); }
+    SharedPreferencesLike prefs() { return new SharedPreferencesLike(this); }
 
     /** Tiny wrapper so the key, the voice switch and nothing else live in one private settings file. */
     static final class SharedPreferencesLike {
@@ -1246,57 +1246,7 @@ public class MainActivity extends Activity {
 
     private void scrollDown() { scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN)); }
 
-    private void keyCard(boolean replacing) {
-        list.removeAllViews();
-        backSaves = null;   // only Settings and Personality set it again
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(round(PANEL, 16));
-        c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        TextView h = text(replacing ? "Claude key" : "Sprocket needs a Claude key", 17, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        c.addView(text(CLAUDE_KEY_HOW, 14, MUTED));
-        EditText k = new EditText(this);
-        k.setHint("sk-ant-...");
-        k.setTextColor(TEXT);
-        k.setHintTextColor(FAINT);
-        k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        c.addView(k);
-        TextView note = text("", 13, ERR);
-        c.addView(note);
-        LinearLayout btns = new LinearLayout(this);
-        Button save = chip("Save");
-        save.setBackground(round(TEXT, 18));
-        save.setTextColor(0xFF111111);
-        save.setOnClickListener(v -> {
-            String s = k.getText().toString().trim();
-            if (!s.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
-            prefs().key(s);
-            render();
-        });
-        btns.addView(save, new LinearLayout.LayoutParams(-2, dp(40)));
-        if (!prefs().key().isEmpty()) {
-            Button remove = chip("Remove key");
-            remove.setBackground(round(MINE, 18));
-            remove.setTextColor(TEXT);
-            remove.setOnClickListener(v -> { prefs().key(""); render(); });
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, dp(40));
-            rp.setMargins(dp(10), 0, 0, 0);
-            btns.addView(remove, rp);
-            Button back = chip("Back");
-            back.setBackground(round(MINE, 18));
-            back.setTextColor(TEXT);
-            back.setOnClickListener(v -> render());
-            btns.addView(back, new LinearLayout.LayoutParams(rp));
-        }
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(10), 0, 0);
-        c.addView(btns, bp);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(16), 0, 0);
-        list.addView(c, lp);
-    }
+    private void keyCard(boolean replacing) { new SetupWalkthrough(this).keyCard(replacing); }
 
     // ------------------------------------------------------------------ first open (Setup)
     static final String ADDRESS_HOW = "The go-between's start.py prints exactly what to type here. Its address is a Tailscale one "
@@ -1316,374 +1266,27 @@ public class MainActivity extends Activity {
             + "dollars goes a long way: most questions cost well under a cent). 3. Under API keys, create a key, copy it and "
             + "paste it here. It stays on this phone. What you ask goes to DeepSeek, a company in China.";
 
-    /** A new install's first screen, and what shows whenever there's no brain: pick one, full screen (the owner,
-     * 2026-11-11). Sprocket walks them through everything else in the chat (Setup). */
-    private void welcomeScreen() {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(8), dp(28), dp(8), dp(24));
-        TextView h = text("Hi, I'm Sprocket", 26, TEXT);
-        h.setTypeface(Typeface.DEFAULT_BOLD);
-        c.addView(h);
-        TextView sub = text("First, pick my brain. I'll walk you through the rest in the chat.", 15, MUTED);
-        sub.setPadding(0, dp(6), 0, 0);
-        c.addView(sub);
+    private void welcomeScreen() { new SetupWalkthrough(this).welcomeScreen(); }
 
-        final boolean[] own = {Config.own};
-        // which card: Claude, DeepSeek (a preset of "your own server": its Claude-style address, no go-between) or own
-        final boolean[] ds = {Config.own && Config.deep}, oa = {Config.own && Config.oa};
-        LinearLayout claude = option("Claude", "Anthropic's AI. Needs a Claude key; you pay Anthropic for what you use.");
-        LinearLayout deep = option("DeepSeek", "DeepSeek's AI. Needs a DeepSeek key; you pay DeepSeek for what you use, usually "
-                + "well under a cent a question. Tested with Sprocket's practice set: 68 of 68.");
-        LinearLayout openai = option("OpenAI", "OpenAI's API (not a ChatGPT subscription). Needs an OpenAI API key; you pay "
-                + "OpenAI for what you use. Tested with Sprocket's practice set: 64 of 68.");
-        LinearLayout mine = option("Your own server", "A model you run yourself, through the included go-between or anything "
-                + "that speaks Anthropic's Messages API. Tested with Qwen.");
-        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(-1, -2);
-        first.setMargins(0, dp(22), 0, 0);
-        c.addView(claude, first);
-        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(-1, -2);
-        second.setMargins(0, dp(10), 0, 0);
-        c.addView(deep, second);
-        LinearLayout.LayoutParams third = new LinearLayout.LayoutParams(-1, -2);
-        third.setMargins(0, dp(10), 0, 0);
-        c.addView(openai, third);
-        LinearLayout.LayoutParams fourth = new LinearLayout.LayoutParams(-1, -2);
-        fourth.setMargins(0, dp(10), 0, 0);
-        c.addView(mine, fourth);
 
-        LinearLayout claudeBox = new LinearLayout(this);
-        claudeBox.setOrientation(LinearLayout.VERTICAL);
-        EditText key = field(claudeBox, "Your Claude key", "", "sk-ant-...", true);
-        claudeBox.addView(text(CLAUDE_KEY_HOW, 12, FAINT));
-        TextView console = text("Open the Claude Console", 13, TEXT);
-        console.setPadding(0, dp(8), 0, dp(4));
-        console.setOnClickListener(v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(CONSOLE_KEYS))); } catch (Exception ignored) { }
-        });
-        claudeBox.addView(console);
-        c.addView(claudeBox);
-        LinearLayout deepBox = new LinearLayout(this);
-        deepBox.setOrientation(LinearLayout.VERTICAL);
-        EditText deepKey = field(deepBox, "Your DeepSeek key", "", "sk-...", true);
-        deepBox.addView(text(DEEPSEEK_KEY_HOW, 12, FAINT));
-        TextView deepSite = text("Open DeepSeek's API keys page", 13, TEXT);
-        deepSite.setPadding(0, dp(8), 0, dp(4));
-        deepSite.setOnClickListener(v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Claude.DEEPSEEK_KEYS))); } catch (Exception ignored) { }
-        });
-        deepBox.addView(deepSite);
-        c.addView(deepBox);
-        LinearLayout oaBox = new LinearLayout(this);
-        oaBox.setOrientation(LinearLayout.VERTICAL);
-        EditText oaKey = field(oaBox, "Your OpenAI API key", "", "sk-...", true);
-        oaBox.addView(text(OPENAI_KEY_HOW, 12, FAINT));
-        TextView oaSite = text("Open OpenAI's API keys page", 13, TEXT);
-        oaSite.setPadding(0, dp(8), 0, dp(4));
-        oaSite.setOnClickListener(v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Claude.OPENAI_KEYS))); } catch (Exception ignored) { }
-        });
-        oaBox.addView(oaSite);
-        c.addView(oaBox);
-        LinearLayout ownBox = new LinearLayout(this);
-        ownBox.setOrientation(LinearLayout.VERTICAL);
-        EditText name = field(ownBox, "Its name (what I call it)", Config.ownName, "Qwen", false);
-        EditText base = field(ownBox, "Its address", Config.ownBase, "https://my-server:8448", false);
-        EditText model = field(ownBox, "Model name (blank if the server has one)", Config.ownModel, "qwen", false);
-        EditText ownKey = field(ownBox, "Its access code (blank if it needs none)", "", "none", true);
-        ownBox.addView(text(ADDRESS_HOW, 12, FAINT));
-        c.addView(ownBox);
-        TextView note = text("", 13, ERR);
-        note.setPadding(0, dp(8), 0, 0);
-        TextView anyway = text("Start anyway", 13, FAINT);   // after a failed test: their server may just be off right now
-        anyway.setPadding(0, dp(12), 0, 0);
-        anyway.setVisibility(View.GONE);
-        final int[] asked = {0};                              // which check is current: switching brains drops the last one
-        Runnable show = () -> {
-            boolean onMine = own[0] && !ds[0] && !oa[0];
-            pick(claude, !own[0]);
-            pick(deep, own[0] && ds[0]);
-            pick(openai, own[0] && oa[0]);
-            pick(mine, onMine);
-            claudeBox.setVisibility(own[0] ? View.GONE : View.VISIBLE);
-            deepBox.setVisibility(own[0] && ds[0] ? View.VISIBLE : View.GONE);
-            oaBox.setVisibility(own[0] && oa[0] ? View.VISIBLE : View.GONE);
-            ownBox.setVisibility(onMine ? View.VISIBLE : View.GONE);
-        };
-        Runnable switched = () -> {   // the other brain's message would read as this one's (the owner's phone test, 2026-11-12)
-            asked[0]++;
-            note.setText("");
-            anyway.setVisibility(View.GONE);
-            show.run();
-        };
-        claude.setOnClickListener(v -> { if (own[0]) { own[0] = false; switched.run(); } });
-        deep.setOnClickListener(v -> { if (!own[0] || !ds[0]) { own[0] = true; ds[0] = true; oa[0] = false; switched.run(); } });
-        openai.setOnClickListener(v -> { if (!own[0] || !oa[0]) { own[0] = true; oa[0] = true; ds[0] = false; switched.run(); } });
-        mine.setOnClickListener(v -> { if (!own[0] || ds[0] || oa[0]) { own[0] = true; ds[0] = false; oa[0] = false; switched.run(); } });
-        show.run();
 
-        c.addView(note);
-        Button start = button("Start", true);
-        start.setOnClickListener(v -> {
-            final boolean useOwn = own[0], useDeep = own[0] && ds[0], useOa = own[0] && oa[0];
-            final String k = key.getText().toString().trim();
-            final String b = useDeep ? Claude.DEEPSEEK_BASE : useOa ? Claude.OPENAI_BASE : base.getText().toString().trim();
-            final String n = useDeep ? "DeepSeek" : useOa ? "OpenAI" : name.getText().toString().trim();
-            final String m = useDeep ? Claude.DEEPSEEK_MODEL : useOa ? Claude.OPENAI_MODEL : model.getText().toString().trim();
-            final String typed = (useDeep ? deepKey : useOa ? oaKey : ownKey).getText().toString().trim();
-            note.setTextColor(ERR);
-            if (useDeep || useOa) {
-                String who = useDeep ? "DeepSeek" : "OpenAI";
-                if (typed.isEmpty()) { note.setText("Paste your " + who + " key first."); return; }
-                if (typed.startsWith("sk-ant-")) { note.setText("That's a Claude key. Pick Claude above, or paste a " + who + " key."); return; }
-            } else if (useOwn) {
-                if (b.isEmpty()) { note.setText("Your own server needs its address."); return; }
-                String bad = Config.addressProblem(b);
-                if (bad != null) { note.setText(bad); return; }
-            } else if (!k.startsWith("sk-ant-")) { note.setText("That isn't a Claude key: they start with sk-ant-"); return; }
-            Runnable go = () -> {
-                synchronized (Claude.class) {   // the whole switch at once: nothing reads half of it (Codex 049 #1)
-                    if (useDeep) prefs().deepKey(typed);       // DeepSeek and OpenAI have their own slots: their server stays as it was
-                    else if (useOa) prefs().openAiKey(typed);
-                    else if (useOwn) {
-                        Config.ownName = n;
-                        Config.ownBase = b;
-                        Config.ownModel = m;
-                        if (!typed.isEmpty()) prefs().ownKey(typed);
-                    } else prefs().key(k);
-                    Config.own = useOwn;
-                    Config.deep = useDeep;
-                    Config.oa = useOa;
-                    prefs().saveConfig();
-                    Claude.useBrain(Config.own);
-                }
-                startSetup();
-                render();
-            };
-            // test it first (Codex's review 2026-11-12): a wrong key or an unreachable server is said here, not mid-setup
-            Claude.Brain test = useOwn ? new Claude.Brain(b.replaceAll("/+$", ""), typed.isEmpty() ? prefs().ownKey() : typed, true,
-                    m.isEmpty() ? "own" : m) : new Claude.Brain(Claude.ANTHROPIC, k, false, "");
-            note.setTextColor(MUTED);
-            note.setText(useDeep ? "Checking the key with DeepSeek..." : useOa ? "Checking the key with OpenAI..." : useOwn ? "Checking your server... A model can take a minute to load the first time." : "Checking the key with Anthropic...");
-            start.setEnabled(false);
-            anyway.setVisibility(View.GONE);
-            final int ticket = ++asked[0];
-            new Thread(() -> {
-                String problem = Claude.check(test);
-                runOnUiThread(() -> {
-                    start.setEnabled(true);
-                    if (ticket != asked[0]) return;   // he switched brains while it checked: this answer is for the other one
-                    if (problem == null) { go.run(); return; }
-                    note.setTextColor(ERR);
-                    note.setText(problem);
-                    anyway.setOnClickListener(x -> go.run());
-                    anyway.setVisibility(View.VISIBLE);
-                });
-            }).start();
-        });
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, dp(44));
-        sp.setMargins(0, dp(12), 0, 0);
-        c.addView(start, sp);
-        c.addView(anyway);
-        list.addView(c, new LinearLayout.LayoutParams(-1, -2));
-    }
+    private void startSetup() { new SetupWalkthrough(this).startSetup(); }
 
-    /** One of the two brains on the first screen: a panel to tap. */
-    private LinearLayout option(String title, String what) {
-        LinearLayout o = new LinearLayout(this);
-        o.setOrientation(LinearLayout.VERTICAL);
-        o.setPadding(dp(16), dp(14), dp(16), dp(14));
-        o.setClickable(true);
-        TextView t = text(title, 17, TEXT);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        o.addView(t);
-        TextView w = text(what, 13, MUTED);
-        w.setPadding(0, dp(4), 0, 0);
-        o.addView(w);
-        return o;
-    }
 
-    private void pick(LinearLayout o, boolean picked) {
-        GradientDrawable g = round(PANEL, 16);
-        g.setStroke(dp(2), picked ? TEXT : PANEL);
-        o.setBackground(g);
-    }
+    private void addSetupCard() { new SetupWalkthrough(this).addSetupCard(); }
 
-    /** Only on a brand-new install (a brain removed and put back later doesn't start it again). */
-    private void startSetup() {
-        android.content.SharedPreferences sp = getSharedPreferences("sprocket", Context.MODE_PRIVATE);
-        if (sp.getBoolean("setup_offered", false) || !chat.turns.isEmpty()) return;
-        sp.edit().putBoolean("setup_offered", true).putBoolean("asked_location", true).apply();
-        Config.off.addAll(Setup.features());      // each feature waits for its own Yes (Codex 042 #3)
-        prefs().saveConfig();
-        FeedAlarm.cancel(this);
-        setupGo(0);
-        chat.add("assistant", Setup.HELLO + "\n\n" + Setup.ask(0), System.currentTimeMillis());
-        saveChat();
-    }
 
-    private void setupGo(int at) {
-        setupAt = at;
-        setupGithub = false;
-        setupReturning = false;
-        setupTried.clear();
-        getSharedPreferences("sprocket", Context.MODE_PRIVATE).edit().putInt("setup_at", at).apply();
-    }
+    private boolean setupTyped(String s) { return new SetupWalkthrough(this).setupTyped(s); }
 
-    /** Under the question on show: Yes / Not now (or Skip while a username is awaited), and a way out of setup. */
-    private void addSetupCard() {
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable g = round(PANEL, 16);
-        g.setStroke(dp(1), FAINT);
-        panel.setBackground(g);
-        panel.setPadding(dp(16), dp(12), dp(16), dp(12));
-        Setup.Step st = Setup.STEPS[setupAt];
-        TextView t = text(setupGithub ? "Type your username below, or skip this one." : st.name, 15, setupGithub ? MUTED : TEXT);
-        if (!setupGithub) t.setTypeface(Typeface.DEFAULT_BOLD);
-        panel.addView(t);
-        LinearLayout btns = new LinearLayout(this);
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, dp(42));
-        gap.setMargins(dp(10), 0, 0, 0);
-        if (setupGithub) {
-            Button skip = button("Skip", false);
-            skip.setOnClickListener(v -> setupTapped(false));
-            btns.addView(skip, new LinearLayout.LayoutParams(-2, dp(42)));
-        } else {
-            Button yes = button("Yes", true), no = button("Not now", false);
-            yes.setOnClickListener(v -> setupTapped(true));
-            no.setOnClickListener(v -> setupTapped(false));
-            btns.addView(yes, new LinearLayout.LayoutParams(-2, dp(42)));
-            btns.addView(no, gap);
-        }
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMargins(0, dp(10), 0, 0);
-        panel.addView(btns, bp);
-        TextView out = text("Start with basic chat (set up the rest later)", 13, FAINT);
-        out.setPadding(0, dp(10), 0, 0);
-        out.setOnClickListener(v -> setupSkipRest());
-        panel.addView(out);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(10), 0, 0);
-        list.addView(panel, lp);
-    }
 
-    private void setupTapped(boolean yes) {
-        if (busy || !Setup.running(setupAt)) return;
-        chat.add("user", yes ? "Yes" : setupGithub ? "Skip" : "Not now", System.currentTimeMillis());
-        if (setupGithub) { Config.off.add("github"); prefs().saveConfig(); setupNext(Setup.ack(Setup.STEPS[setupAt], false)); return; }
-        setupAnswer(yes);
-    }
+    private void setupContinue() { new SetupWalkthrough(this).setupContinue(); }
 
-    /** Typed during setup: true if it answered the question on show; false = a question, for the brain. */
-    private boolean setupTyped(String s) {
-        Boolean yes = Setup.answer(s);
-        if (setupGithub) {
-            String name = yes == Boolean.FALSE ? null : Setup.githubName(s);
-            if (yes != Boolean.FALSE && name == null) return false;
-            chat.add("user", s, System.currentTimeMillis());
-            if (name == null) { Config.off.add("github"); prefs().saveConfig(); setupNext(Setup.ack(Setup.STEPS[setupAt], false)); return true; }
-            Config.github = name;
-            Config.off.remove("github");
-            prefs().saveConfig();
-            setupNext("Got it: " + name + ".");
-            return true;
-        }
-        if (yes == null) return false;
-        chat.add("user", s, System.currentTimeMillis());
-        setupAnswer(yes);
-        return true;
-    }
 
-    private void setupAnswer(boolean yes) {
-        Setup.Step st = Setup.STEPS[setupAt];
-        if (st.feature != null) {
-            if (yes) Config.off.remove(st.feature); else Config.off.add(st.feature);
-            prefs().saveConfig();
-            if (st.feature.equals("brief")) { if (yes) FeedAlarm.schedule(this); else FeedAlarm.cancel(this); }
-        }
-        if (!yes) { setupNext(Setup.ack(st, false)); return; }
-        render();                                 // their Yes on screen before Android's question
-        if (st.way == Setup.Way.GITHUB_NAME) {
-            setupGithub = true;
-            chat.add("assistant", Setup.GITHUB_ASK, System.currentTimeMillis());
-            saveChat();
-            render();
-            return;
-        }
-        setupContinue();
-    }
 
-    /** Asks Android for whatever the step on show still lacks, one thing at a time and each only once, then moves on. */
-    private void setupContinue() {
-        Setup.Step st = Setup.STEPS[setupAt];
-        boolean listener = st.way == Setup.Way.NOTIFICATION_ACCESS || st.way == Setup.Way.BOTH_SWITCHES;
-        boolean screen = st.way == Setup.Way.SCREEN_CONTROL || st.way == Setup.Way.BOTH_SWITCHES;
-        String[] missing = missingPerms(st.perms);
-        if (missing.length > 0 && setupTried.add("perms")) { requestPermissions(missing, ASK_SETUP); return; }
-        if (listener && !MessageListener.on(this) && setupTried.add("listener")) {
-            setupReturning = true;
-            MessageListener.openSwitch(this);
-            return;
-        }
-        if (screen && !ScreenHands.on() && setupTried.add("screen")) {
-            setupReturning = true;
-            startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
-            return;
-        }
-        if (st.way == Setup.Way.ASSISTANT) {     // Android lets no app ask for this role: its own Default apps page
-            if (!isAssistant() && setupTried.add("assistant")) {
-                setupReturning = true;
-                startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
-                return;
-            }
-            setupNext(isAssistant() ? Setup.ack(st, true) : Setup.ASSISTANT_NOT_YET);
-            return;
-        }
-        boolean switches = (!listener || MessageListener.on(this)) && (!screen || ScreenHands.on());
-        if (Place.allowed(this)) Place.refresh(this);
-        setupNext(!switches ? Setup.STILL_OFF : missingPerms(st.perms).length > 0 ? Setup.DENIED : Setup.ack(st, true));
-    }
 
-    /** True when Sprocket is the phone's digital assistant (the side button), as far as this Android can tell. */
-    private boolean isAssistant() {
-        if (Build.VERSION.SDK_INT >= 29) {
-            android.app.role.RoleManager rm = getSystemService(android.app.role.RoleManager.class);
-            return rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
-        }
-        String a = android.provider.Settings.Secure.getString(getContentResolver(), "assistant");
-        return a != null && a.startsWith(getPackageName() + "/");
-    }
-
-    private String[] missingPerms(String[] perms) {
-        java.util.List<String> out = new java.util.ArrayList<>();
-        for (String p : perms) {
-            if (p.equals(Setup.POST) && Build.VERSION.SDK_INT < 33) continue;       // no such question before Android 13
-            if (checkSelfPermission(p) != android.content.pm.PackageManager.PERMISSION_GRANTED) out.add(p);
-        }
-        return out.toArray(new String[0]);
-    }
-
-    private void setupNext(String ack) {
-        int n = Setup.next(setupAt);
-        setupGo(n);
-        chat.add("assistant", ack + "\n\n" + (Setup.running(n) ? Setup.ask(n) : Setup.DONE), System.currentTimeMillis());
-        saveChat();
-        render();
-    }
-
-    private void setupSkipRest() {
-        if (busy) return;
-        setupGo(Setup.OFF);
-        chat.add("assistant", "Okay, that's it for setup. What we didn't get to stays off: switch it on in ⋯ > Settings, "
-                        + "and ask me about any of it.",
-                System.currentTimeMillis());
-        saveChat();
-        render();
-    }
 
     // ------------------------------------------------------------------ settings (Config)
-    private EditText field(LinearLayout c, String label, String value, String hint, boolean secret) {
+    EditText field(LinearLayout c, String label, String value, String hint, boolean secret) {
         TextView l = text(label, 13, MUTED);
         l.setPadding(0, dp(10), 0, 0);
         c.addView(l);
@@ -1706,7 +1309,7 @@ public class MainActivity extends Activity {
         return h;
     }
 
-    private Button button(String t, boolean main) {
+    Button button(String t, boolean main) {
         Button b = chip(t);
         b.setBackground(round(main ? TEXT : MINE, 18));
         b.setTextColor(main ? 0xFF111111 : TEXT);
@@ -2939,7 +2542,7 @@ public class MainActivity extends Activity {
         if (im != null) im.hideSoftInputFromWindow(v.getWindowToken(), 0);
     }
 
-    private static void saveChat() {
+    static void saveChat() {
         try {
             File tmp = new File(app.getFilesDir(), "chat.json.tmp");
             Files.write(tmp.toPath(), chat.toJson().getBytes(StandardCharsets.UTF_8));
