@@ -64,6 +64,16 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
 - **Memory:** tell it to remember something and it keeps a note on your phone (up to 2,000). Notes go along with
   your question when its words fit; "always remember" notes go with every message. Search, pin or delete them under
   ⋯ > Memory.
+- **Undo:** "what did you just do?" lists what Sprocket tapped, opened and changed for your last requests. "Undo that"
+  puts settings, list, goal and memory changes back exactly as they were, offers to switch back anything it changed
+  inside another app (only after your yes), and says plainly what can't be undone: a sent text, a call, an order you
+  approved.
+- **Remembers your food:** after it fills a cart it saves your usual for that place, so "get my usual from Taco Bell"
+  just works. Tell it about an allergy once and that note goes with every message; in food orders it checks the app's
+  ingredient or allergen notes and tells you when it can't tell. It's a helper, not a guarantee: menus can be wrong or
+  incomplete, so check anything serious yourself.
+- **Cameras:** "check my cameras" opens your camera app (a security camera, a doorbell, a baby monitor), starts the
+  live view and says what's in it. It never calls an old snapshot live, and tells you when a camera is offline.
 - **Also:** web search, research write-ups, GitHub threads and repositories (read only).
 
 Every feature can be switched off in Settings.
@@ -144,6 +154,11 @@ about this last; to do it yourself:
   opens Bixby until you also change Settings > Advanced features > **Side button** > Press and hold > **Digital
   assistant**.
 
+**Headset button (new, not yet tried with real earbuds):** with Sprocket as your assistant, the voice-assistant press on
+earbuds, a headset or a car (usually press and hold) opens Sprocket's listening card, the same as the side button. If
+Android asks which app to use, pick Sprocket. Only Android's own Bluetooth and media-button parts can open it, never
+another app. If you try it, tell us whether it works.
+
 ### Optional: let Sprocket switch screen control back on by itself
 Android sometimes switches an app's screen control off on its own, and turning it back on means digging through
 Settings (and can hit a "restricted setting" block). If you have a computer with
@@ -172,8 +187,10 @@ cart or changes a setting. To set it up:
    Sprocket moves it onto your screen.
 
 Good to know:
-- It needs Wi-Fi, because wireless debugging only runs on Wi-Fi. Away from Wi-Fi, Sprocket simply uses screen
-  control on your own screen, as before, and the hidden screen comes back by itself when you're on Wi-Fi again.
+- It starts over Wi-Fi, because wireless debugging only runs on Wi-Fi. To keep it working when you leave Wi-Fi, also
+  turn on **USB debugging** (Developer options > USB debugging; Sprocket reminds you during setup). Without it, away
+  from Wi-Fi Sprocket simply uses screen control on your own screen, as before, and the hidden screen comes back by
+  itself when you're on Wi-Fi again.
 - After the phone restarts, Sprocket starts it again the next time you open the app.
 - Pairing gives Sprocket the same access a computer with adb would have. It uses that only to start its hidden screen
   and to give itself the permission described above under "let Sprocket switch screen control back on" (so it can

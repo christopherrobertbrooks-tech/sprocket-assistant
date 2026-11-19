@@ -7,12 +7,6 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 - **Where's my food?** "Where's my order?" opens your delivery app or the restaurant's own app and reads the live
   status: being made, picked up, or a few minutes away.
 
-- **What did you just do? Undo that.** A short log on your phone of what Sprocket tapped and changed for each request,
-  so you can ask what it did, and "undo that" puts a setting it changed back the way it was.
-
-- **Talk with your headset button.** Press the button on Bluetooth earbuds, a headset or your car to talk to Sprocket
-  with the phone in your pocket. Still push to talk: it listens only after the press.
-
 - **Food spending.** "How much have I spent on DoorDash this month?" reads the order history in your delivery apps and
   adds it up, which fits with lunch budgets and remembering your food.
 
@@ -23,11 +17,6 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 
 - **Correct it mid-task.** Talk to Sprocket while it's working to change the plan ("make that a large", "skip the
   fries") without starting over, and after you stop it, "keep going" picks up where it left off. Also an idea from Mika.
-
-- **Tidier code for contributors.** Most of Sprocket's code already sits in small files that each do one job, but the
-  main screen's file has grown to about a quarter of the whole app. Planned: move its parts (the setup walkthrough,
-  the Settings pages, Notion lists, the test hooks and so on) into their own files, one at a time and tested after
-  each, so the code is easier to find your way around and changes don't collide.
 
 - **Smaller models tested.** Sprocket is tested on Qwen 3.8 27B, which needs a big graphics card. Planned: run the
   practice tests on smaller models that fit everyday graphics cards (8 to 16 GB) through the go-between, and list
@@ -49,16 +38,8 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   while you've asked it to watch, with a notice on screen the whole time. What you type and anything in banking or
   password apps is never recorded, and recordings stay on the phone.
 
-- **Remembers your food.** Sprocket keeps track of what you order and how you like it (no onions, the large, your
-  usual from each place), so "get my usual from Taco Bell" just works. Tell it your allergies once ("I'm allergic to
-  peanuts") and it steers clear of them in every food order: it checks the menu's ingredient and allergen notes where
-  the app has them, and tells you when it can't tell. It's a helper, not a guarantee: menus can be wrong or
-  incomplete, so check anything serious yourself.
-
-- **Home devices.** Control the smart-home and TV apps already on your phone by voice, and check in on cameras: "how
-  are the snakes doing?" opens your pet or reptile camera app, looks at the live view, and tells you what it sees (the
-  light on, an animal out and about, the water dish full). The picture goes only to the brain you've set up, nowhere
-  else. Remote and camera apps are often all picture buttons, so this needs testing app by app.
+- **Home devices.** Control the smart-home and TV apps already on your phone by voice. Remote apps are often all
+  picture buttons, so this needs testing app by app. (Checking your cameras already works: see the README.)
 
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not
