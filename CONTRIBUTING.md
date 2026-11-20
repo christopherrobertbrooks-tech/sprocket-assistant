@@ -27,6 +27,9 @@ The app is plain Java in `android/src/dev/sprocket/app/`, one job per file:
 - **Texts and calls:** `Messages.java`, `Calls.java`, `CallAnnouncer.java`. **Voice:** `Listen.java`, `VoiceOut.java`,
   `Speech.java`. **The side-button card:** `SprocketSession.java`.
 - **Background work:** `BgScreen.java`, `BgSetup.java` and `adb/` (ported from Mika).
+- **Scheduled tasks:** `Schedules.java` (the tasks, plain Java), `ScheduleAlarm.java` (the alarm and the Yes / No
+  buttons) and `ScheduleService.java` (runs them, asks by notification). **TVs:** `Tv.java` (Vizio, finding TVs) and
+  `Lg.java`.
 - **Tests:** `android/test/`, run with `scripts/test.sh`. The adb-only test door is `TestHooks.java`.
 - **The go-between** (for your own model): `go-between/`.
 
