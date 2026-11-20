@@ -55,8 +55,8 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
 - **Where's my food:** "where's my order?" checks your delivery app first, not a shipped package, and reads the live
   status: being made, picked up, or a few minutes away, with the driver when the app shows one.
 - **Food spending:** "how much have I spent on DoorDash this month?" reads the whole order history in one go (Sprocket
-  scrolls it itself), leaves out cancelled and refunded orders, and adds it up. If the list won't scroll to the end,
-  it says the total may be short.
+  scrolls it itself), leaves out cancelled and refunded orders, and adds it up. If it can't be sure it read every row
+  (some apps don't number their rows), it says the total may be short.
 - **Scheduled tasks:** "at 8 tomorrow, check the weather and only tell me if it'll rain", "every Friday at 5, see if
   my pizza place has a deal". At that time Sprocket does it by itself and puts the answer in a notification; tap it and
   Sprocket reads it out. "Only tell me if" with nothing to tell means no notification. Anything that sends, calls or

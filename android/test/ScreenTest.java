@@ -77,7 +77,7 @@ public class ScreenTest {
                 eq("stuck isn't 'to the end'", stuck.contains("to the end"), false);
                 String words = Screen.wholeList(acc, 2, true, false, false);
                 eq("matched by words: doesn't promise every row", words.contains("Every row is here once"), false);
-                eq("matched by words: says look-alikes may merge", words.contains("may have been counted as one"), true);
+                eq("not sure: says a row may be missing or doubled", words.contains("may be missing or counted twice"), true);
                 eq("keyed: promises every row", Screen.wholeList(acc, 2, true, false, true).contains("Every row is here once"), true);
             }
             eq("a scroll in a list points to read_all", Screen.scrollNote(s1).contains("use read_all"), true);

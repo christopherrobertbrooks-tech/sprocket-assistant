@@ -515,21 +515,27 @@ public class ScreenHands extends AccessibilityService {
     private String readAll() throws Exception {
         String screen = read();
         if (!Screen.hasList(lastItems)) return "Nothing on this screen scrolls, so this screen is the whole of it.\n" + screen;
-        for (int i = 0; i < 30; i++) {   // to the top first
-            String before = Screen.describe("", lastItems);
+        // to the top first; "didn't move" by the rows' keys too, so pages that look alike aren't taken for the top
+        // (Codex 056 #2); 30 tries without getting there: not sure it started at the top
+        boolean atTop = false;
+        for (int i = 0; i < 30; i++) {
+            String before = where();
             screen = scroll(false);
-            if (Screen.describe("", lastItems).equals(before)) break;
+            if (where().equals(before)) { atTop = true; break; }
         }
         java.util.List<String> rows = new java.util.ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         int screens = 0;
         boolean end = false, stuck = false, keyed = listNode() != null;
+        // sure = every row had the app's own row number and it started at row 0: only then "every row once"
+        boolean sure = keyed && atTop;
         for (int i = 0; i < 40; i++) {
             int added;
             if (keyed) {
                 java.util.List<Screen.Item> items = new java.util.ArrayList<>();
                 java.util.List<String> keys = new java.util.ArrayList<>();
-                listRows(items, keys);
+                if (!listRows(items, keys)) sure = false;   // the app doesn't number its rows: told apart by position only
+                if (i == 0 && !keys.isEmpty() && keys.get(0).startsWith("row") && keys.stream().noneMatch(x -> x.startsWith("row0."))) sure = false;   // row 0 not on show: not the top
                 added = Screen.mergeKeyed(rows, seen, items, keys);
             } else {
                 int was = rows.size();
@@ -544,7 +550,15 @@ public class ScreenHands extends AccessibilityService {
             screen = scroll(true);
             if (!keyed && Screen.describe("", lastItems).equals(before)) { stuck = Screen.moreBelow(lastItems); end = !stuck; break; }
         }
-        return Screen.wholeList(rows, screens, end, stuck, keyed) + "\nWhere it ended (the bottom):\n" + screen;
+        return Screen.wholeList(rows, screens, end, stuck, sure) + "\nWhere it ended (the bottom):\n" + screen;
+    }
+
+    /** What's on show, with each list row's key: the same only when the list really didn't move. */
+    private String where() {
+        java.util.List<Screen.Item> items = new java.util.ArrayList<>();
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        listRows(items, keys);
+        return Screen.describe("", lastItems) + "|" + String.join(",", keys);
     }
 
     /** The biggest scrolling list on the last read, or null. */
@@ -564,11 +578,13 @@ public class ScreenHands extends AccessibilityService {
     /**
      * The last read's items that are inside the scrolling list (not the toolbar or buttons around it), each with the key
      * of the row it belongs to: Android's row number for the list when the app gives one, else the item's own element,
-     * which stays the same while it scrolls (Codex 055 #5).
+     * which stays the same while it scrolls (Codex 055 #5). True when every row had the app's row number; false means
+     * the element's own key, which an app that reuses its row views may give to different rows (Codex 056 #2).
      */
-    private void listRows(java.util.List<Screen.Item> items, java.util.List<String> keys) {
+    private boolean listRows(java.util.List<Screen.Item> items, java.util.List<String> keys) {
         AccessibilityNodeInfo list = listNode();
-        if (list == null) return;
+        if (list == null) return false;
+        boolean numbered = true;
         for (int i = 0; i < lastItems.size() && i < lastNodes.size(); i++) {
             AccessibilityNodeInfo n = lastNodes.get(i);
             if (n.equals(list)) continue;
@@ -585,7 +601,9 @@ public class ScreenHands extends AccessibilityService {
             if (!inside) continue;
             items.add(lastItems.get(i));
             keys.add(row != null ? row : "node" + n.hashCode());
+            if (row == null) numbered = false;
         }
+        return numbered && !items.isEmpty();
     }
 
     /**

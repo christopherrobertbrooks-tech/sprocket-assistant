@@ -444,17 +444,17 @@ final class Screen {
     static String wholeList(List<String> lines, int screens, boolean reachedEnd) { return wholeList(lines, screens, reachedEnd, false, true); }
 
     /**
-     * stuck: the list still said "more below" but scrolling didn't move it. keyed: rows were told apart by which row
-     * they are (mergeKeyed); false = only by their words where screens overlap (mergeScreen), so look-alike rows at a
-     * screen's edge may have been counted once, and it says so rather than promising every row (Codex 055 #5).
+     * stuck: the list still said "more below" but scrolling didn't move it. keyed (sure): every row had the app's own
+     * row number and the read started at the top; false = told apart by position or words only, so a row may be
+     * missing or doubled, and it says so rather than promising every row (Codex 055 #5, 056 #2).
      */
     static String wholeList(List<String> lines, int screens, boolean reachedEnd, boolean stuck, boolean keyed) {
         StringBuilder b = new StringBuilder("The whole list, top to bottom (").append(screens).append(screens == 1 ? " screen" : " screens")
                 .append(stuck ? ", stopped: the list says there's more below but it wouldn't scroll further, so this may NOT be all of it"
                         : reachedEnd ? ", to the end" : ", stopped before the end: more below")
                 .append("). ").append(keyed ? "Every row is here once."
-                        : "Rows were matched by their words where screens overlap: two rows that look exactly alike at the edge of a "
-                        + "screen may have been counted as one, so say a count or total is from what could be read.")
+                        : "Sprocket couldn't be sure of every row (this app doesn't number its rows, or the top couldn't be "
+                        + "confirmed): a row may be missing or counted twice, so say a count or total is from what could be read.")
                 .append(" Count and add from these rows only, keeping just the ones that fit what he asked "
                         + "(the dates, the place, not cancelled or refunded); work sums out step by step and check them before you say them.\n");
         for (String l : lines) b.append("- ").append(l).append('\n');

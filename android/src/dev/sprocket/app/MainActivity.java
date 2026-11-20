@@ -220,6 +220,9 @@ public class MainActivity extends Activity {
         boolean[] busyNow = {false};
         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
             if (busy) { busyNow[0] = true; done.countDown(); return; }   // checked here, where questions start (Codex 055 #2)
+            boolean still;   // cancelled between the service's claim and now: never start it (Codex 056 #1)
+            synchronized (schedules) { still = schedules.has(k); }
+            if (!still) { done.countDown(); return; }
             scheduledDone = (text, err) -> { out[0] = text; out[1] = err; done.countDown(); };
             scheduled = true;
             spokenTurn = false;
@@ -1850,6 +1853,25 @@ public class MainActivity extends Activity {
     private static String read(String name) {
         try { return new String(Files.readAllBytes(new File(app.getFilesDir(), name).toPath()), StandardCharsets.UTF_8); }
         catch (Exception e) { return ""; }
+    }
+
+    /** Writes and reads back: true only when the file on disk now holds exactly this text. */
+    private static boolean writeChecked(String name, String text) {
+        write(name, text);
+        try { return new String(Files.readAllBytes(new File(app.getFilesDir(), name).toPath()), StandardCharsets.UTF_8).equals(text); }
+        catch (Exception e) { return false; }
+    }
+
+    /**
+     * Saves the schedules and says whether it worked: a run is only started once its "started" mark is safely on disk,
+     * so a run cut off can never look unstarted and be done twice (Codex 056 #4).
+     */
+    static boolean saveSchedulesChecked() {
+        boolean ok;
+        try { synchronized (schedules) { ok = writeChecked("schedules.json", schedules.toJson().toString()); } }
+        catch (Exception e) { ok = false; }
+        exportForPractice();
+        return ok;
     }
 
     private static void write(String name, String text) {

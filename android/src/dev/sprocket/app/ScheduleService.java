@@ -30,6 +30,10 @@ public final class ScheduleService extends Service {
     private static final int WORK_ID = 71;
     static final long ASK_WAIT_S = 3600;   // an hour at most for a yes (11-19)
     private static final AtomicBoolean running = new AtomicBoolean();
+    /** Android's time limit came: the worker finishes the current step and starts nothing more (Codex 056 #5). */
+    private static volatile boolean stopping;
+    /** While waiting its turn, the alarm stays set this far ahead, so a stopped app still wakes (Codex 056 #3). */
+    private static final long WAKE_AGAIN_MS = 15 * 60 * 1000L;
 
     static void start(Context c) {
         Intent i = new Intent(c, ScheduleService.class);
@@ -59,6 +63,7 @@ public final class ScheduleService extends Service {
 
     private void timedOut() {
         android.util.Log.w("Sprocket", "scheduled tasks: Android's time limit for background work was reached");
+        stopping = true;
         cancelAsk();
         if (MainActivity.scheduledRun()) MainActivity.stopAnswer();
         if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true);
@@ -71,7 +76,7 @@ public final class ScheduleService extends Service {
         Notification n = ResearchService.note(this, WORK, "Sprocket", "Doing a scheduled task", true);
         if (Build.VERSION.SDK_INT >= 29) startForeground(WORK_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
         else startForeground(WORK_ID, n);
-        if (running.compareAndSet(false, true)) new Thread(this::run, "sprocket-scheduled").start();
+        if (running.compareAndSet(false, true)) { stopping = false; new Thread(this::run, "sprocket-scheduled").start(); }
         return START_NOT_STICKY;
     }
 
@@ -82,6 +87,7 @@ public final class ScheduleService extends Service {
         wake.acquire(90 * 60 * 1000L);   // a task, plus an hour for his yes at most
         try {
             MainActivity.init(app);
+            ScheduleAlarm.schedule(app, WAKE_AGAIN_MS);   // the alarm that woke this is used up: a new one, in case
             List<Schedules.Task> cut;   // a run the app was stopped in the middle of: say so, never do it twice (Codex 055b #5)
             synchronized (MainActivity.schedules) { cut = MainActivity.schedules.interrupted(); }
             for (Schedules.Task k : cut) {
@@ -89,7 +95,7 @@ public final class ScheduleService extends Service {
                         + ". It may or may not have finished, so it wasn't run again.");
                 finished(k);
             }
-            while (true) {
+            while (!stopping) {
                 LocalDateTime now = LocalDateTime.now();
                 List<Schedules.Task> due;
                 synchronized (MainActivity.schedules) { due = MainActivity.schedules.due(now); }
@@ -102,13 +108,19 @@ public final class ScheduleService extends Service {
                     continue;
                 }
                 String[] r = null;
-                for (int i = 0; i < 120; i++) {   // he's mid-question: after it (ten minutes at most)
+                ScheduleAlarm.schedule(app, WAKE_AGAIN_MS);   // still set while it waits its turn (Codex 056 #3)
+                boolean unsaved = false;
+                for (int i = 0; i < 120 && !stopping; i++) {   // he's mid-question: after it (ten minutes at most)
                     if (MainActivity.busy()) { Thread.sleep(5000); continue; }
                     synchronized (MainActivity.schedules) {
                         if (!MainActivity.schedules.has(k)) break;   // cancelled while it waited its turn (Codex 055 #1)
                         MainActivity.schedules.claim(k, LocalDateTime.now());
                     }
-                    MainActivity.saveSchedules();
+                    if (!MainActivity.saveSchedulesChecked()) {   // its "started" mark isn't on disk: don't start it
+                        synchronized (MainActivity.schedules) { k.started = null; }
+                        unsaved = true;
+                        break;
+                    }
                     ScheduleAlarm.schedule(app);   // the safety alarm, in case the app is stopped mid-run (Codex 055b #4)
                     r = MainActivity.runScheduled(k, now.isAfter(k.at.plusMinutes(10)));
                     if (r != MainActivity.BUSY) break;
@@ -120,6 +132,13 @@ public final class ScheduleService extends Service {
                 boolean gone;
                 synchronized (MainActivity.schedules) { gone = !MainActivity.schedules.has(k); }
                 if (gone) { android.util.Log.i("Sprocket", "scheduled task #" + k.id + " was cancelled before it ran"); continue; }
+                if (unsaved) {
+                    tell(app, k, "Couldn't do: " + k.what, "Sprocket couldn't save to the phone's storage (is it full?), so it "
+                            + "didn't start this. Free some space and ask again.");
+                    finished(k);
+                    continue;
+                }
+                if (r == null && stopping) break;   // the time limit came while it waited: it stays due for the next alarm
                 if (r == null) {
                     tell(app, k, "Skipped: " + k.what, "Sprocket was busy answering you at " + Schedules.when(k.at) + ".");
                     finished(k);
@@ -134,7 +153,8 @@ public final class ScheduleService extends Service {
             android.util.Log.w("Sprocket", "scheduled tasks: " + e);
         } finally {
             running.set(false);
-            ScheduleAlarm.schedule(app);
+            if (stopping) ScheduleAlarm.schedule(app, WAKE_AGAIN_MS);   // Android's limit: try again later, not at once
+            else ScheduleAlarm.schedule(app);
             if (wake.isHeld()) wake.release();
             if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true);
             stopSelf();
