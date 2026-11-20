@@ -5,7 +5,7 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
 
 ## Planned
 - **Correct it mid-task.** Talk to Sprocket while it's working to change the plan ("make that a large", "skip the
-  fries") without starting over, and after you stop it, "keep going" picks up where it left off. Also an idea from Mika.
+  fries") without starting over, and after you stop it, "keep going" picks up where it left off. An idea from [Mika](https://github.com/wangzan101/Mika).
 
 - **Smaller models tested.** Sprocket is tested on Qwen 3.8 27B, which needs a big graphics card. Planned: run the
   practice tests on smaller models that fit everyday graphics cards (8 to 16 GB) through the go-between, and list
