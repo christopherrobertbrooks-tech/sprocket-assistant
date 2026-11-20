@@ -578,8 +578,9 @@ public class ScreenHands extends AccessibilityService {
     /**
      * The last read's items that are inside the scrolling list (not the toolbar or buttons around it), each with the key
      * of the row it belongs to: Android's row number for the list when the app gives one, else the item's own element,
-     * which stays the same while it scrolls (Codex 055 #5). True when every row had the app's row number; false means
-     * the element's own key, which an app that reuses its row views may give to different rows (Codex 056 #2).
+     * which stays the same while it scrolls (Codex 055 #5). True when every row had the app's row number, or the list is a
+     * plain scrolling page (it never reuses row views); false means the element's own key, which an app that reuses its
+     * row views may give to different rows (Codex 056 #2).
      */
     private boolean listRows(java.util.List<Screen.Item> items, java.util.List<String> keys) {
         AccessibilityNodeInfo list = listNode();
@@ -603,7 +604,10 @@ public class ScreenHands extends AccessibilityService {
             keys.add(row != null ? row : "node" + n.hashCode());
             if (row == null) numbered = false;
         }
-        return numbered && !items.isEmpty();
+        // a plain scrolling page (ScrollView) never reuses its row views, so each element is one row for good
+        CharSequence cls = list.getClassName();
+        boolean plainPage = cls != null && cls.toString().endsWith("ScrollView");
+        return (numbered || plainPage) && !items.isEmpty();
     }
 
     /**
