@@ -1272,7 +1272,7 @@ public class MainActivity extends Activity {
     private static Claude.Reply askBackup(Claude.Brain failed, Exception e, JSONObject req, Claude.Listener l) throws Exception {
         if (req == null || !Claude.backupOk(e) || standIn()) return null;
         SharedPreferencesLike p = new SharedPreferencesLike(app);
-        // the others they set up, cheapest first: their own server, DeepSeek, OpenAI, Claude (11-15, Chris: "fall back to
+        // the others they set up, cheapest first: their own server, DeepSeek, OpenAI, Claude (11-15: "fall back to
         // whichever models they chose to set up"); each one asks first, and a "no" stops there
         List<Claude.Brain> others = new ArrayList<>();
         if (!Config.ownBase.trim().isEmpty())

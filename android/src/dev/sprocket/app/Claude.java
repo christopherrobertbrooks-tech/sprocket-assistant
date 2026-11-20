@@ -655,7 +655,7 @@ final class Claude {
     }
 
     /** What an answer to the test means: null when it worked. */
-    /** DeepSeek as a brain (11-15, Chris: "add deepseek as a setup choice"): its Claude-style address, so no go-between. */
+    /** DeepSeek as a brain (11-15): its Claude-style address, so no go-between. */
     static final String DEEPSEEK_BASE = "https://api.deepseek.com/anthropic", DEEPSEEK_MODEL = "deepseek-flash",
             DEEPSEEK_KEYS = "https://platform.deepseek.com/api_keys";
 
