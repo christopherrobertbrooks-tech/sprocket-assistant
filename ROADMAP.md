@@ -4,17 +4,6 @@ Sprocket is a personal project, shared as-is, and grows with what its owner uses
 what might happen, and what won't (with the reason). Ideas are welcome in [Discussions](../../discussions/categories/ideas).
 
 ## Planned
-- **Where's my food?** "Where's my order?" opens your delivery app or the restaurant's own app and reads the live
-  status: being made, picked up, or a few minutes away.
-
-- **Food spending.** "How much have I spent on DoorDash this month?" reads the order history in your delivery apps and
-  adds it up, which fits with lunch budgets and remembering your food.
-
-- **Scheduled and conditional tasks.** Ask once and Sprocket does it later, or on repeat: "at 8 tomorrow, check the
-  weather and only tell me if it'll rain", "every Friday at 5, see if my usual pizza place has a deal". It runs on
-  time even when you're not in the app, and anything that sends, calls or buys still waits for your yes (it asks with
-  a notification). The idea comes from [Mika](https://github.com/wangzan101/Mika).
-
 - **Correct it mid-task.** Talk to Sprocket while it's working to change the plan ("make that a large", "skip the
   fries") without starting over, and after you stop it, "keep going" picks up where it left off. Also an idea from Mika.
 
@@ -38,8 +27,9 @@ what might happen, and what won't (with the reason). Ideas are welcome in [Discu
   while you've asked it to watch, with a notice on screen the whole time. What you type and anything in banking or
   password apps is never recorded, and recordings stay on the phone.
 
-- **Home devices.** Control the smart-home and TV apps already on your phone by voice. Remote apps are often all
-  picture buttons, so this needs testing app by app. (Checking your cameras already works: see the README.)
+- **Home devices.** TVs from Vizio and LG work now (see the README). Next: other TV brands, then the smart-home apps
+  already on your phone. Remote apps are often all picture buttons, so those need testing app by app. (Checking your
+  cameras already works too.)
 
 ## Maybe
 - **Routines.** Save a few actions under one phrase and run them again later: "bedtime" sets the alarm, turns on Do Not

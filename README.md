@@ -39,7 +39,7 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
 - **Texts and calls:** reads your texts to you, writes replies, places calls. Nothing is sent or called until you tap
   (or say) yes on a card that shows exactly what will happen.
 - **Screen control:** for anything else, Sprocket reads the screen and taps through other apps like a person. Buttons
-  like pay, buy, delete, install or sign out wait for your yes; banking, wallet and password apps are off limits.
+  like pay, buy, delete, install, sign out, cancel an order or add a tip wait for your yes; banking, wallet and password apps are off limits.
   After a task that worked, it remembers the way (say, Gmail's spam folder) and next time goes there by itself in a
   few seconds, stopping and handing back if the app looks different. The saved ways stay on your phone, under
   ⋯ > Memory to delete. (Ideas from [Mika](https://github.com/wangzan101/Mika)'s per-app knowledge files and the
@@ -52,6 +52,19 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
   Give it a budget ("I've got $20 for lunch") and it counts delivery, fees, tax and tip, and suggests what fits.
 - **Packages:** "where's my package?" looks in Shop, then Amazon, Walmart or Target, then your shipping emails, and
   opens the tracking link to tell you where it is and when it's due.
+- **Where's my food:** "where's my order?" checks your delivery app first, not a shipped package, and reads the live
+  status: being made, picked up, or a few minutes away, with the driver when the app shows one.
+- **Food spending:** "how much have I spent on DoorDash this month?" reads the whole order history in one go (Sprocket
+  scrolls it itself), leaves out cancelled and refunded orders, and adds it up. If the list won't scroll to the end,
+  it says the total may be short.
+- **Scheduled tasks:** "at 8 tomorrow, check the weather and only tell me if it'll rain", "every Friday at 5, see if
+  my pizza place has a deal". At that time Sprocket does it by itself and puts the answer in a notification; tap it and
+  Sprocket reads it out. "Only tell me if" with nothing to tell means no notification. Anything that sends, calls or
+  buys asks with a notification and waits up to an hour, then skips that step. A scheduled task can't add or cancel
+  tasks. For exact times, allow "Alarms & reminders" for Sprocket. (An idea from Mika.)
+- **TVs (Vizio and LG):** on your home Wi-Fi: "turn on the bedroom TV", volume, mute, inputs and apps, remote buttons.
+  Setting up a TV needs the code on its screen (Vizio) or Allow on the TV (LG); after that Sprocket only talks to that
+  same TV. "Undo that" puts power, volume, mute and input back when it knows how they were.
 - **Call announcer:** with the phone on vibrate, it says who is calling and listens for "answer", "decline" or
   "text". Works over the lock screen. You set the hours.
 - **Lists:** groceries sorted by aisle, to-dos with due dates, lists from a photo of a recipe, and (optionally) kept
@@ -271,6 +284,7 @@ It's a personal project, so answers may take a while.
 - What you ask goes to the brain you chose: Anthropic for Claude, DeepSeek for DeepSeek, OpenAI for OpenAI, or your own server.
 - Background work talks only to your own phone's wireless debugging (on the phone itself); its pairing code is read
   from the screen and never saved.
+- The TV remote talks only to TVs on your home Wi-Fi, and a TV's pairing key stays on your phone.
 - Weather comes from Open-Meteo, GitHub from GitHub's public API, lists from your Notion when connected. Web search
   goes through Anthropic's search (Claude) or the go-between's Brave Search (your own model).
 - Nothing is collected by anyone else. There are no analytics.
