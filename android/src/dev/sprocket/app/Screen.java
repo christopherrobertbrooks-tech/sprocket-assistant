@@ -153,7 +153,13 @@ final class Screen {
     private static final String[] SENDING_WORDS = {"send", "post", "publish", "submit"};
 
     /** True when tapping this needs his OK on a card first. */
-    static boolean risky(Item it) { return has(it, RISKY_WORDS) || (it != null && MONEY_BUTTON.matcher(it.label).matches()); }
+    static boolean risky(Item it) {
+        return has(it, RISKY_WORDS) || (it != null && MONEY_BUTTON.matcher(it.label).matches() && !CART_ADD.matcher(it.label).matches());
+    }
+
+    /** "Add 42 to cart · $503.58": filling a cart isn't paying (the order button keeps its card). 11-20 practice: the
+     *  money rule caught it and every cart test came back empty. */
+    private static final java.util.regex.Pattern CART_ADD = java.util.regex.Pattern.compile("(?i).*\\b(cart|bag|basket|order|list)\\b.*");
 
     /** True when this button sends words (a message, a post): its card shows them. */
     static boolean sends(Item it) { return has(it, SENDING_WORDS); }

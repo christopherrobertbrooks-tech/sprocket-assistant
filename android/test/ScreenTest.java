@@ -180,6 +180,9 @@ public class ScreenTest {
         eq("Tips & tricks: no card", Screen.needsCard("com.android.settings", button("Tips & tricks")), false);
         eq("a menu item with a price: no card", Screen.needsCard("com.dd.doordash", button("Cheeseburger $9.99")), false);
         eq("Add to cart: no card (nothing is bought yet)", Screen.needsCard("com.dd.doordash", button("Add to cart")), false);
+        eq("Add 42 to cart with its price: no card (11-20 practice)", Screen.needsCard("dev.playground.eats", button("Add 42 to cart \u00b7 $503.58")), false);
+        eq("Add to order $12.49: no card", Screen.needsCard("com.mcdonalds.app", button("Add to order $12.49")), false);
+        eq("Add $2.00 still a card", Screen.needsCard("com.dd.doordash", button("Add $2.00")), true);
         eq("Allow in an ordinary app's own screen: as before", Screen.needsCard("com.walmart.android", button("Allow substitutions")), false);
         eq("Delete Item in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Delete Item")), false);
         eq("Remove in a food app's cart: no card", Screen.needsCard("dev.playground.eats", button("Remove Onion Rings")), false);
