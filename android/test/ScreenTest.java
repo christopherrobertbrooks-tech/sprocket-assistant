@@ -20,6 +20,69 @@ public class ScreenTest {
         // and read "3m ago · Spider · Motion Trigger Armed" as motion 3 minutes ago. Camera apps now carry a rule.
         java.util.List<Screen.Item> arlo = java.util.Arrays.asList(button("3m ago \u00b7 Spider \u00b7 Motion Trigger Armed"), button("Play"));
         String cam = Screen.cameraNote("com.arlo.app", arlo);
+
+        // 11-19 practice: "how much have I spent on Eats in the last 30 days?" -- the brain scrolled the order history
+        // itself, stopped one screen early with "(more below)" showing, and said 17 orders / $417.45 (18 / $434.98).
+        // read_all: the code scrolls; every row comes back once, top to bottom, overlaps dropped.
+        {
+            Screen.Item list = new Screen.Item("list", "", false, false, true, false, false, true, "more below");
+            java.util.List<Screen.Item> s1 = java.util.Arrays.asList(list, new Screen.Item("text", "Golden Wok", false, false, false, false, false),
+                    new Screen.Item("text", "Total $27.98", false, false, false, false, false), button("Reorder"),
+                    new Screen.Item("text", "Rosie's Burgers", false, false, false, false, false),
+                    new Screen.Item("text", "Total $13.47", false, false, false, false, false), button("Reorder"));
+            java.util.List<Screen.Item> s2 = java.util.Arrays.asList(list, new Screen.Item("text", "Rosie's Burgers", false, false, false, false, false),
+                    new Screen.Item("text", "Total $13.47", false, false, false, false, false), button("Reorder"),
+                    new Screen.Item("text", "Golden Wok", false, false, false, false, false),
+                    new Screen.Item("text", "Total $17.53", false, false, false, false, false), button("Reorder"),
+                    new Screen.Item("password", "secret", false, true, false, false, true));
+            java.util.List<String> rows = new java.util.ArrayList<>();
+            Screen.mergeScreen(rows, Screen.listLines(s1));
+            Screen.mergeScreen(rows, Screen.listLines(s2));
+            eq("the scrolling list itself isn't a row", rows.get(0), "text \"Golden Wok\"");
+            eq("overlap dropped, repeats kept: 9 rows", rows.size(), 9);
+            eq("the shared order appears once", java.util.Collections.frequency(rows, "text \"Total $13.47\""), 1);
+            eq("the same place twice stays twice", java.util.Collections.frequency(rows, "text \"Golden Wok\""), 2);
+            eq("the last order is there", rows.get(7), "text \"Total $17.53\"");
+            eq("a password field is never listed", String.join("|", rows).contains("secret"), false);
+            java.util.List<String> fresh = new java.util.ArrayList<>(Arrays.asList("a", "b"));
+            Screen.mergeScreen(fresh, Arrays.asList("c", "d"));
+            eq("no overlap: all kept", fresh.toString(), "[a, b, c, d]");
+            String w = Screen.wholeList(rows, 2, true);
+            eq("says it reached the end", w.contains("2 screens, to the end"), true);
+            eq("says to keep only what fits", w.contains("not cancelled or refunded"), true);
+            eq("every row listed", w.split("\n- ").length - 1, 9);
+            eq("stopping early says so", Screen.wholeList(rows, 40, false).contains("stopped before the end"), true);
+            java.util.List<String> big = new java.util.ArrayList<>();
+            for (int i = 0; i < 500; i++) Screen.mergeScreen(big, Arrays.asList("row " + i));
+            eq("capped", big.size(), Screen.MAX_LIST_LINES);
+            {   // Codex 055 #5: rows known by which row they are, not their words
+                Screen.Item t10 = new Screen.Item("text", "Total $10", false, false, false, false, false);
+                Screen.Item t20 = new Screen.Item("text", "Total $20", false, false, false, false, false);
+                Screen.Item t30 = new Screen.Item("text", "Total $30", false, false, false, false, false);
+                java.util.List<String> acc = new java.util.ArrayList<>();
+                java.util.Set<String> seen = new java.util.HashSet<>();
+                eq("first screen: two new", Screen.mergeKeyed(acc, seen, Arrays.asList(t10, t20), Arrays.asList("r1", "r2")), 2);
+                eq("second screen: the shared row isn't new", Screen.mergeKeyed(acc, seen, Arrays.asList(t20, t30), Arrays.asList("r2", "r3")), 1);
+                eq("$10 + $20 + $30, each once", acc.toString(), "[text \"Total $10\", text \"Total $20\", text \"Total $30\"]");
+                eq("didn't move: nothing new", Screen.mergeKeyed(acc, seen, Arrays.asList(t20, t30), Arrays.asList("r2", "r3")), 0);
+                java.util.List<String> same = new java.util.ArrayList<>();
+                java.util.Set<String> seen2 = new java.util.HashSet<>();
+                Screen.mergeKeyed(same, seen2, Arrays.asList(t10, t10), Arrays.asList("r1", "r2"));
+                Screen.mergeKeyed(same, seen2, Arrays.asList(t10, t10), Arrays.asList("r2", "r3"));
+                eq("three orders that look the same stay three", same.size(), 3);
+                eq("a password row never listed (keyed)", Screen.mergeKeyed(same, seen2,
+                        Arrays.asList(new Screen.Item("password", "secret", false, true, false, false, true)), Arrays.asList("r9")), 0);
+                String stuck = Screen.wholeList(acc, 3, false, true, true);
+                eq("more below but it wouldn't move: says so", stuck.contains("may NOT be all of it"), true);
+                eq("stuck isn't 'to the end'", stuck.contains("to the end"), false);
+                String words = Screen.wholeList(acc, 2, true, false, false);
+                eq("matched by words: doesn't promise every row", words.contains("Every row is here once"), false);
+                eq("matched by words: says look-alikes may merge", words.contains("may have been counted as one"), true);
+                eq("keyed: promises every row", Screen.wholeList(acc, 2, true, false, true).contains("Every row is here once"), true);
+            }
+            eq("a scroll in a list points to read_all", Screen.scrollNote(s1).contains("use read_all"), true);
+            eq("no list, no note", Screen.scrollNote(java.util.Arrays.asList(button("OK"))), "");
+        }
         eq("a camera app gets the rule", cam.contains("saved snapshot, not live"), true);
         eq("the snapshot's age is pointed out", cam.contains("\u201c3m ago\u201d"), true);
         eq("armed is a setting, not an event", cam.contains("Armed"), true);
@@ -106,6 +169,17 @@ public class ScreenTest {
         eq("While using the app: card", Screen.needsCard(pc, button("While using the app")), true);
         eq("Only this time: card", Screen.needsCard("com.android.permissioncontroller", button("Only this time")), true);
         eq("Don't allow: no card (the safe answer)", Screen.needsCard(pc, button("Don\u2019t allow")), false);
+        // Codex 055b #1: cancelling an order, tips, money buttons and a bare Confirm wait for his OK
+        eq("Cancel order: card", Screen.needsCard("dev.playground.eats", button("Cancel order")), true);
+        eq("Add to tip: card", Screen.needsCard("com.dd.doordash", button("Add to tip")), true);
+        eq("Add $2.00: card", Screen.needsCard("com.dd.doordash", button("Add $2.00")), true);
+        eq("Tip $3: card", Screen.needsCard("com.dd.doordash", button("Tip $3")), true);
+        eq("Confirm: card", Screen.needsCard("dev.playground.eats", button("Confirm")), true);
+        eq("Cancel subscription: card", Screen.needsCard("com.netflix.mediaclient", button("Cancel subscription")), true);
+        eq("a plain Cancel: no card (it backs out)", Screen.needsCard("dev.playground.eats", button("Cancel")), false);
+        eq("Tips & tricks: no card", Screen.needsCard("com.android.settings", button("Tips & tricks")), false);
+        eq("a menu item with a price: no card", Screen.needsCard("com.dd.doordash", button("Cheeseburger $9.99")), false);
+        eq("Add to cart: no card (nothing is bought yet)", Screen.needsCard("com.dd.doordash", button("Add to cart")), false);
         eq("Allow in an ordinary app's own screen: as before", Screen.needsCard("com.walmart.android", button("Allow substitutions")), false);
         eq("Delete Item in DoorDash: no card", Screen.needsCard("com.dd.doordash", button("Delete Item")), false);
         eq("Remove in a food app's cart: no card", Screen.needsCard("dev.playground.eats", button("Remove Onion Rings")), false);

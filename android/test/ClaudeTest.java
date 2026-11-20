@@ -63,6 +63,7 @@ public class ClaudeTest {
         Claude.foodNow = false;
         String foodNote = fo.getJSONArray("messages").getJSONObject(fo.getJSONArray("messages").length() - 1).getJSONArray("content").toString();
         eq("a food ask carries the food rules", foodNote.contains("allerg") && foodNote.contains("Usual at"), true);
+        eq("where's my food = the food app, not a shipped package (11-19)", foodNote.contains("current order in his food-delivery app first"), true);
         String lastNote = live.getJSONArray("messages").getJSONObject(live.getJSONArray("messages").length() - 1)
                 .getJSONArray("content").toString();
         eq("the real settings ride with his question", lastNote.contains("media volume 0%, screen brightness 40% (automatic), "

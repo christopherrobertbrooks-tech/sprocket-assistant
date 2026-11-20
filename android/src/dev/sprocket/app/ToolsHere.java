@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 /**
- * The tools that run inside the app itself: lists (and their Notion copy), goals, the AI news topics, memory notes, his texts and notifications. Moved out of MainActivity (roadmap: tidier code).
+ * The tools that run inside the app itself: lists (and their Notion copy), goals, the AI news topics, memory notes, his texts and notifications, TVs and scheduled tasks. Moved out of MainActivity (roadmap: tidier code).
  */
 final class ToolsHere {
     final MainActivity host;
@@ -202,5 +202,63 @@ final class ToolsHere {
         List<Notices.Notice> showing = MessageListener.showing(MainActivity.app);
         if (showing == null) return "The notification reader is still starting; ask again in a few seconds.";
         return Notices.describe(showing, which, System.currentTimeMillis(), TimeZone.getDefault());
+    }
+
+    /** schedule_task / scheduled_tasks / cancel_scheduled (Schedules), with undo: a new task cancelled, a cancelled one back. */
+    static String scheduleTool(String name, JSONObject input) throws Exception {
+        Schedules schedules = MainActivity.schedules;
+        if (name.equals("scheduled_tasks")) synchronized (schedules) { return schedules.list(); }
+        if (MainActivity.scheduledRun()) return Schedules.NOT_WHILE_SCHEDULED;   // a task can't add or cancel tasks (Codex 055b #2)
+        String out;
+        try {
+            synchronized (schedules) {
+                if (name.equals("schedule_task")) {
+                    out = schedules.add(input.optString("what"), input.optString("at"), input.optString("repeat"), input.optString("only_tell_if"),
+                            java.time.LocalDateTime.now());
+                    Schedules.Task k = schedules.tasks.get(schedules.tasks.size() - 1);
+                    Hands.record("scheduled “" + k.what + "”", UndoLog.AUTO, "cancel_scheduled", new JSONObject().put("task", String.valueOf(k.id)));
+                } else {
+                    Schedules.Task k = schedules.cancel(input.optString("task"));
+                    out = "Cancelled " + k.line() + ".";
+                    Hands.record("cancelled the scheduled “" + k.what + "”", UndoLog.AUTO, "schedule_task", k.input());
+                }
+            }
+        } finally {
+            MainActivity.saveSchedules();
+            ScheduleAlarm.schedule(MainActivity.app);
+        }
+        return out;
+    }
+
+    /** tv_find, tv_pair, tv: only on Wi-Fi (the TVs are on the home network); whatever changed is saved and logged. */
+    static String tvTool(String name, JSONObject input) throws Exception {
+        String ip = wifiIp();
+        if (ip == null) return Tv.NOT_WIFI;
+        Tv tv = MainActivity.tv;
+        synchronized (tv) {
+            try {
+                if (name.equals("tv_find")) return tv.find(Tv.REAL, ip);
+                if (name.equals("tv_pair")) return tv.pair(Tv.REAL, ip, input.optString("tv"), input.optString("code"));
+                Tv.Result r = tv.control(Tv.REAL, input.optString("tv"), input.optString("action"), input.optInt("value", 0), input.optString("input"));
+                if (r.did != null) Hands.record(r.did, r.undoKind, "tv", r.undo);
+                return r.text;
+            } finally {
+                MainActivity.saveTv();   // a new pairing, a moved address
+            }
+        }
+    }
+
+    /** The phone's own address on Wi-Fi, or null when it isn't on Wi-Fi (the VPN doesn't count). */
+    private static String wifiIp() {
+        android.net.ConnectivityManager cm = MainActivity.app.getSystemService(android.net.ConnectivityManager.class);
+        for (android.net.Network n : cm.getAllNetworks()) {
+            android.net.NetworkCapabilities c = cm.getNetworkCapabilities(n);
+            android.net.LinkProperties lp = cm.getLinkProperties(n);
+            if (c == null || lp == null || !c.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                    || c.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)) continue;
+            for (android.net.LinkAddress la : lp.getLinkAddresses())
+                if (la.getAddress() instanceof java.net.Inet4Address) return la.getAddress().getHostAddress();
+        }
+        return null;
     }
 }

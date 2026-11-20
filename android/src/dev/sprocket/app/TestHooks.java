@@ -114,6 +114,10 @@ final class TestHooks {
             synchronized (MainActivity.lists) { MainActivity.lists = new Lists(); MainActivity.saveLists(); }
             MainActivity.memory = new Memory(); MainActivity.saveMemory();
             MainActivity.appNotes = new AppNotes(); MainActivity.saveAppNotes();
+            synchronized (MainActivity.schedules) { MainActivity.schedules = new Schedules(); }
+            MainActivity.saveSchedules();
+            // an earlier test's answer notification can't pass this test's check (Codex 055 #6)
+            ((android.app.NotificationManager) host.getSystemService(android.content.Context.NOTIFICATION_SERVICE)).cancelAll();
             File cardLog = new File(host.getExternalFilesDir(null), "cards.txt");
             if (cardLog.exists() && !cardLog.delete()) android.util.Log.w("Sprocket", "practice: cards.txt stayed");
         }

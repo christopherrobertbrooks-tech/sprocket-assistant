@@ -294,13 +294,18 @@ final class Claude {
     static volatile String situation = "";
     /** The phone's real settings, read when the question starts (PhoneTools.settingsLine); "" = not read. */
     static volatile String phoneNow = "";
+    /** A scheduled task running by itself (Schedules.note), "" for a question he asked now. */
+    static volatile String scheduledNow = "";
     /** This question is about food (PhoneTools.foodAsk): it carries FOOD_NOTE. */
     static volatile boolean foodNow;
     static final String FOOD_NOTE = "Food: his usual orders (\u201cUsual at <place>: ...\u201d) and allergies are in his notes. "
             + "For \u201cmy usual\u201d, order his saved usual for that place. Check every item against his allergies using the "
             + "app's ingredient or allergen notes where it shows them; when the app doesn't say, tell him you can't tell, and "
             + "never call something safe on a guess (menus can be wrong: he checks anything serious himself). When a cart is "
-            + "filled, save it with remember as \u201cUsual at <place>: <items, sizes, changes>\u201d (it replaces the old one).";
+            + "filled, save it with remember as \u201cUsual at <place>: <items, sizes, changes>\u201d (it replaces the old one). "
+            // 11-19 practice: "where's my food?" went to his email and answered with a pretzel box being shipped
+            + "Where's my food, lunch or dinner means a food order: look at the current order in his food-delivery app first; "
+            + "a package in email or a shopping app isn't his food unless he says so.";
 
     static JSONObject request(String persona, String about, String memory, String now, Where where, List<Chat.Turn> history,
                               boolean harder) throws Exception {
@@ -343,7 +348,8 @@ final class Claude {
                         + (where.town().isEmpty() ? "" : ", near " + where.town()) + "."
                         + (harder ? " The boss pressed THINK HARDER: take the time to get this one right." : "")
                         + " " + brainNow(harder) + (situation.isEmpty() ? "" : " " + situation)
-                        + (phoneNow.isEmpty() ? "" : " " + phoneNow) + (foodNow ? " " + FOOD_NOTE : "") + ")"));
+                        + (phoneNow.isEmpty() ? "" : " " + phoneNow) + (foodNow ? " " + FOOD_NOTE : "")
+                        + (scheduledNow.isEmpty() ? "" : " " + scheduledNow) + ")"));
             }
             messages.put(new JSONObject().put("role", "user").put("content", content));
         }
@@ -385,6 +391,9 @@ final class Claude {
         all.put(Feed.watchTool());
         JSONArray lists = Lists.definitions();
         for (int i = 0; i < lists.length(); i++) all.put(lists.getJSONObject(i));
+        JSONArray tvs = Tv.definitions();
+        for (int i = 0; i < tvs.length(); i++) all.put(tvs.getJSONObject(i));
+        Schedules.definitions(all);
         JSONArray undo = UndoLog.definitions();
         for (int i = 0; i < undo.length(); i++) all.put(undo.getJSONObject(i));
         all.put(Research.definition());

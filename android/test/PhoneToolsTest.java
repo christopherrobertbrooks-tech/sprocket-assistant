@@ -87,6 +87,16 @@ public class PhoneToolsTest {
         eq("by bus or train", PhoneTools.mapsUri("directions", "Union Station", "transit"),
                 "https://www.google.com/maps/dir/?api=1&destination=Union%20Station&travelmode=transit");
         eq("nearby", PhoneTools.mapsUri("nearby", "coffee & donuts", ""), "geo:0,0?q=coffee%20%26%20donuts");
+        {   // 11-19: read_all is one of the screen tool's actions, and the description says when to use it
+            String actions = "", desc = "";
+            for (int i = 0; i < defs.length(); i++)
+                if (defs.getJSONObject(i).getString("name").equals("screen")) {
+                    actions = defs.getJSONObject(i).getJSONObject("input_schema").getJSONObject("properties").getJSONObject("action").getJSONArray("enum").toString();
+                    desc = defs.getJSONObject(i).getString("description");
+                }
+            eq("screen tool has read_all", actions.contains("\"read_all\""), true);
+            eq("read_all is for adding up a list", desc.contains("read_all: every row of a long list"), true);
+        }
         JSONArray screens = null;
         for (int i = 0; i < defs.length(); i++)
             if (defs.getJSONObject(i).getString("name").equals("open_screen"))

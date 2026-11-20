@@ -66,6 +66,15 @@ public class MainActivity extends Activity {
     static Lists lists;                        // his lists (files/lists.json)
     static AppNotes appNotes;                  // app memory for screen control (files/app-notes.json)
     static Goals goals;                        // what he's working toward (files/goals.json)
+    static Schedules schedules = new Schedules();   // scheduled tasks (files/schedules.json; ScheduleService runs them)
+    /** A scheduled task is the question now being answered: quiet (no voice), its cards ask by notification. */
+    private static volatile boolean scheduled;
+    private static java.util.function.BiConsumer<String, String> scheduledDone;
+    private static Chat.Turn scheduledTurn;      // the reply the scheduled run is waiting for: only that one finishes it
+    private static Runnable afterFinish;         // his question, held while a scheduled run stops for it
+    /** runScheduled's answer when he started a question first: the service waits and tries again. */
+    static final String[] BUSY = new String[2];
+    static Tv tv = new Tv();                   // TVs on the home Wi-Fi he paired (files/tv.json: their keys never leave the phone)
     static UndoLog undoLog = new UndoLog();    // what Sprocket did for each request, and how to put it back (files/undo.json)
     static Feed feed;                          // the morning brief: settings, news topics, the last week (files/feed.json)
     static volatile String about = "";         // his About-you page (files/about.md), edited in ⋯ Memory
@@ -150,12 +159,16 @@ public class MainActivity extends Activity {
         appNotes = loadAppNotes();
         goals = Goals.fromJson(read("goals.json"));
         undoLog = UndoLog.fromJson(read("undo.json"));
+        tv = Tv.load(read("tv.json"));
+        schedules = Schedules.load(read("schedules.json"));
         Phone.watchTorch(app);                  // the flashlight's real state, for undo
         feed = Feed.fromJson(read("feed.json"));
         FeedService.channels(app);
         StudioService.channels(app);
         if (Config.on("brief") && brainSetUp())   // a new install schedules nothing before its brain and setup (Codex 043 #3)
             try { FeedAlarm.schedule(app); } catch (Exception e) { android.util.Log.w("Sprocket", "brief alarm: " + e); }
+        ScheduleService.channels(app);
+        try { ScheduleAlarm.schedule(app); } catch (Exception e) { android.util.Log.w("Sprocket", "scheduled alarm: " + e); }
         Claude.photos = name -> Photo.base64(app, name);
         VoiceOut.get(app);
     }
@@ -174,6 +187,7 @@ public class MainActivity extends Activity {
             Intent test = takeTest();
             selfTest(test);
             shared(getIntent(), test);
+            takeSpeak(getIntent());
         }
         takeTextBack();
     }
@@ -184,7 +198,52 @@ public class MainActivity extends Activity {
         Intent test = takeTest();
         selfTest(test);
         shared(i, test);
+        takeSpeak(i);
         takeTextBack();
+    }
+
+    /** A scheduled task's answer notification, tapped: Sprocket opens and says it (11-19). */
+    private void takeSpeak(Intent i) {
+        String say = i == null ? null : i.getStringExtra(ScheduleService.SPEAK);
+        if (say == null || say.trim().isEmpty()) return;
+        i.removeExtra(ScheduleService.SPEAK);   // said once, not again when the screen is rebuilt
+        VoiceOut.get(app).sayThen(say, "", () -> { });
+    }
+
+    /**
+     * Worker thread (ScheduleService): asks the task like his own question, quietly, and waits for the answer.
+     * Returns {reply, error}: error null when it answered.
+     */
+    static String[] runScheduled(Schedules.Task k, boolean late) throws InterruptedException {
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        String[] out = new String[2];
+        boolean[] busyNow = {false};
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            if (busy) { busyNow[0] = true; done.countDown(); return; }   // checked here, where questions start (Codex 055 #2)
+            scheduledDone = (text, err) -> { out[0] = text; out[1] = err; done.countDown(); };
+            scheduled = true;
+            spokenTurn = false;
+            Claude.scheduledNow = Schedules.note(k, late);
+            scheduledTurn = askQuestion(Schedules.question(k), null, null);
+        });
+        // its cards may wait an hour for his yes (ScheduleService.ask), so the whole task gets a little more
+        if (!done.await(ScheduleService.ASK_WAIT_S + 20 * 60, java.util.concurrent.TimeUnit.SECONDS)) {
+            stopAnswer();
+            out[1] = "it took too long and was stopped";
+        }
+        return busyNow[0] ? BUSY : out;
+    }
+
+    static boolean scheduledRun() { return scheduled; }
+
+    static void saveSchedules() {
+        try { synchronized (schedules) { write("schedules.json", schedules.toJson().toString()); } }
+        catch (Exception e) { android.util.Log.w("Sprocket", "schedules: " + e); }
+        exportForPractice();
+    }
+
+    static void saveTv() {
+        try { write("tv.json", tv.toJson()); } catch (Exception e) { android.util.Log.w("Sprocket", "tv: " + e); }
     }
 
     private static Intent pendingTest;          // from SelfTestActivity (adb only), never from this screen's own intent
@@ -396,6 +455,7 @@ public class MainActivity extends Activity {
             handler.postDelayed(() -> { if (Setup.running(setupAt)) setupContinue(); }, 700);
         }
         StudioService.resume(this);           // anything the studio was still making when Android ended the app
+        ScheduleService.resume(this);         // a scheduled task Android wouldn't start by itself: now, with the app open
         Place.refresh(this);                  // the town, if it's older than 20 minutes (background)
         ScreenHands.check(this);              // screen control switched off since (11-13): a notice that opens the page
         if (prefs().bg()) BgSetup.keepUp(app);   // background work on, helper gone (a restart): bring it back
@@ -1114,7 +1174,12 @@ public class MainActivity extends Activity {
     }
 
     /** Main thread: a question asked, from this screen or the side-button card (spokenTurn set by whoever heard it). */
-    static void askQuestion(String said, String photo, SelfTest st) {
+    static Chat.Turn askQuestion(String said, String photo, SelfTest st) {
+        if (busy && scheduled) {   // he asks while a scheduled task runs: it stops (a waiting yes is a no), then his question
+            afterFinish = () -> askQuestion(said, photo, st);
+            stopAnswer();
+            return null;
+        }
         VoiceOut.get(app).stop();
         if (listen.on()) listen.cancel();
         Chat.Turn mine = chat.add("user", said, System.currentTimeMillis());
@@ -1173,7 +1238,7 @@ public class MainActivity extends Activity {
                     }
                     public void sentence(String s, String mood) {
                         if (st != null) st.sentences.add(s);
-                        if (voiceOn()) new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> VoiceOut.get(app).add(s, mood));
+                        if (voiceOn() && !scheduled) new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> VoiceOut.get(app).add(s, mood));
                     }
                 };
                 r = Claude.send(k, req[0], listener[0], live, TOOLS);
@@ -1190,6 +1255,7 @@ public class MainActivity extends Activity {
             android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
             main.post(() -> finish(reply, done, err, st));
         });
+        return reply;
     }
 
     /**
@@ -1260,6 +1326,8 @@ public class MainActivity extends Activity {
     /** Main thread. Static work first (the chat), then the screen on show, if any. */
     private static void finish(Chat.Turn reply, Claude.Reply r, String error, SelfTest st) {
         busy = false;
+        boolean wasScheduled = scheduled && reply == scheduledTurn;   // this reply, not just "a run is on" (Codex 055 #2)
+        if (wasScheduled) { scheduled = false; scheduledTurn = null; Claude.scheduledNow = ""; }
         ScreenHands.glow(false);   // answered (or stopped): the glow goes
         pending = null;
         if (r != null) {
@@ -1274,6 +1342,11 @@ public class MainActivity extends Activity {
             android.util.Log.i("PA-REPLY", error != null ? "ERROR " + error   // screen (a screen dump suspends the hands)
                     : reply.text.trim().isEmpty() ? "(no words)" : reply.text.replace('\n', ' '));
         if (reply.text.trim().isEmpty()) chat.turns.remove(reply);
+        if (wasScheduled && r != null && Schedules.quiet(reply.text)) {   // "only tell me if" and it isn't so: no trace
+            chat.turns.remove(reply);
+            for (int i = chat.turns.size() - 1; i >= 0; i--)
+                if (chat.turns.get(i).role.equals("user") && chat.turns.get(i).text.startsWith("\u23f0")) { chat.turns.remove(i); break; }
+        }
         exportForPractice();
         saveChat();
         if (handsMoved && BgScreen.on() && (ScreenHands.stay || PhoneTools.wantsToSee(askedNow))) {   // worked on the hidden screen:
@@ -1291,7 +1364,13 @@ public class MainActivity extends Activity {
         if (st != null) st.write(app, r, error);
         Watch w = watch;
         if (w != null) w.done(reply.text, error == null ? null : "Couldn't get an answer: " + error + ".");
-        if (r != null && voiceOn()) {
+        java.util.function.BiConsumer<String, String> sd = scheduledDone;
+        if (wasScheduled && sd != null) {
+            scheduledDone = null;
+            String why = afterFinish != null ? "you asked Sprocket something while it was running, so it stopped" : error == null ? "stopped" : error;
+            sd.accept(r == null ? null : reply.text, r == null ? why : null);
+        }
+        if (r != null && voiceOn() && !wasScheduled) {
             boolean followUp = spokenTurn;
             VoiceOut.get(app).end(() -> {
                 if (st != null) st.writeVoice(app, followUp);
@@ -1305,6 +1384,9 @@ public class MainActivity extends Activity {
             a.styleSend();
             a.render();
         }
+        Runnable then = afterFinish;   // his question that stopped a scheduled task
+        afterFinish = null;
+        if (then != null) then.run();
     }
 
     private void stop() { stopAnswer(); }
@@ -1313,6 +1395,7 @@ public class MainActivity extends Activity {
     static void stopAnswer() {
         stopped = true;
         Hands.answer(Hands.card, false);              // a card waiting for his tap: Stop means no
+        ScheduleService.cancelAsk();                  // the same for a scheduled task's notification
         HttpURLConnection h = live[0];
         if (h != null) new Thread(h::disconnect).start();   // not the worker: it's busy reading this very reply
         VoiceOut.get(app).stop();
@@ -1556,7 +1639,7 @@ public class MainActivity extends Activity {
         if (!app.getPackageName().endsWith(".test")) return;
         File out = app.getExternalFilesDir(null);
         if (out == null) return;
-        for (File f : new File[]{listsFile(), memoryFile()}) {
+        for (File f : new File[]{listsFile(), memoryFile(), new File(app.getFilesDir(), "schedules.json")}) {
             try {
                 byte[] b = f.exists() ? java.nio.file.Files.readAllBytes(f.toPath()) : "{}".getBytes();
                 java.nio.file.Files.write(new File(out, f.getName()).toPath(), b);
@@ -1698,6 +1781,8 @@ public class MainActivity extends Activity {
             if (name.equals("check_texts") || name.equals("read_texts")) return texts(name, input);
             if (name.equals("check_notifications")) return notices(input.optString("app"));
             if (name.equals("check_machines")) return Machines.check(input.optString("machine"));
+            if (name.equals("tv_find") || name.equals("tv_pair") || name.equals("tv")) return ToolsHere.tvTool(name, input);
+            if (name.equals("schedule_task") || name.equals("scheduled_tasks") || name.equals("cancel_scheduled")) return ToolsHere.scheduleTool(name, input);
             if (name.equals("studio_jobs")) return Studio.jobs(Studio.http("/jobs", null, 15_000).getJSONArray("jobs"), System.currentTimeMillis());
             if (name.equals("studio_make")) {
                 String kind = input.optString("kind"), what = input.optString("prompt"), photo = null;

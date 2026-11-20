@@ -135,7 +135,7 @@ final class PhoneTools {
                 .put(tool("screen", "Use the phone's screen like a person, for apps and settings no other tool covers (use "
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read; tap with times presses the same button again and again in one step (a "
-                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. find: looks through the whole list for an item with these words (it does the scrolling, top to bottom, in one step): use it to look for something in a long menu or list, and trust what it says. look: a screenshot, for screens the list "
+                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. find: looks through the whole list for an item with these words (it does the scrolling, top to bottom, in one step): use it to look for something in a long menu or list, and trust what it says. read_all: every row of a long list in one step (it scrolls top to bottom itself): use it to count, add up or compare things in a list (order history, spending, a long menu), never your own scrolling. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
                                 + "(it asks them first only when it sounds risky). Each action returns the screen after it. Never "
                                 + "tell them something is on their screen unless you read it, or go_to returned it, in this "
@@ -151,7 +151,7 @@ final class PhoneTools {
                                 + "only they can turn it back on, in Settings or from the notice that follows.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
-                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off").put("find")))
+                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off").put("find").put("read_all")))
                                 .put("item", new JSONObject().put("type", "integer").put("description", "For tap and type: the item's number."))
                                 .put("times", new JSONObject().put("type", "integer").put("description", "For tap: press it this many times (default 1, at most 50)."))
                                 .put("text", str("For type: what to type. For note: the fact to save. For find: the words to look for (\"pickle spear\")."))
