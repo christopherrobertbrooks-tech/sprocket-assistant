@@ -15,6 +15,23 @@ public class SpeechTest {
     public static void main(String[] a) throws Exception {
         eq("shouting isn't spelled out", Speech.forVoice("I was built for WAR!"), "I was built for war!");
         eq("real abbreviations stay", Speech.forVoice("Put me on the GPU. The V100, the GOOD one."), "Put me on the GPU. The V one hundred, the good one.");
+        // oz is "ounce", never the name Oz (11-20)
+        eq("a quarter", Speech.forVoice("Deals on a 1/4oz of coffee"), "Deals on a quarter ounce of coffee");
+        eq("an eighth and a half", Speech.forVoice("1/8 oz or 1/2oz"), "eighth ounce or half ounce");
+        eq("ounces", Speech.forVoice("The 1oz jar is $100, the 3.5 oz bag too"), "The 1 ounce jar is 100 bucks, the 3.5 ounces bag too");
+        eq("a store's name", Speech.forVoice("Opening Market OZ now"), "Opening Market ounce now");
+        eq("not inside words", Speech.forVoice("Ozzy reads Ozymandias"), "Ozzy reads Ozymandias");
+        // prices (11-20: "$31.50" was said "thirty one dollars fifty")
+        eq("dollars and cents", Speech.forVoice("Party trays are $31.50, was $45."), "Party trays are 31 dollars and 50 cents, was 45 dollars.");   // 81, 45: dollars
+        eq("whole dollars", Speech.forVoice("Iced tea is $6.00."), "Iced tea is 6 dollars.");
+        eq("one of each", Speech.forVoice("It's $1.01."), "It's 1 dollar and 1 cent.");
+        eq("cents only", Speech.forVoice("Add $0.75 for cheese."), "Add 75 cents for cheese.");
+        eq("thousands", Speech.forVoice("Total $1,234.56 today"), "Total 1,234 dollars and 56 cents today");
+        eq("3 for $100", Speech.forVoice("3 for $100"), "3 for 100 bucks");   // 100: a buck-day
+        // "bucks" now and then (11-20): about one price in three, the same price always said the same way
+        eq("a list varies", Speech.forVoice("$19.98, $22.49, $33.79"), "19 dollars and 98 cents, 22 dollars and 49 cents, 33 bucks and 79 cents");
+        eq("one buck", Speech.forVoice("$1"), "1 buck");
+        eq("cents only stay cents", Speech.forVoice("$0.76"), "76 cents");
         eq("markdown and emoji dropped", Speech.forVoice("**Done!** 🤖 See [this](https://x.y)."), "Done! See this.");
         eq("one-letter capitals untouched", Speech.forVoice("I am A unit."), "I am A unit.");
         // clock times as words (the owner's session 2026-10-17: "6:30 AM" was said "six, three zero AM")
