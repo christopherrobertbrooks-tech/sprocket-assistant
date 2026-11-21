@@ -21,7 +21,7 @@ public class PhoneToolsTest {
         StringBuilder names = new StringBuilder();
         for (int i = 0; i < defs.length(); i++) names.append(i > 0 ? " " : "").append(defs.getJSONObject(i).getString("name"));
         eq("the everyday set, then the rest of the earlier test app's", names, "set_timer set_alarm set_reminder reminders send_text call find_contact "
-                + "check_calendar add_event open_app phone_control phone_status media maps open_screen clock_control missed_calls "
+                + "check_calendar add_event open_link open_app phone_control phone_status media maps open_screen clock_control missed_calls "
                 + "email add_contact share_location go_to screen");
         for (int i = 0; i < defs.length(); i++) {
             JSONObject d = defs.getJSONObject(i);
@@ -53,6 +53,26 @@ public class PhoneToolsTest {
         // a reminder is a Sprocket notification now, never the Clock (11-20: the owner wanted "a reminder and not an alarm")
         ZoneId z = ZoneId.of("America/Chicago");
         eq("set_reminder says it's a notification, not an alarm", desc(defs, "set_reminder").contains("notification") && desc(defs, "set_reminder").contains("no alarm rings"), true);
+
+        // open_link: web addresses only (11-20: a store web app's sorted menu is one address)
+        eq("a store's sorted menu", PhoneTools.webLink("https://shop.example.com/stores/main-street/products/snacks?sortby=pricelowtohigh"),
+                "https://shop.example.com/stores/main-street/products/snacks?sortby=pricelowtohigh");
+        eq("a bare address gets https", PhoneTools.webLink("shop.example.com/stores"), "https://shop.example.com/stores");
+        eq("plain http isn't opened", PhoneTools.webLink("http://example.com"), null);
+        eq("no app links", PhoneTools.webLink("intent://scan#Intent;scheme=zxing;end"), null);
+        eq("no scripts", PhoneTools.webLink("javascript:alert(1)"), null);
+        eq("no files", PhoneTools.webLink("file:///sdcard/x.html"), null);
+        eq("no phone calls", PhoneTools.webLink("tel:911"), null);
+        eq("no spaces", PhoneTools.webLink("https://example.com/a b"), null);
+        eq("a host is needed", PhoneTools.webLink("https://localhost/x"), null);
+        eq("nothing", PhoneTools.webLink(""), null);
+        java.util.List<String> browsers = java.util.Arrays.asList("org.mozilla.fenix", "com.android.chrome", "com.sec.android.app.sbrowser");
+        eq("the site's own web app, not the default browser (11-20: a store's link opened logged out in Firefox)",
+                PhoneTools.siteApp(java.util.Arrays.asList("org.mozilla.fenix", "org.chromium.webapk.a0123456789abcdef_v2", "com.android.chrome"), browsers),
+                "org.chromium.webapk.a0123456789abcdef_v2");
+        eq("only browsers open it: the default browser", PhoneTools.siteApp(browsers, browsers), null);
+        eq("www added (a web app that claims the www spelling)", PhoneTools.otherWww("https://example.com/stores?x=1"), "https://www.example.com/stores?x=1");
+        eq("www taken off", PhoneTools.otherWww("https://www.example.com/a"), "https://example.com/a");
 
         // the hidden screen's helper passes no extras: an alarm (time, label) never goes through it (11-20: "no alarm")
         eq("an alarm with the hidden screen up opens normally", PhoneTools.viaHiddenScreen(true, false, true), false);

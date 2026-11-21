@@ -74,6 +74,12 @@ final class PhoneTools {
                                 .put("start", str("YYYY-MM-DDTHH:MM, or YYYY-MM-DD for an all-day event."))
                                 .put("minutes", new JSONObject().put("type", "integer").put("description", "Length; default 60."))
                                 .put("location", str("Optional place.")), "title", "start"))
+                .put(tool("open_link", "Open a web address on the phone (https only). It opens in the app that owns the site "
+                                + "(a site saved to the home screen, like a store's web app) or else the browser. The fastest way to a "
+                                + "page whose address you know (they gave it, or you remembered it): one step instead of many taps, "
+                                + "e.g. a store's menu already sorted by price. Then read it with the screen tool. Never put their "
+                                + "personal details in an address.",
+                        new JSONObject().put("url", str("The full address, e.g. \"https://example.com/menu?sort=price\".")), "url"))
                 .put(tool("open_app", "Open an app on the phone by its name.",
                         new JSONObject().put("name", str("The app's name, e.g. \"Spotify\".")), "name"))
                 .put(tool("phone_control", "The flashlight, the media volume, the screen brightness, Do Not Disturb or the ringer.",
@@ -417,6 +423,32 @@ final class PhoneTools {
         } catch (Exception e) {
             return -1L;
         }
+    }
+
+    /** The same address with "www." added or taken off the host. */
+    static String otherWww(String u) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)^(https://)(www\\.)?(.*)$").matcher(u);
+        if (!m.matches()) return u;
+        return m.group(2) == null ? m.group(1) + "www." + m.group(3) : m.group(1) + m.group(3);
+    }
+
+    /** The app that owns a link's site: one that opens this link but not just any web address (browsers open any).
+     * Null when only browsers open it. */
+    static String siteApp(List<String> opensThisLink, List<String> opensAnyLink) {
+        for (String p : opensThisLink) if (!opensAnyLink.contains(p)) return p;
+        return null;
+    }
+
+    /** A web address open_link may open: https only (no app links, files or scripts), one line, a real host; a bare
+     * "example.com/x" gets https:// in front. Null when it isn't one. */
+    static String webLink(String url) {
+        if (url == null) return null;
+        String u = url.trim();
+        if (u.isEmpty() || u.length() > 2000 || u.matches("(?s).*\\s.*")) return null;
+        if (!u.matches("(?i)^[a-z][a-z0-9+.-]*:.*")) u = "https://" + u;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)^https://([a-z0-9-]+(\\.[a-z0-9-]+)+)(:\\d+)?([/?#].*)?$").matcher(u);
+        if (!m.matches()) return null;
+        return u;
     }
 
     /** Opens an app on the hidden screen only when it's up, the app isn't Sprocket, and the intent has no extras: the

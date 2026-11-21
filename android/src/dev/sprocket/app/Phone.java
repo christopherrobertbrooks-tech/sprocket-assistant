@@ -79,6 +79,7 @@ final class Phone {
                         in.optInt("minutes", 60), in.optString("location"), false);
             }
             case "open_app": return openApp(c, in.optString("name"));
+            case "open_link": return openLink(c, in.optString("url"));
             case "phone_control": return control(c, in);
             case "phone_status": return status(c);
             case "media": return media(c, in.optString("command"), in.optString("query"));
@@ -414,6 +415,34 @@ final class Phone {
 
     // ---------------------------------------------------------------- apps and settings (the earlier test app's ways)
     private static String norm(String t) { return t.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", ""); }
+
+    /** A web address, in the app that owns the site (a home-screen web app takes its own links) or the browser
+     * (11-20: a store web app's menu sorted by price is one address; tapping there took Sprocket minutes). */
+    private static String openLink(Context c, String url) throws Exception {
+        String u = PhoneTools.webLink(url);
+        if (u == null) throw new Exception("that isn't a web address Sprocket opens (https only)");
+        Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addCategory(Intent.CATEGORY_BROWSABLE);
+        // the site's own app (a home-screen web app, where the boss is logged in) over the browser: 11-20 a store's link
+        // opened in Firefox, logged out, because Firefox was the default browser.
+        // A web app claims one spelling of its site (11-20: a store's web app took only the www. name, not the bare
+        // one), so the other spelling is tried too
+        PackageManager pm = c.getPackageManager();
+        List<String> forAny = new ArrayList<>();
+        Intent any = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com/")).addCategory(Intent.CATEGORY_BROWSABLE);
+        for (ResolveInfo r : pm.queryIntentActivities(any, PackageManager.MATCH_ALL)) forAny.add(r.activityInfo.packageName);
+        for (String cand : new String[]{u, PhoneTools.otherWww(u)}) {
+            Intent t = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(cand)).addCategory(Intent.CATEGORY_BROWSABLE);
+            List<String> forLink = new ArrayList<>();
+            for (ResolveInfo r : pm.queryIntentActivities(t, PackageManager.MATCH_ALL)) forLink.add(r.activityInfo.packageName);
+            String own = PhoneTools.siteApp(forLink, forAny);
+            if (own != null) { i = t.setPackage(own); u = cand; break; }
+        }
+        start(c, i);
+        Thread.sleep(2500);   // the page loads; the screen tool reads it next
+        String where = android.net.Uri.parse(u).getHost();
+        Hands.record("Opened " + where);
+        return "Opened " + u + ". Read it with the screen tool (it may still be loading).";
+    }
 
     private static String openApp(Context c, String name) throws Exception {
         PackageManager pm = c.getPackageManager();

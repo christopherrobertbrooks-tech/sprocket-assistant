@@ -37,6 +37,8 @@
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <!-- open_link (11-20): which apps open a web address, to prefer a site's own web app over the browser -->
+        <intent><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="https" /></intent>
     </queries>
     <application android:label="Sprocket" android:icon="@mipmap/ic_launcher" android:theme="@style/SprocketTheme"
         android:allowBackup="false" android:networkSecurityConfig="@xml/network_security_config">
