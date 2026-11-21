@@ -51,10 +51,13 @@ final class PhoneTools {
                                 .put("repeat_days", new JSONObject().put("type", "array").put("items",
                                         new JSONObject().put("type", "string").put("enum", days))
                                         .put("description", "Days it repeats on; leave out for a one-time alarm.")), "time"))
-                .put(tool("set_reminder", "Remind the boss of something at a date and time: within 90 minutes it is a labelled "
-                                + "timer, within a day a labelled alarm, later a calendar entry with an alert.",
-                        new JSONObject().put("text", str("What to remind them of, e.g. \"Call Mom\"."))
+                .put(tool("set_reminder", "Remind the boss of something at a date and time: a Sprocket notification pops up "
+                                + "then (no alarm rings). Use it for \"remind me\"; set_alarm only when they ask for an alarm.",
+                        new JSONObject().put("text", str("What to remind them of, in their words, e.g. \"Call Mom\" or \"Drugstore\"."))
                                 .put("at", str("Local date and time, YYYY-MM-DDTHH:MM.")), "text", "at"))
+                .put(tool("reminders", "List the reminders waiting, or cancel one by its number from the list.",
+                        new JSONObject().put("cancel", new JSONObject().put("type", "integer")
+                                .put("description", "The reminder's number to cancel; leave out to list them."))))
                 .put(tool("send_text", "Send a text message (SMS) from the boss's number. They see a card with the recipient "
                                 + "and the exact words and must tap Send; the result says whether it was sent or they cancelled. "
                                 + "Write the message as they would, plainly: never in Sprocket's voice unless they ask.",
@@ -71,6 +74,12 @@ final class PhoneTools {
                                 .put("start", str("YYYY-MM-DDTHH:MM, or YYYY-MM-DD for an all-day event."))
                                 .put("minutes", new JSONObject().put("type", "integer").put("description", "Length; default 60."))
                                 .put("location", str("Optional place.")), "title", "start"))
+                .put(tool("open_link", "Open a web address on the phone (https only). It opens in the app that owns the site "
+                                + "(a site saved to the home screen, like a store's web app) or else the browser. The fastest way to a "
+                                + "page whose address you know (they gave it, or you remembered it): one step instead of many taps, "
+                                + "e.g. a store's menu already sorted by price. Then read it with the screen tool. Never put their "
+                                + "personal details in an address.",
+                        new JSONObject().put("url", str("The full address, e.g. \"https://example.com/menu?sort=price\".")), "url"))
                 .put(tool("open_app", "Open an app on the phone by its name.",
                         new JSONObject().put("name", str("The app's name, e.g. \"Spotify\".")), "name"))
                 .put(tool("phone_control", "The flashlight, the media volume, the screen brightness, Do Not Disturb or the ringer.",
@@ -135,7 +144,7 @@ final class PhoneTools {
                 .put(tool("screen", "Use the phone's screen like a person, for apps and settings no other tool covers (use "
                                 + "the other tools first). read: a numbered list of what's on screen. tap / type: an item number "
                                 + "from the last read; tap with times presses the same button again and again in one step (a "
-                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. find: looks through the whole list for an item with these words (it does the scrolling, top to bottom, in one step): use it to look for something in a long menu or list, and trust what it says. look: a screenshot, for screens the list "
+                                + "quantity +, when the quantity isn't a box you can type in), up to 50. scroll up/down, back, home. find: looks through the whole list for an item with these words (it does the scrolling, top to bottom, in one step): use it to look for something in a long menu or list, and trust what it says. read_all: every row of a long list in one step (it scrolls top to bottom itself): use it to count, add up or compare things in a list (order history, spending, a long menu), never your own scrolling. For the cheapest or priciest thing, sort by price when the app can and read the top of the list instead. look: a screenshot, for screens the list "
                                 + "can't describe (maps, pictures); then tap_point at x, y in that picture, saying what you're tapping "
                                 + "(it asks them first only when it sounds risky). Each action returns the screen after it. Never "
                                 + "tell them something is on their screen unless you read it, or go_to returned it, in this "
@@ -151,7 +160,7 @@ final class PhoneTools {
                                 + "only they can turn it back on, in Settings or from the notice that follows.",
                         new JSONObject().put("action", new JSONObject().put("type", "string").put("enum",
                                         new JSONArray().put("read").put("tap").put("type").put("scroll").put("back").put("home")
-                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off").put("find")))
+                                                .put("look").put("tap_point").put("stay").put("note").put("switch_off").put("find").put("read_all")))
                                 .put("item", new JSONObject().put("type", "integer").put("description", "For tap and type: the item's number."))
                                 .put("times", new JSONObject().put("type", "integer").put("description", "For tap: press it this many times (default 1, at most 50)."))
                                 .put("text", str("For type: what to type. For note: the fact to save. For find: the words to look for (\"pickle spear\")."))
@@ -416,14 +425,56 @@ final class PhoneTools {
         }
     }
 
-    /** How a reminder is kept: "timer" (within 90 min), "alarm" (within a day: the Clock's alarms are times of day),
-     * "calendar" (later), or "past". */
-    static String route(long now, long when) {
-        long ahead = when - now;
-        if (ahead <= 0) return "past";
-        if (ahead <= 90 * 60 * 1000L) return "timer";
-        if (ahead < 24 * 3600 * 1000L) return "alarm";
-        return "calendar";
+    /** The same address with "www." added or taken off the host. */
+    static String otherWww(String u) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)^(https://)(www\\.)?(.*)$").matcher(u);
+        if (!m.matches()) return u;
+        return m.group(2) == null ? m.group(1) + "www." + m.group(3) : m.group(1) + m.group(3);
+    }
+
+    /** The app that owns a link's site: one that opens this link but not just any web address (browsers open any).
+     * Null when only browsers open it. */
+    static String siteApp(List<String> opensThisLink, List<String> opensAnyLink) {
+        for (String p : opensThisLink) if (!opensAnyLink.contains(p)) return p;
+        return null;
+    }
+
+    /** A web address open_link may open: https only (no app links, files or scripts), one line, a real host; a bare
+     * "example.com/x" gets https:// in front. Null when it isn't one. */
+    static String webLink(String url) {
+        if (url == null) return null;
+        String u = url.trim();
+        if (u.isEmpty() || u.length() > 2000 || u.matches("(?s).*\\s.*")) return null;
+        if (!u.matches("(?i)^[a-z][a-z0-9+.-]*:.*")) u = "https://" + u;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)^https://([a-z0-9-]+(\\.[a-z0-9-]+)+)(:\\d+)?([/?#].*)?$").matcher(u);
+        if (!m.matches()) return null;
+        return u;
+    }
+
+    /** Opens an app on the hidden screen only when it's up, the app isn't Sprocket, and the intent has no extras: the
+     * hidden screen's helper passes only the action, data and app, so extras (an alarm's time) would be lost. */
+    static boolean viaHiddenScreen(boolean hiddenUp, boolean ownApp, boolean hasExtras) {
+        return hiddenUp && !ownApp && !hasExtras;
+    }
+
+    /** When an alarm at h:m next rings from now: today if still ahead, else the next day it's on (Calendar days,
+     * 1 = Sunday; none = every day is fine, a one-time alarm). */
+    static long nextRing(long now, int h, int m, List<Integer> days, ZoneId z) {
+        java.time.ZonedDateTime t = java.time.Instant.ofEpochMilli(now).atZone(z).toLocalDate().atTime(h, m).atZone(z);
+        for (int i = 0; i < 9; i++) {
+            java.time.ZonedDateTime d = t.toLocalDate().plusDays(i).atTime(h, m).atZone(z);
+            int cal = d.getDayOfWeek().getValue() % 7 + 1;
+            if (d.toInstant().toEpochMilli() > now && (days.isEmpty() || days.contains(cal))) return d.toInstant().toEpochMilli();
+        }
+        return -1;
+    }
+
+    /** Did the Clock app save the alarm? "yes": the phone's next alarm is it (to the minute); "unsure": an earlier alarm
+     * comes first, so it can't be seen; "no": there's no alarm, or the next one is later than this one. */
+    static String alarmTaken(long want, long next) {
+        if (next >= 0 && Math.abs(next - want) < 60_000) return "yes";
+        if (next >= 0 && next < want) return "unsure";
+        return "no";
     }
 
     /** The digits of a phone number he said or typed (a leading + kept); null if it's a name. */

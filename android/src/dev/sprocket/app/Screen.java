@@ -139,13 +139,27 @@ final class Screen {
             "checkout", "check out",
             "subscribe", "transfer", "send money", "delete", "uninstall", "install", "remove", "erase", "factory reset",
             "reset phone", "sign out", "log out", "logout", "clear data", "clear storage", "format",
-            "send", "post", "publish", "submit", "call", "dial", "answer"};
+            "send", "post", "publish", "submit", "call", "dial", "answer",
+            // Codex 055b #1: cancelling an order or a booking, tips, and a bare "Confirm" (whatever it confirms)
+            "cancel order", "cancel my order", "cancel your order", "cancel this order", "cancel subscription",
+            "cancel membership", "cancel booking", "cancel reservation", "cancel ride", "cancel trip",
+            "tip", "add tip", "add to tip", "donate", "redeem", "confirm"};
+
+    /** A button that adds or gives money: "Add $2.00", "Tip $3" (Codex 055b #1). */
+    private static final java.util.regex.Pattern MONEY_BUTTON = java.util.regex.Pattern.compile(
+            "(?i)\\s*(add|tip|give|donate|top up|reload)\\b[^$]{0,20}\\$\\s*\\d.*");
 
     /** Buttons whose card shows the words about to go out. */
     private static final String[] SENDING_WORDS = {"send", "post", "publish", "submit"};
 
     /** True when tapping this needs his OK on a card first. */
-    static boolean risky(Item it) { return has(it, RISKY_WORDS); }
+    static boolean risky(Item it) {
+        return has(it, RISKY_WORDS) || (it != null && MONEY_BUTTON.matcher(it.label).matches() && !CART_ADD.matcher(it.label).matches());
+    }
+
+    /** "Add 42 to cart · $503.58": filling a cart isn't paying (the order button keeps its card). 11-20 practice: the
+     *  money rule caught it and every cart test came back empty. */
+    private static final java.util.regex.Pattern CART_ADD = java.util.regex.Pattern.compile("(?i).*\\b(cart|bag|basket|order|list)\\b.*");
 
     /** True when this button sends words (a message, a post): its card shows them. */
     static boolean sends(Item it) { return has(it, SENDING_WORDS); }
@@ -222,6 +236,20 @@ final class Screen {
     static String handsOffNotice(String when) {
         return "Screen control went off" + (when == null ? "" : " at " + when) + ". Tap here, then Installed apps > Sprocket: "
                 + "screen control, and switch it on.";
+    }
+
+    /**
+     * Children in the order a finger meets them: highest drawing order first, and of equal ones the later child (drawn
+     * after). 11-20 DoorDash: the search bar's part of the screen is drawn at 3 and the feed under it at 1, though the
+     * feed comes later in the list; going by list order made the search bar look covered.
+     */
+    static int[] topFirst(int[] drawingOrder) {
+        Integer[] idx = new Integer[drawingOrder.length];
+        for (int i = 0; i < idx.length; i++) idx[i] = i;
+        java.util.Arrays.sort(idx, (a, b) -> drawingOrder[a] != drawingOrder[b] ? Integer.compare(drawingOrder[b], drawingOrder[a]) : Integer.compare(b, a));
+        int[] out = new int[idx.length];
+        for (int i = 0; i < idx.length; i++) out[i] = idx[i];
+        return out;
     }
 
     /**
@@ -373,6 +401,105 @@ final class Screen {
         return "No “" + text + "” on this screen, and nothing on it scrolls, so this was NOT a look through a list or menu"
                 + " (it may be an item's own page). Don't tell them it isn't there: finish here, go back to the list or menu,"
                 + " and find it there.";
+    }
+
+    // ------------------------------------------------------------------ read_all: the whole list in one step (11-19)
+    /** Most rows read_all hands back (a long order history is a few hundred). */
+    static final int MAX_LIST_LINES = 400;
+
+    /** One screen's rows as plain lines, without numbers (they change as the list moves) or the scrolling list itself. */
+    static List<String> listLines(List<Item> items) {
+        List<String> out = new java.util.ArrayList<>();
+        for (Item it : items) { String l = line(it); if (l != null) out.add(l); }
+        return out;
+    }
+
+    /** One row as read_all lists it, or null for one it leaves out (the list itself, a password, an empty one). */
+    static String line(Item it) {
+        if (it.scrollable || it.password) return null;
+        String label = it.label.trim().replace('\n', ' ');
+        if (label.isEmpty() && it.value.isEmpty()) return null;
+        StringBuilder b = new StringBuilder(it.role);
+        if (!label.isEmpty()) b.append(" \"").append(label).append('"');
+        if (!it.value.isEmpty()) b.append(" (").append(it.value).append(')');
+        if (!it.enabled) b.append(" (greyed out)");
+        return b.toString();
+    }
+
+    /**
+     * Adds a screen's rows that haven't been seen yet, each known by its key: which row of the list it is (Android's
+     * row number for the list, or the row's own on-screen element), plus its words. So a header that stays put isn't
+     * counted twice, and two orders that look alike are still two (Codex 055 #5). keys[i] goes with items[i]. Returns
+     * how many rows were new: none after a scroll means the list didn't move.
+     */
+    static int mergeKeyed(List<String> acc, java.util.Set<String> seen, List<Item> items, List<String> keys) {
+        int added = 0;
+        for (int i = 0; i < items.size() && acc.size() < MAX_LIST_LINES; i++) {
+            String l = line(items.get(i));
+            if (l == null || !seen.add(keys.get(i) + "|" + l)) continue;
+            acc.add(l);
+            added++;
+        }
+        return added;
+    }
+
+    /**
+     * Adds the next screen's rows after the ones so far, dropping the rows the two screens share (a scroll overlaps: the
+     * bottom of one screen is the top of the next). The overlap is the longest run where the end of acc equals the
+     * start of next, so repeated rows ("Reorder" under every order) are kept.
+     */
+    static void mergeScreen(List<String> acc, List<String> next) {
+        int best = 0;
+        for (int k = Math.min(acc.size(), next.size()); k > 0; k--) {
+            if (acc.subList(acc.size() - k, acc.size()).equals(next.subList(0, k))) { best = k; break; }
+        }
+        for (int i = best; i < next.size() && acc.size() < MAX_LIST_LINES; i++) acc.add(next.get(i));
+    }
+
+    /**
+     * What read_all says (11-19 practice: asked what he'd spent on Eats in 30 days, the brain scrolled the order history
+     * itself, stopped one screen early with "(more below)" still showing, and said 17 orders for $417.45; it was 18 for
+     * $434.98). The code does the scrolling; the brain gets every row once, top to bottom.
+     */
+    static String wholeList(List<String> lines, int screens, boolean reachedEnd) { return wholeList(lines, screens, reachedEnd, false, true); }
+
+    /**
+     * stuck: the list still said "more below" but scrolling didn't move it. keyed (sure): every row had the app's own
+     * row number and the read started at the top; false = told apart by position or words only, so a row may be
+     * missing or doubled, and it says so rather than promising every row (Codex 055 #5, 056 #2).
+     */
+    static String wholeList(List<String> lines, int screens, boolean reachedEnd, boolean stuck, boolean keyed) {
+        StringBuilder b = new StringBuilder("The whole list, top to bottom (").append(screens).append(screens == 1 ? " screen" : " screens")
+                .append(stuck ? ", stopped: the list says there's more below but it wouldn't scroll further, so this may NOT be all of it"
+                        : reachedEnd ? ", to the end" : ", stopped before the end: more below")
+                .append("). ").append(keyed ? "Every row is here once."
+                        : "Sprocket couldn't be sure of every row (this app doesn't number its rows, or the top couldn't be "
+                        + "confirmed): a row may be missing or counted twice, so say a count or total is from what could be read.")
+                .append(" Count and add from these rows only, keeping just the ones that fit what he asked "
+                        + "(the dates, the place, not cancelled or refunded); work sums out step by step and check them before you say them.\n");
+        for (String l : lines) b.append("- ").append(l).append('\n');
+        if (lines.size() >= MAX_LIST_LINES) b.append("(stopped at ").append(MAX_LIST_LINES).append(" rows: there may be more)\n");
+        return b.toString();
+    }
+
+    /**
+     * What a scroll in a list adds (11-19 practice: with read_all in the tool's description, 9 of 10 spending questions
+     * still scrolled by hand, and one stopped 4 orders short: $350.06 instead of $434.98). "" off a list.
+     */
+    static String scrollNote(List<Item> items) {
+        if (!hasList(items)) return "";
+        return "\n(Scrolling shows one screen at a time. To count, add up or compare rows across a list, use read_all "
+                + "instead: it reads every row, top to bottom, in one step.)";
+    }
+
+    /**
+     * How to scroll up: "none" when the main list says nothing is above it (never drag then: at the top of a web page a
+     * drag down is pull-to-refresh, 11-20 a store's web app refreshed over and over); "action" (the list's own scroll
+     * back) when it says there's more above; "drag" only when there's no list that says either way.
+     */
+    static String upMove(boolean haveList, boolean listCanScrollUp) {
+        if (!haveList) return "drag";
+        return listCanScrollUp ? "action" : "none";
     }
 
     /** True while some list on the screen says it has more below. */

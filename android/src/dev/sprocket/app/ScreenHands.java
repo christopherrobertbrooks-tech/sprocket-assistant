@@ -221,7 +221,7 @@ public class ScreenHands extends AccessibilityService {
                     + "\", which changes something; go there with the screen tool instead");
         String out = "";
         int n = 0;
-        for (AppNotes.Step st : r.steps) {
+        for (AppNotes.Step st : AppNotes.withoutTrailingScrolls(r.steps)) {   // a way saved before 11-19 can end on a scroll
             n++;
             if (!st.kind.startsWith("open") && h.keyboardUp()) {   // 11-13: Gmail's search page kept it up over the menu's Spam
                 h.back();
@@ -350,8 +350,12 @@ public class ScreenHands extends AccessibilityService {
             case "read": return h.read();
             case "tap": return in.optInt("times", 1) > 1 ? h.tapTimes(in.optInt("item"), in.optInt("times")) : h.tap(in.optInt("item"));
             case "type": return h.type(in.optInt("item"), in.optString("text"));
-            case "scroll": return h.scroll(!"up".equals(in.optString("direction", "down")));
+            case "scroll": {
+                String sc = h.scroll(!"up".equals(in.optString("direction", "down")));
+                synchronized (ScreenHands.class) { return sc + Screen.scrollNote(lastItems); }
+            }
             case "find": return h.find(in.optString("text"));
+            case "read_all": return h.readAll();
             case "back": h.back(); return h.settleAndRead();
             case "home": h.home(); return h.settleAndRead();
             case "look": return h.look();
@@ -492,6 +496,7 @@ public class ScreenHands extends AccessibilityService {
         if (hit > 0) return "Found \u201c" + text + "\u201d: item " + hit + ".\n" + screen;
         if (!Screen.hasList(lastItems)) return Screen.findMiss(text, false) + "\n" + screen;
         for (int i = 0; i < 30; i++) {   // to the top first: what it's after may be above
+            if (atTop()) break;
             String before = Screen.describe("", lastItems);
             screen = scroll(false);
             if (Screen.describe("", lastItems).equals(before)) break;
@@ -505,6 +510,106 @@ public class ScreenHands extends AccessibilityService {
             if (Screen.describe("", lastItems).equals(before)) break;
         }
         return Screen.findMiss(text, true) + "\n" + screen;
+    }
+
+    /** The whole list in one step: back to the top, then down a screen at a time to the end (Screen.wholeList). */
+    private String readAll() throws Exception {
+        String screen = read();
+        if (!Screen.hasList(lastItems)) return "Nothing on this screen scrolls, so this screen is the whole of it.\n" + screen;
+        // to the top first; "didn't move" by the rows' keys too, so pages that look alike aren't taken for the top
+        // (Codex 056 #2); 30 tries without getting there: not sure it started at the top
+        boolean atTop = false;
+        for (int i = 0; i < 30; i++) {
+            if (atTop()) { atTop = true; screen = settleAndRead(); break; }
+            String before = where();
+            screen = scroll(false);
+            if (where().equals(before)) { atTop = true; break; }
+        }
+        java.util.List<String> rows = new java.util.ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        int screens = 0;
+        boolean end = false, stuck = false, keyed = listNode() != null;
+        // sure = every row had the app's own row number and it started at row 0: only then "every row once"
+        boolean sure = keyed && atTop;
+        for (int i = 0; i < 40; i++) {
+            int added;
+            if (keyed) {
+                java.util.List<Screen.Item> items = new java.util.ArrayList<>();
+                java.util.List<String> keys = new java.util.ArrayList<>();
+                if (!listRows(items, keys)) sure = false;   // the app doesn't number its rows: told apart by position only
+                if (i == 0 && !keys.isEmpty() && keys.get(0).startsWith("row") && keys.stream().noneMatch(x -> x.startsWith("row0."))) sure = false;   // row 0 not on show: not the top
+                added = Screen.mergeKeyed(rows, seen, items, keys);
+            } else {
+                int was = rows.size();
+                Screen.mergeScreen(rows, Screen.listLines(lastItems));
+                added = rows.size() - was;
+            }
+            screens++;
+            if (i > 0 && added == 0 && keyed) { stuck = Screen.moreBelow(lastItems); end = !stuck; screens--; break; }   // didn't move
+            if (!Screen.moreBelow(lastItems)) { end = true; break; }
+            if (rows.size() >= Screen.MAX_LIST_LINES) break;
+            String before = Screen.describe("", lastItems);
+            screen = scroll(true);
+            if (!keyed && Screen.describe("", lastItems).equals(before)) { stuck = Screen.moreBelow(lastItems); end = !stuck; break; }
+        }
+        return Screen.wholeList(rows, screens, end, stuck, sure) + "\nWhere it ended (the bottom):\n" + screen;
+    }
+
+    /** What's on show, with each list row's key: the same only when the list really didn't move. */
+    private String where() {
+        java.util.List<Screen.Item> items = new java.util.ArrayList<>();
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        listRows(items, keys);
+        return Screen.describe("", lastItems) + "|" + String.join(",", keys);
+    }
+
+    /** The biggest scrolling list on the last read, or null. */
+    private AccessibilityNodeInfo listNode() {
+        AccessibilityNodeInfo best = null;
+        long area = -1;
+        for (int i = 0; i < lastItems.size() && i < lastNodes.size(); i++) {
+            if (!lastItems.get(i).scrollable) continue;
+            Rect r = new Rect();
+            lastNodes.get(i).getBoundsInScreen(r);
+            long a = (long) r.width() * r.height();
+            if (a > area) { area = a; best = lastNodes.get(i); }
+        }
+        return best;
+    }
+
+    /**
+     * The last read's items that are inside the scrolling list (not the toolbar or buttons around it), each with the key
+     * of the row it belongs to: Android's row number for the list when the app gives one, else the item's own element,
+     * which stays the same while it scrolls (Codex 055 #5). True when every row had the app's row number, or the list is a
+     * plain scrolling page (it never reuses row views); false means the element's own key, which an app that reuses its
+     * row views may give to different rows (Codex 056 #2).
+     */
+    private boolean listRows(java.util.List<Screen.Item> items, java.util.List<String> keys) {
+        AccessibilityNodeInfo list = listNode();
+        if (list == null) return false;
+        boolean numbered = true;
+        for (int i = 0; i < lastItems.size() && i < lastNodes.size(); i++) {
+            AccessibilityNodeInfo n = lastNodes.get(i);
+            if (n.equals(list)) continue;
+            String row = null;
+            boolean inside = false;
+            AccessibilityNodeInfo c = n;
+            for (int depth = 0; c != null && depth < 40; depth++) {
+                AccessibilityNodeInfo.CollectionItemInfo ci = c.getCollectionItemInfo();
+                if (row == null && ci != null) row = "row" + ci.getRowIndex() + "." + ci.getColumnIndex();
+                AccessibilityNodeInfo p = c.getParent();
+                if (p != null && p.equals(list)) { inside = true; break; }
+                c = p;
+            }
+            if (!inside) continue;
+            items.add(lastItems.get(i));
+            keys.add(row != null ? row : "node" + n.hashCode());
+            if (row == null) numbered = false;
+        }
+        // a plain scrolling page (ScrollView) never reuses its row views, so each element is one row for good
+        CharSequence cls = list.getClassName();
+        boolean plainPage = cls != null && cls.toString().endsWith("ScrollView");
+        return (numbered || plainPage) && !items.isEmpty();
     }
 
     /**
@@ -707,11 +812,29 @@ public class ScreenHands extends AccessibilityService {
         return settleAndRead();
     }
 
-    /** A finger swipe up the middle of the screen (works in every app); the list's own scroll action if that fails. */
+    /**
+     * Down: a finger swipe up the middle of the screen (works in every app); the list's own scroll action if that fails.
+     * Up: the list's own "scroll back" action, and no move at all when the list says nothing is above. A finger dragged
+     * down at the top of a web page is pull-to-refresh (11-20, a store's web app: it "keeps dragging down on the screen
+     * making it refresh repeatedly"); a drag is only the last resort, for a list that doesn't say.
+     */
     private String scroll(boolean down) throws Exception {
         if (Screen.blockedApp(nowPackage())) throw new Exception("that app is off limits to Sprocket (money or passwords)");   // Codex 041
         int w = getResources().getDisplayMetrics().widthPixels, h = getResources().getDisplayMetrics().heightPixels;
-        boolean done = down ? gesture(w / 2, h * 7 / 10, w / 2, h * 3 / 10, 400) : gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
+        boolean done;
+        if (down) done = gesture(w / 2, h * 7 / 10, w / 2, h * 3 / 10, 400);
+        else {
+            AccessibilityNodeInfo root = root(), list = root == null ? null : biggestScrollable(root, null, 0);
+            switch (Screen.upMove(list != null, list != null && offers(list, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD))) {
+                case "none": return "Already at the top: nothing above.\n" + settleAndRead();
+                case "action":
+                    done = list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                            || gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
+                    break;
+                default: done = gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
+            }
+            if (done) { Thread.sleep(400); return settleAndRead(); }
+        }
         if (!done) {
             AccessibilityNodeInfo root = root();
             AccessibilityNodeInfo best = root == null ? null : biggestScrollable(root, null, 0);
@@ -720,6 +843,17 @@ public class ScreenHands extends AccessibilityService {
         if (!done) throw new Exception("couldn't scroll");
         Thread.sleep(400);   // a fling keeps moving for a moment
         return settleAndRead();
+    }
+
+    private static boolean offers(AccessibilityNodeInfo n, int action) {
+        for (AccessibilityNodeInfo.AccessibilityAction a : n.getActionList()) if (a.getId() == action) return true;
+        return false;
+    }
+
+    /** At the top: the main list is there and says nothing is above it. A list that doesn't say isn't taken as the top. */
+    private boolean atTop() {
+        AccessibilityNodeInfo root = root(), list = root == null ? null : biggestScrollable(root, null, 0);
+        return Screen.upMove(list != null, list != null && offers(list, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)).equals("none");
     }
 
     private AccessibilityNodeInfo biggestScrollable(AccessibilityNodeInfo n, AccessibilityNodeInfo best, int depth) {
@@ -779,6 +913,10 @@ public class ScreenHands extends AccessibilityService {
             android.util.Log.i("PA-REPLY", "CARD " + text.replace('\n', ' ') + " -> " + auto);
             Hands.practiceCard(text, auto);
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> { answer.set(auto.equals("yes")); done.countDown(); }, 2000);
+        }
+        if (auto == null && MainActivity.scheduledRun()) {   // a scheduled task: he isn't watching, so a notification asks
+            takeDown.run();
+            return ScheduleService.ask(text, yes);
         }
         boolean answered = done.await(CARD_WAIT_S, TimeUnit.SECONDS);
         takeDown.run();
@@ -1166,7 +1304,7 @@ public class ScreenHands extends AccessibilityService {
         Rect r = new Rect();
         n.getBoundsInScreen(r);
         if (!r.contains(x, y)) return null;
-        for (int i = n.getChildCount() - 1; i >= 0; i--) {   // the last child is drawn on top
+        for (int i : drawnTopFirst(n)) {   // what's drawn on top first (11-20 DoorDash: by drawing order, not list order)
             AccessibilityNodeInfo hit = topAt(n.getChild(i), x, y, depth + 1);
             if (hit != null) return hit;
         }
@@ -1176,12 +1314,23 @@ public class ScreenHands extends AccessibilityService {
         return seen ? n : null;
     }
 
+    /** A node's children, the one drawn on top first: Android's own drawing order (an app's floating search bar is
+     * early in the list but raised above the feed scrolling under it: 11-20 DoorDash's taps were refused as covered). */
+    private static int[] drawnTopFirst(AccessibilityNodeInfo n) {
+        int[] order = new int[n.getChildCount()];
+        for (int i = 0; i < order.length; i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+            order[i] = c == null ? 0 : c.getDrawingOrder();
+        }
+        return Screen.topFirst(order);
+    }
+
     private static AccessibilityNodeInfo deepestAt(AccessibilityNodeInfo n, int x, int y, int depth) {
         if (n == null || depth > 40 || !n.isVisibleToUser()) return null;
         Rect r = new Rect();
         n.getBoundsInScreen(r);
         if (!r.contains(x, y)) return null;
-        for (int i = n.getChildCount() - 1; i >= 0; i--) {   // the last child is drawn on top
+        for (int i : drawnTopFirst(n)) {
             AccessibilityNodeInfo hit = deepestAt(n.getChild(i), x, y, depth + 1);
             if (hit != null) return hit;
         }

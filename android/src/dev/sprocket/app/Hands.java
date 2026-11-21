@@ -55,15 +55,17 @@ final class Hands {
 
     /** Worker thread: shows the card and waits for his tap. true = yes, false = cancelled, null = no answer. */
     static Boolean confirm(String text, String yes) throws InterruptedException {
-        Card c = new Card(text, yes);
-        card = c;
-        redraw();
         // a card answers itself only in a self-test against the stand-in: never when the real API is in use
         String auto = MainActivity.standIn() ? autoAnswer : null;
         if (auto == null && testCards != null && MainActivity.appContext().getPackageName().endsWith(".test")) {
             auto = testCards;
             android.util.Log.i("PA-REPLY", "CARD " + text.replace('\n', ' ') + " -> " + auto);
         }
+        // he isn't watching: a notification asks, and no card is put up that couldn't answer it (Codex 055 #3)
+        if (auto == null && MainActivity.scheduledRun()) return ScheduleService.ask(text, yes);
+        Card c = new Card(text, yes);
+        card = c;
+        redraw();
         if (auto != null) practiceCard(text, auto);
         final String answerWith = auto;
         if (answerWith != null) onMain(() -> new Handler(Looper.getMainLooper()).postDelayed(() -> answer(c, answerWith.equals("yes")), 3000));

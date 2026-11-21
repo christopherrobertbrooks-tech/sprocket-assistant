@@ -224,11 +224,22 @@ final class AppNotes {
         return null;
     }
 
-    /** The steps the choice names, in its order. */
+    /** The steps the choice names, in its order, never ending on a scroll (withoutTrailingScrolls). */
     static List<Step> pick(List<Step> trail, List<Integer> numbers) {
         List<Step> out = new ArrayList<>();
         for (int k : numbers) out.add(trail.get(k - 1));
-        return out;
+        return withoutTrailingScrolls(out);
+    }
+
+    /**
+     * A way to a place never ends on a scroll: a scroll isn't a place (11-19 practice: "Eats: open the app Eats > tap
+     * \"Your orders\" > scroll down" was replayed, the list sat halfway down, and the spending total left out the two
+     * newest orders). Also applied to ways saved before, when they're replayed.
+     */
+    static List<Step> withoutTrailingScrolls(List<Step> steps) {
+        int end = steps.size();
+        while (end > 0 && steps.get(end - 1).kind.equals("scroll")) end--;
+        return new ArrayList<>(steps.subList(0, end));
     }
 
     /** True when steps are the first part of (and shorter than) whole: the same way, stopped early. */

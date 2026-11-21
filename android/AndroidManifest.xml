@@ -31,11 +31,14 @@
     <!-- the morning brief: at 6:00 exactly (his "Alarms & reminders" switch), set again after a restart -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <queries>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <!-- open_link (11-20): which apps open a web address, to prefer a site's own web app over the browser -->
+        <intent><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="https" /></intent>
     </queries>
     <application android:label="Sprocket" android:icon="@mipmap/ic_launcher" android:theme="@style/SprocketTheme"
         android:allowBackup="false" android:networkSecurityConfig="@xml/network_security_config">
@@ -91,6 +94,25 @@
         <service android:name=".ResearchService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".FeedService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".StudioService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <!-- scheduled tasks (11-19): the alarm, its Yes / No buttons, and the runner -->
+        <service android:name=".ScheduleService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <receiver android:name=".ScheduleAlarm" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <!-- reminders (11-20): "remind me" as a Sprocket notification at the time -->
+        <receiver android:name=".ReminderAlarm" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".FeedAlarm" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

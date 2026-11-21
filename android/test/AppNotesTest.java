@@ -101,6 +101,14 @@ public class AppNotesTest {
         eq("no steps", AppNotes.choice("x |", 6), null);
         eq("its thinking left out, quotes too", AppNotes.choice("<think>ok</think>\"Spam | 1,2\"", 6).goal, "Spam");
 
+        {   // 11-19 practice: "Your orders > scroll down" was replayed and the spending total missed the newest orders
+            java.util.List<AppNotes.Step> eats = java.util.Arrays.asList(AppNotes.Step.open("open_app", "Eats"),
+                    AppNotes.Step.tap("Eats", "Your orders"), AppNotes.Step.scroll("Eats", "down"), AppNotes.Step.scroll("Eats", "down"));
+            eq("a saved way never ends on a scroll", AppNotes.pick(eats, java.util.Arrays.asList(1, 2, 3, 4)).size(), 2);
+            eq("an old way ending on scrolls is trimmed for replay", AppNotes.withoutTrailingScrolls(eats).get(1).said(), "tap \"Your orders\"");
+            eq("a scroll in the middle stays (it may be how to reach a button)", AppNotes.withoutTrailingScrolls(
+                    java.util.Arrays.asList(eats.get(0), eats.get(2), eats.get(1))).size(), 3);
+        }
         AppNotes r = new AppNotes();
         eq("route saved", r.learnRoute("com.google.android.gm", "Gmail", ch.goal, AppNotes.pick(trail, ch.steps), 10),
                 "Noted for Gmail: Gmail spam folder: open the app Gmail > tap \"Open navigation drawer\" > scroll down > tap \"Spam, 246\"");

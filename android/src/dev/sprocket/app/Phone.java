@@ -67,6 +67,7 @@ final class Phone {
                 return alarm(c, t[0], t[1], in.optString("label"), PhoneTools.days(in.optJSONArray("repeat_days")));
             }
             case "set_reminder": return reminder(c, in.optString("text"), in.optString("at"));
+            case "reminders": return reminders(c, in.has("cancel") ? in.optInt("cancel", -1) : -1);
             case "send_text": return text(c, in.optString("to"), in.optString("message"));
             case "call": return call(c, in.optString("to"));
             case "find_contact": return findContact(c, in.optString("name"));
@@ -78,6 +79,7 @@ final class Phone {
                         in.optInt("minutes", 60), in.optString("location"), false);
             }
             case "open_app": return openApp(c, in.optString("name"));
+            case "open_link": return openLink(c, in.optString("url"));
             case "phone_control": return control(c, in);
             case "phone_status": return status(c);
             case "media": return media(c, in.optString("command"), in.optString("query"));
@@ -94,7 +96,9 @@ final class Phone {
     }
 
     private static void start(Context c, Intent i) throws Exception {
-        if (BgScreen.on() && !c.getPackageName().equals(i.getPackage())) {   // the hidden screen: open it there
+        // the hidden screen: open it there, but only an intent without extras: its helper passes only the action,
+        // data and app, so an alarm's time and label were lost and the Clock saved nothing (11-20, "no alarm")
+        if (PhoneTools.viaHiddenScreen(BgScreen.on(), c.getPackageName().equals(i.getPackage()), i.getExtras() != null && !i.getExtras().isEmpty())) {
             BgScreen.start(i);
             return;
         }
@@ -133,27 +137,53 @@ final class Phone {
                 .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
         if (!label.isEmpty()) i.putExtra(AlarmClock.EXTRA_MESSAGE, label);
         if (!days.isEmpty()) i.putExtra(AlarmClock.EXTRA_DAYS, new ArrayList<>(days));
+        long want = PhoneTools.nextRing(System.currentTimeMillis(), h, m, days, ZoneId.systemDefault());
         start(c, i);
+        // the Clock app answers nothing back: the phone's next alarm says whether it was saved (11-20: "Set" was
+        // said and no alarm existed)
+        AlarmManager am = c.getSystemService(AlarmManager.class);
+        String took = "no";
+        for (int k = 0; k < 20; k++) {
+            AlarmManager.AlarmClockInfo next = am.getNextAlarmClock();
+            took = PhoneTools.alarmTaken(want, next == null ? -1 : next.getTriggerTime());
+            if (took.equals("yes")) break;
+            Thread.sleep(250);
+        }
+        if (took.equals("no")) throw new Exception("the Clock app didn't save the alarm, so no alarm is set (Android may have "
+                + "stopped Sprocket opening it); say so plainly");
         StringBuilder rep = new StringBuilder();
         for (int d : days) rep.append(rep.length() > 0 ? ", " : "").append(PhoneTools.DAY_NAMES[d - 1].substring(0, 3));
         String what = "Alarm: " + clock(h, m) + (label.isEmpty() ? "" : ", " + label) + (days.isEmpty() ? "" : " (every " + rep + ")");
         Hands.record(what, UndoLog.SCREEN, null, null);
-        return what + " (set in the Clock app).";
+        return what + (took.equals("yes") ? " (set in the Clock app, checked)." : " (sent to the Clock app; an earlier alarm "
+                + "comes first, so it couldn't be checked).");
     }
 
+    /** A Sprocket notification at the time (11-20: the owner wanted a reminder, not an alarm, and the Clock app
+     * never got the alarm). Kept in reminders.json; ReminderAlarm shows it, even after a restart. */
     private static String reminder(Context c, String text, String at) throws Exception {
-        ZoneId z = ZoneId.systemDefault();
-        long when = PhoneTools.at(at, z), now = System.currentTimeMillis();
-        if (when < 0) throw new Exception("the time must be YYYY-MM-DDTHH:MM");
-        switch (PhoneTools.route(now, when)) {
-            case "past": throw new Exception("that time has already passed");
-            case "timer": return timer(c, (int) Math.round((when - now) / 1000.0), text) + " It rings then, as a reminder.";
-            case "alarm": {
-                LocalDateTime t = LocalDateTime.ofInstant(Instant.ofEpochMilli(when), z);
-                return alarm(c, t.getHour(), t.getMinute(), text, new ArrayList<>()) + " It rings then, as a reminder.";
-            }
-            default: return addEvent(c, text, when, false, 15, "", true);
-        }
+        LocalDateTime now = LocalDateTime.now();
+        Reminders.Item r;
+        synchronized (MainActivity.reminders) { r = MainActivity.reminders.add(text, at, now); }
+        MainActivity.saveReminders();
+        ReminderAlarm.schedule(c);
+        String what = "Reminder #" + r.id + ": " + Reminders.when(r.at, now) + ", " + r.text;
+        Hands.record(what, UndoLog.SCREEN, null, null);
+        return what + " (a Sprocket notification at that time" + (FeedAlarm.exact(c) ? "" : "; it may be a few minutes late "
+                + "because \"Alarms & reminders\" is off for Sprocket") + ").";
+    }
+
+    private static String reminders(Context c, int cancel) throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        if (cancel < 0) { synchronized (MainActivity.reminders) { return MainActivity.reminders.list(now); } }
+        Reminders.Item r;
+        synchronized (MainActivity.reminders) { r = MainActivity.reminders.cancel(cancel); }
+        if (r == null) throw new Exception("there's no reminder #" + cancel);
+        MainActivity.saveReminders();
+        ReminderAlarm.schedule(c);
+        String what = "Cancelled reminder #" + r.id + " (" + Reminders.when(r.at, now) + ", " + r.text + ")";
+        Hands.record(what, UndoLog.SCREEN, null, null);
+        return what + ".";
     }
 
     // ---------------------------------------------------------------- contacts, texts, calls
@@ -385,6 +415,34 @@ final class Phone {
 
     // ---------------------------------------------------------------- apps and settings (the earlier test app's ways)
     private static String norm(String t) { return t.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", ""); }
+
+    /** A web address, in the app that owns the site (a home-screen web app takes its own links) or the browser
+     * (11-20: a store web app's menu sorted by price is one address; tapping there took Sprocket minutes). */
+    private static String openLink(Context c, String url) throws Exception {
+        String u = PhoneTools.webLink(url);
+        if (u == null) throw new Exception("that isn't a web address Sprocket opens (https only)");
+        Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addCategory(Intent.CATEGORY_BROWSABLE);
+        // the site's own app (a home-screen web app, where the boss is logged in) over the browser: 11-20 a store's link
+        // opened in Firefox, logged out, because Firefox was the default browser.
+        // A web app claims one spelling of its site (11-20: a store's web app took only the www. name, not the bare
+        // one), so the other spelling is tried too
+        PackageManager pm = c.getPackageManager();
+        List<String> forAny = new ArrayList<>();
+        Intent any = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com/")).addCategory(Intent.CATEGORY_BROWSABLE);
+        for (ResolveInfo r : pm.queryIntentActivities(any, PackageManager.MATCH_ALL)) forAny.add(r.activityInfo.packageName);
+        for (String cand : new String[]{u, PhoneTools.otherWww(u)}) {
+            Intent t = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(cand)).addCategory(Intent.CATEGORY_BROWSABLE);
+            List<String> forLink = new ArrayList<>();
+            for (ResolveInfo r : pm.queryIntentActivities(t, PackageManager.MATCH_ALL)) forLink.add(r.activityInfo.packageName);
+            String own = PhoneTools.siteApp(forLink, forAny);
+            if (own != null) { i = t.setPackage(own); u = cand; break; }
+        }
+        start(c, i);
+        Thread.sleep(2500);   // the page loads; the screen tool reads it next
+        String where = android.net.Uri.parse(u).getHost();
+        Hands.record("Opened " + where);
+        return "Opened " + u + ". Read it with the screen tool (it may still be loading).";
+    }
 
     private static String openApp(Context c, String name) throws Exception {
         PackageManager pm = c.getPackageManager();

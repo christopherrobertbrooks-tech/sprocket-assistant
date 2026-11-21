@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI as a brain (Chris 11-15: "so nobody with an openai account can use sprocket?"). Sprocket speaks Anthropic's
+ * OpenAI as a brain (11-15). Sprocket speaks Anthropic's
  * Messages API; OpenAI's newer models only take tools with thinking on its Responses API (chat completions refuse:
  * "Function tools with reasoning_effort are not supported"). So this turns Sprocket's request into a Responses
  * request, and OpenAI's streamed answer back into the Messages stream events Claude.Stream already reads: the voice,
