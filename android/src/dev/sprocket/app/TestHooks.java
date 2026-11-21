@@ -116,6 +116,9 @@ final class TestHooks {
             MainActivity.appNotes = new AppNotes(); MainActivity.saveAppNotes();
             synchronized (MainActivity.schedules) { MainActivity.schedules = new Schedules(); }
             MainActivity.saveSchedules();
+            synchronized (MainActivity.reminders) { MainActivity.reminders = new Reminders(); }
+            MainActivity.saveReminders();
+            ReminderAlarm.schedule(host);
             // an earlier test's answer notification can't pass this test's check (Codex 055 #6)
             ((android.app.NotificationManager) host.getSystemService(android.content.Context.NOTIFICATION_SERVICE)).cancelAll();
             File cardLog = new File(host.getExternalFilesDir(null), "cards.txt");

@@ -67,6 +67,7 @@ final class Phone {
                 return alarm(c, t[0], t[1], in.optString("label"), PhoneTools.days(in.optJSONArray("repeat_days")));
             }
             case "set_reminder": return reminder(c, in.optString("text"), in.optString("at"));
+            case "reminders": return reminders(c, in.has("cancel") ? in.optInt("cancel", -1) : -1);
             case "send_text": return text(c, in.optString("to"), in.optString("message"));
             case "call": return call(c, in.optString("to"));
             case "find_contact": return findContact(c, in.optString("name"));
@@ -94,7 +95,9 @@ final class Phone {
     }
 
     private static void start(Context c, Intent i) throws Exception {
-        if (BgScreen.on() && !c.getPackageName().equals(i.getPackage())) {   // the hidden screen: open it there
+        // the hidden screen: open it there, but only an intent without extras: its helper passes only the action,
+        // data and app, so an alarm's time and label were lost and the Clock saved nothing (11-20, "no alarm")
+        if (PhoneTools.viaHiddenScreen(BgScreen.on(), c.getPackageName().equals(i.getPackage()), i.getExtras() != null && !i.getExtras().isEmpty())) {
             BgScreen.start(i);
             return;
         }
@@ -133,27 +136,53 @@ final class Phone {
                 .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
         if (!label.isEmpty()) i.putExtra(AlarmClock.EXTRA_MESSAGE, label);
         if (!days.isEmpty()) i.putExtra(AlarmClock.EXTRA_DAYS, new ArrayList<>(days));
+        long want = PhoneTools.nextRing(System.currentTimeMillis(), h, m, days, ZoneId.systemDefault());
         start(c, i);
+        // the Clock app answers nothing back: the phone's next alarm says whether it was saved (11-20: "Set" was
+        // said and no alarm existed)
+        AlarmManager am = c.getSystemService(AlarmManager.class);
+        String took = "no";
+        for (int k = 0; k < 20; k++) {
+            AlarmManager.AlarmClockInfo next = am.getNextAlarmClock();
+            took = PhoneTools.alarmTaken(want, next == null ? -1 : next.getTriggerTime());
+            if (took.equals("yes")) break;
+            Thread.sleep(250);
+        }
+        if (took.equals("no")) throw new Exception("the Clock app didn't save the alarm, so no alarm is set (Android may have "
+                + "stopped Sprocket opening it); say so plainly");
         StringBuilder rep = new StringBuilder();
         for (int d : days) rep.append(rep.length() > 0 ? ", " : "").append(PhoneTools.DAY_NAMES[d - 1].substring(0, 3));
         String what = "Alarm: " + clock(h, m) + (label.isEmpty() ? "" : ", " + label) + (days.isEmpty() ? "" : " (every " + rep + ")");
         Hands.record(what, UndoLog.SCREEN, null, null);
-        return what + " (set in the Clock app).";
+        return what + (took.equals("yes") ? " (set in the Clock app, checked)." : " (sent to the Clock app; an earlier alarm "
+                + "comes first, so it couldn't be checked).");
     }
 
+    /** A Sprocket notification at the time (11-20: the owner wanted a reminder, not an alarm, and the Clock app
+     * never got the alarm). Kept in reminders.json; ReminderAlarm shows it, even after a restart. */
     private static String reminder(Context c, String text, String at) throws Exception {
-        ZoneId z = ZoneId.systemDefault();
-        long when = PhoneTools.at(at, z), now = System.currentTimeMillis();
-        if (when < 0) throw new Exception("the time must be YYYY-MM-DDTHH:MM");
-        switch (PhoneTools.route(now, when)) {
-            case "past": throw new Exception("that time has already passed");
-            case "timer": return timer(c, (int) Math.round((when - now) / 1000.0), text) + " It rings then, as a reminder.";
-            case "alarm": {
-                LocalDateTime t = LocalDateTime.ofInstant(Instant.ofEpochMilli(when), z);
-                return alarm(c, t.getHour(), t.getMinute(), text, new ArrayList<>()) + " It rings then, as a reminder.";
-            }
-            default: return addEvent(c, text, when, false, 15, "", true);
-        }
+        LocalDateTime now = LocalDateTime.now();
+        Reminders.Item r;
+        synchronized (MainActivity.reminders) { r = MainActivity.reminders.add(text, at, now); }
+        MainActivity.saveReminders();
+        ReminderAlarm.schedule(c);
+        String what = "Reminder #" + r.id + ": " + Reminders.when(r.at, now) + ", " + r.text;
+        Hands.record(what, UndoLog.SCREEN, null, null);
+        return what + " (a Sprocket notification at that time" + (FeedAlarm.exact(c) ? "" : "; it may be a few minutes late "
+                + "because \"Alarms & reminders\" is off for Sprocket") + ").";
+    }
+
+    private static String reminders(Context c, int cancel) throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        if (cancel < 0) { synchronized (MainActivity.reminders) { return MainActivity.reminders.list(now); } }
+        Reminders.Item r;
+        synchronized (MainActivity.reminders) { r = MainActivity.reminders.cancel(cancel); }
+        if (r == null) throw new Exception("there's no reminder #" + cancel);
+        MainActivity.saveReminders();
+        ReminderAlarm.schedule(c);
+        String what = "Cancelled reminder #" + r.id + " (" + Reminders.when(r.at, now) + ", " + r.text + ")";
+        Hands.record(what, UndoLog.SCREEN, null, null);
+        return what + ".";
     }
 
     // ---------------------------------------------------------------- contacts, texts, calls

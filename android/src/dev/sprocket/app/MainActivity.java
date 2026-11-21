@@ -67,6 +67,7 @@ public class MainActivity extends Activity {
     static AppNotes appNotes;                  // app memory for screen control (files/app-notes.json)
     static Goals goals;                        // what he's working toward (files/goals.json)
     static Schedules schedules = new Schedules();   // scheduled tasks (files/schedules.json; ScheduleService runs them)
+    static Reminders reminders = new Reminders();   // reminders (files/reminders.json; ReminderAlarm shows them)
     /** A scheduled task is the question now being answered: quiet (no voice), its cards ask by notification. */
     private static volatile boolean scheduled;
     private static java.util.function.BiConsumer<String, String> scheduledDone;
@@ -161,6 +162,7 @@ public class MainActivity extends Activity {
         undoLog = UndoLog.fromJson(read("undo.json"));
         tv = Tv.load(read("tv.json"));
         schedules = Schedules.load(read("schedules.json"));
+        reminders = Reminders.load(read("reminders.json"));
         Phone.watchTorch(app);                  // the flashlight's real state, for undo
         feed = Feed.fromJson(read("feed.json"));
         FeedService.channels(app);
@@ -169,6 +171,7 @@ public class MainActivity extends Activity {
             try { FeedAlarm.schedule(app); } catch (Exception e) { android.util.Log.w("Sprocket", "brief alarm: " + e); }
         ScheduleService.channels(app);
         try { ScheduleAlarm.schedule(app); } catch (Exception e) { android.util.Log.w("Sprocket", "scheduled alarm: " + e); }
+        try { ReminderAlarm.schedule(app); } catch (Exception e) { android.util.Log.w("Sprocket", "reminder alarm: " + e); }
         Claude.photos = name -> Photo.base64(app, name);
         VoiceOut.get(app);
     }
@@ -238,6 +241,12 @@ public class MainActivity extends Activity {
     }
 
     static boolean scheduledRun() { return scheduled; }
+
+    static void saveReminders() {
+        try { synchronized (reminders) { write("reminders.json", reminders.toJson().toString()); } }
+        catch (Exception e) { android.util.Log.w("Sprocket", "reminders: " + e); }
+        exportForPractice();
+    }
 
     static void saveSchedules() {
         try { synchronized (schedules) { write("schedules.json", schedules.toJson().toString()); } }
@@ -1642,7 +1651,8 @@ public class MainActivity extends Activity {
         if (!app.getPackageName().endsWith(".test")) return;
         File out = app.getExternalFilesDir(null);
         if (out == null) return;
-        for (File f : new File[]{listsFile(), memoryFile(), new File(app.getFilesDir(), "schedules.json")}) {
+        for (File f : new File[]{listsFile(), memoryFile(), new File(app.getFilesDir(), "schedules.json"),
+                new File(app.getFilesDir(), "reminders.json")}) {
             try {
                 byte[] b = f.exists() ? java.nio.file.Files.readAllBytes(f.toPath()) : "{}".getBytes();
                 java.nio.file.Files.write(new File(out, f.getName()).toPath(), b);

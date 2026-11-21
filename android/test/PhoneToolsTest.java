@@ -20,7 +20,7 @@ public class PhoneToolsTest {
         JSONArray defs = PhoneTools.definitions();
         StringBuilder names = new StringBuilder();
         for (int i = 0; i < defs.length(); i++) names.append(i > 0 ? " " : "").append(defs.getJSONObject(i).getString("name"));
-        eq("the everyday set, then the rest of the earlier test app's", names, "set_timer set_alarm set_reminder send_text call find_contact "
+        eq("the everyday set, then the rest of the earlier test app's", names, "set_timer set_alarm set_reminder reminders send_text call find_contact "
                 + "check_calendar add_event open_app phone_control phone_status media maps open_screen clock_control missed_calls "
                 + "email add_contact share_location go_to screen");
         for (int i = 0; i < defs.length(); i++) {
@@ -50,14 +50,30 @@ public class PhoneToolsTest {
         eq("a bad time", PhoneTools.hhmm("6pm"), null);
         eq("a bad hour", PhoneTools.hhmm("25:00"), null);
 
-        // a reminder: soon = a labelled timer, within a day = a labelled alarm, later = a calendar entry with an alert
+        // a reminder is a Sprocket notification now, never the Clock (11-20: the owner wanted "a reminder and not an alarm")
         ZoneId z = ZoneId.of("America/Chicago");
-        long now = LocalDateTime.of(2026, 10, 17, 9, 0).atZone(z).toInstant().toEpochMilli();
-        eq("in 20 minutes", PhoneTools.route(now, PhoneTools.at("2026-10-17T09:20", z)), "timer");
-        eq("tonight at 6", PhoneTools.route(now, PhoneTools.at("2026-10-17T18:00", z)), "alarm");
-        eq("tomorrow at 8", PhoneTools.route(now, PhoneTools.at("2026-10-18T08:00", z)), "alarm");
-        eq("next week", PhoneTools.route(now, PhoneTools.at("2026-10-24T08:00", z)), "calendar");
-        eq("already past", PhoneTools.route(now, PhoneTools.at("2026-10-17T08:00", z)), "past");
+        eq("set_reminder says it's a notification, not an alarm", desc(defs, "set_reminder").contains("notification") && desc(defs, "set_reminder").contains("no alarm rings"), true);
+
+        // the hidden screen's helper passes no extras: an alarm (time, label) never goes through it (11-20: "no alarm")
+        eq("an alarm with the hidden screen up opens normally", PhoneTools.viaHiddenScreen(true, false, true), false);
+        eq("a plain app with the hidden screen up opens there", PhoneTools.viaHiddenScreen(true, false, false), true);
+        eq("hidden screen down: normal", PhoneTools.viaHiddenScreen(false, false, false), false);
+        eq("Sprocket itself: normal", PhoneTools.viaHiddenScreen(true, true, false), false);
+
+        // when an alarm rings next, and whether the Clock app saved it
+        long three = LocalDateTime.of(2026, 11, 20, 15, 0).atZone(z).toInstant().toEpochMilli();   // Friday 3 pm
+        long at430 = LocalDateTime.of(2026, 11, 20, 16, 30).atZone(z).toInstant().toEpochMilli();
+        eq("4:30 later today", PhoneTools.nextRing(three, 16, 30, java.util.Collections.emptyList(), z), at430);
+        eq("8 am is tomorrow", PhoneTools.nextRing(three, 8, 0, java.util.Collections.emptyList(), z),
+                LocalDateTime.of(2026, 11, 21, 8, 0).atZone(z).toInstant().toEpochMilli());
+        eq("Mondays at 7 from a Friday", PhoneTools.nextRing(three, 7, 0, java.util.Arrays.asList(2), z),
+                LocalDateTime.of(2026, 11, 23, 7, 0).atZone(z).toInstant().toEpochMilli());
+        eq("this very minute is next week's (Friday repeat)", PhoneTools.nextRing(three, 15, 0, java.util.Arrays.asList(6), z),
+                LocalDateTime.of(2026, 11, 27, 15, 0).atZone(z).toInstant().toEpochMilli());
+        eq("saved: the next alarm is it", PhoneTools.alarmTaken(at430, at430), "yes");
+        eq("no alarm at all: not saved", PhoneTools.alarmTaken(at430, -1), "no");
+        eq("only a later alarm: not saved", PhoneTools.alarmTaken(at430, at430 + 3600_000), "no");
+        eq("an earlier alarm hides it: unsure", PhoneTools.alarmTaken(at430, three + 600_000), "unsure");
         eq("a date-time he can't mean", PhoneTools.at("tonight", z), -1L);
         eq("a whole day", PhoneTools.at("2026-10-20", z), LocalDateTime.of(2026, 10, 20, 0, 0).atZone(z).toInstant().toEpochMilli());
 

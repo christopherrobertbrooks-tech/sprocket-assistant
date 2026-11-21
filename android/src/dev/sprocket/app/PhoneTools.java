@@ -51,10 +51,13 @@ final class PhoneTools {
                                 .put("repeat_days", new JSONObject().put("type", "array").put("items",
                                         new JSONObject().put("type", "string").put("enum", days))
                                         .put("description", "Days it repeats on; leave out for a one-time alarm.")), "time"))
-                .put(tool("set_reminder", "Remind the boss of something at a date and time: within 90 minutes it is a labelled "
-                                + "timer, within a day a labelled alarm, later a calendar entry with an alert.",
-                        new JSONObject().put("text", str("What to remind them of, e.g. \"Call Mom\"."))
+                .put(tool("set_reminder", "Remind the boss of something at a date and time: a Sprocket notification pops up "
+                                + "then (no alarm rings). Use it for \"remind me\"; set_alarm only when they ask for an alarm.",
+                        new JSONObject().put("text", str("What to remind them of, in their words, e.g. \"Call Mom\" or \"Drugstore\"."))
                                 .put("at", str("Local date and time, YYYY-MM-DDTHH:MM.")), "text", "at"))
+                .put(tool("reminders", "List the reminders waiting, or cancel one by its number from the list.",
+                        new JSONObject().put("cancel", new JSONObject().put("type", "integer")
+                                .put("description", "The reminder's number to cancel; leave out to list them."))))
                 .put(tool("send_text", "Send a text message (SMS) from the boss's number. They see a card with the recipient "
                                 + "and the exact words and must tap Send; the result says whether it was sent or they cancelled. "
                                 + "Write the message as they would, plainly: never in Sprocket's voice unless they ask.",
@@ -416,14 +419,30 @@ final class PhoneTools {
         }
     }
 
-    /** How a reminder is kept: "timer" (within 90 min), "alarm" (within a day: the Clock's alarms are times of day),
-     * "calendar" (later), or "past". */
-    static String route(long now, long when) {
-        long ahead = when - now;
-        if (ahead <= 0) return "past";
-        if (ahead <= 90 * 60 * 1000L) return "timer";
-        if (ahead < 24 * 3600 * 1000L) return "alarm";
-        return "calendar";
+    /** Opens an app on the hidden screen only when it's up, the app isn't Sprocket, and the intent has no extras: the
+     * hidden screen's helper passes only the action, data and app, so extras (an alarm's time) would be lost. */
+    static boolean viaHiddenScreen(boolean hiddenUp, boolean ownApp, boolean hasExtras) {
+        return hiddenUp && !ownApp && !hasExtras;
+    }
+
+    /** When an alarm at h:m next rings from now: today if still ahead, else the next day it's on (Calendar days,
+     * 1 = Sunday; none = every day is fine, a one-time alarm). */
+    static long nextRing(long now, int h, int m, List<Integer> days, ZoneId z) {
+        java.time.ZonedDateTime t = java.time.Instant.ofEpochMilli(now).atZone(z).toLocalDate().atTime(h, m).atZone(z);
+        for (int i = 0; i < 9; i++) {
+            java.time.ZonedDateTime d = t.toLocalDate().plusDays(i).atTime(h, m).atZone(z);
+            int cal = d.getDayOfWeek().getValue() % 7 + 1;
+            if (d.toInstant().toEpochMilli() > now && (days.isEmpty() || days.contains(cal))) return d.toInstant().toEpochMilli();
+        }
+        return -1;
+    }
+
+    /** Did the Clock app save the alarm? "yes": the phone's next alarm is it (to the minute); "unsure": an earlier alarm
+     * comes first, so it can't be seen; "no": there's no alarm, or the next one is later than this one. */
+    static String alarmTaken(long want, long next) {
+        if (next >= 0 && Math.abs(next - want) < 60_000) return "yes";
+        if (next >= 0 && next < want) return "unsure";
+        return "no";
     }
 
     /** The digits of a phone number he said or typed (a leading + kept); null if it's a name. */
