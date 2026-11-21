@@ -30,6 +30,9 @@ The app is plain Java in `android/src/dev/sprocket/app/`, one job per file:
 - **Scheduled tasks:** `Schedules.java` (the tasks, plain Java), `ScheduleAlarm.java` (the alarm and the Yes / No
   buttons) and `ScheduleService.java` (runs them, asks by notification). **TVs:** `Tv.java` (Vizio, finding TVs) and
   `Lg.java`.
+- **Reminders:** `Reminders.java` (the reminders, plain Java) and `ReminderAlarm.java` (the wake-up and the
+  notification). **Opening web links** (`open_link`): `PhoneTools.webLink` / `siteApp` (which addresses, which app)
+  and `Phone.openLink`.
 - **Tests:** `android/test/`, run with `scripts/test.sh`. The adb-only test door is `TestHooks.java`.
 - **The go-between** (for your own model): `go-between/`.
 

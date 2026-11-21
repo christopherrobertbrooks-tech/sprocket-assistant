@@ -35,7 +35,10 @@ goes to the services you choose to connect (web search, the weather, Notion, Git
 
 ## What it does
 - **Everyday phone jobs:** timers, alarms, reminders, calendar, contacts, music, maps, the flashlight, volume,
-  brightness, Do Not Disturb, the camera and photos.
+  brightness, Do Not Disturb, the camera and photos. Reminders are Sprocket notifications; alarms are checked after
+  the Clock app sets them. See "Reminders and alarms" below.
+- **Web pages:** opens a web address in the site's own app or your browser, so a store's sorted menu is one step. See
+  "Web pages and links" below.
 - **Texts and calls:** reads your texts to you, writes replies, places calls. Nothing is sent or called until you tap
   (or say) yes on a card that shows exactly what will happen.
 - **Screen control:** for anything else, Sprocket reads the screen and taps through other apps like a person. Buttons
@@ -212,6 +215,42 @@ Good to know:
   **sprocket@** followed by your phone's model.
 - Tested on a Samsung phone and an Android 14 tablet, including with the screen locked. Other phones may differ:
   reports help.
+
+## Reminders and alarms
+"Remind me to call Mom at 6 tomorrow" puts up a Sprocket notification at that time: no alarm rings and no other app is
+involved. Reminders survive a restart, and "what reminders do I have?" and "cancel the Mom one" work. If the phone was
+off at the time, the reminder shows when it comes back on, or as missed if it's more than 12 hours late. "Set an alarm
+for 6:45" still uses your Clock app; Sprocket then checks the phone's next alarm and tells you plainly if the Clock
+didn't save it. For exact times, allow "Alarms & reminders" for Sprocket.
+
+## Web pages and links
+Sprocket can open a web address (https only) in the app that owns the site, such as a store's site you saved to your
+home screen (where you're logged in), or else in your browser. A store menu that's already filtered and sorted is then
+one step instead of many taps, and links you ask it to remember work too ("remember: the menu sorted cheapest first is
+..."). For the cheapest thing in a list it sorts by price and reads the top. Scrolling up stops at the top of the page,
+so a web page is never pulled down to refresh. When an app needs a store or location and you didn't say which,
+Sprocket asks, naming the choices, and remembers your answer.
+
+### Teaching Sprocket a store's website
+Many store sites (liquor stores, restaurants, grocery shops) put the menu, the filters and the sort order in the page
+address. Give Sprocket those addresses once and a question like "what wine is on sale?" is one page instead of minutes
+of tapping.
+
+1. Open the store's menu in your phone's browser. Pick the store location, a category, a size filter and "price low
+   to high", then copy the address from the address bar. Do it for one or two categories so you can see which part
+   of the address changes (for example `/shop/wine?size=750ml`).
+2. Tell Sprocket, in one message, to remember it always, with the changing parts written as words in capitals:
+   "Remember always: Corner Liquor menu: https://example.com/shop/CATEGORY?sort=price_asc . CATEGORY: bourbon,
+   vodka, wine."
+3. Add a second note for what words mean at that store: "Remember always: at Corner Liquor, on sale = items showing
+   % off; '2 for $30' lines are everyday bundles, only when I ask about bundles." If the site has more than one
+   store, say which part of the address is the store.
+4. Ask normally: "Any bourbon on sale at Corner Liquor?" Sprocket opens the address in the store's own app if you
+   saved the site to your home screen, otherwise in the browser.
+
+Each note holds up to 300 characters; use two or three notes for a big site. They're under ⋯ > Memory to change or
+delete. Ordering still stops at the store's "Place order" button for your tap. Don't put anything personal in a
+remembered address.
 
 ## Updating
 - **Hearing about new versions:** Sprocket doesn't check for updates itself. To be told, sign in to GitHub and, at
