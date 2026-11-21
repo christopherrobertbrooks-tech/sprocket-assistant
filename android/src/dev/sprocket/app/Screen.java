@@ -239,6 +239,20 @@ final class Screen {
     }
 
     /**
+     * Children in the order a finger meets them: highest drawing order first, and of equal ones the later child (drawn
+     * after). 11-20 DoorDash: the search bar's part of the screen is drawn at 3 and the feed under it at 1, though the
+     * feed comes later in the list; going by list order made the search bar look covered.
+     */
+    static int[] topFirst(int[] drawingOrder) {
+        Integer[] idx = new Integer[drawingOrder.length];
+        for (int i = 0; i < idx.length; i++) idx[i] = i;
+        java.util.Arrays.sort(idx, (a, b) -> drawingOrder[a] != drawingOrder[b] ? Integer.compare(drawingOrder[b], drawingOrder[a]) : Integer.compare(b, a));
+        int[] out = new int[idx.length];
+        for (int i = 0; i < idx.length; i++) out[i] = idx[i];
+        return out;
+    }
+
+    /**
      * True when the item is really what a finger on its middle would touch (11-12: a menu button hidden behind Gmail's
      * search page still read as visible, and the tap landed on a recent search; 11-13: what covered it there was the
      * page, not a button). top: what's drawn at the item's middle, then what it sits in (empty: nothing there); item:

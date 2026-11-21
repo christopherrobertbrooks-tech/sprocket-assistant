@@ -1304,7 +1304,7 @@ public class ScreenHands extends AccessibilityService {
         Rect r = new Rect();
         n.getBoundsInScreen(r);
         if (!r.contains(x, y)) return null;
-        for (int i = n.getChildCount() - 1; i >= 0; i--) {   // the last child is drawn on top
+        for (int i : drawnTopFirst(n)) {   // what's drawn on top first (11-20 DoorDash: by drawing order, not list order)
             AccessibilityNodeInfo hit = topAt(n.getChild(i), x, y, depth + 1);
             if (hit != null) return hit;
         }
@@ -1314,12 +1314,23 @@ public class ScreenHands extends AccessibilityService {
         return seen ? n : null;
     }
 
+    /** A node's children, the one drawn on top first: Android's own drawing order (an app's floating search bar is
+     * early in the list but raised above the feed scrolling under it: 11-20 DoorDash's taps were refused as covered). */
+    private static int[] drawnTopFirst(AccessibilityNodeInfo n) {
+        int[] order = new int[n.getChildCount()];
+        for (int i = 0; i < order.length; i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+            order[i] = c == null ? 0 : c.getDrawingOrder();
+        }
+        return Screen.topFirst(order);
+    }
+
     private static AccessibilityNodeInfo deepestAt(AccessibilityNodeInfo n, int x, int y, int depth) {
         if (n == null || depth > 40 || !n.isVisibleToUser()) return null;
         Rect r = new Rect();
         n.getBoundsInScreen(r);
         if (!r.contains(x, y)) return null;
-        for (int i = n.getChildCount() - 1; i >= 0; i--) {   // the last child is drawn on top
+        for (int i : drawnTopFirst(n)) {
             AccessibilityNodeInfo hit = deepestAt(n.getChild(i), x, y, depth + 1);
             if (hit != null) return hit;
         }
