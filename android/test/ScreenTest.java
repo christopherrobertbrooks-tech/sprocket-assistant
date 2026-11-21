@@ -201,6 +201,10 @@ public class ScreenTest {
         eq("a list with more below says so", Screen.scrollState(true, true), "more below");
         eq("a list at its end says so", Screen.scrollState(false, true), "at the bottom");
         eq("a list that can't tell says nothing", Screen.scrollState(false, false), "");
+        // scrolling up (11-20, a store's web app: a drag down at the top of a web page refreshed it over and over)
+        eq("at the top: no move at all", Screen.upMove(true, false), "none");
+        eq("more above: the list's own scroll back, not a drag", Screen.upMove(true, true), "action");
+        eq("no list that says: a drag, the last resort", Screen.upMove(false, false), "drag");
         eq("the screen list shows it", Screen.describe("Eats", Arrays.asList(new Screen.Item("list", "", false, false, true, false, false, true, "more below"))),
                 "Screen of Eats:\n[1] list (more below) (scrolls)\n");
         // practice: with "(more below)" on every screen it still said "I went through the entire menu" after 4 of 7

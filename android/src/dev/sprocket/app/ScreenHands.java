@@ -496,6 +496,7 @@ public class ScreenHands extends AccessibilityService {
         if (hit > 0) return "Found \u201c" + text + "\u201d: item " + hit + ".\n" + screen;
         if (!Screen.hasList(lastItems)) return Screen.findMiss(text, false) + "\n" + screen;
         for (int i = 0; i < 30; i++) {   // to the top first: what it's after may be above
+            if (atTop()) break;
             String before = Screen.describe("", lastItems);
             screen = scroll(false);
             if (Screen.describe("", lastItems).equals(before)) break;
@@ -519,6 +520,7 @@ public class ScreenHands extends AccessibilityService {
         // (Codex 056 #2); 30 tries without getting there: not sure it started at the top
         boolean atTop = false;
         for (int i = 0; i < 30; i++) {
+            if (atTop()) { atTop = true; screen = settleAndRead(); break; }
             String before = where();
             screen = scroll(false);
             if (where().equals(before)) { atTop = true; break; }
@@ -810,11 +812,29 @@ public class ScreenHands extends AccessibilityService {
         return settleAndRead();
     }
 
-    /** A finger swipe up the middle of the screen (works in every app); the list's own scroll action if that fails. */
+    /**
+     * Down: a finger swipe up the middle of the screen (works in every app); the list's own scroll action if that fails.
+     * Up: the list's own "scroll back" action, and no move at all when the list says nothing is above. A finger dragged
+     * down at the top of a web page is pull-to-refresh (11-20, a store's web app: it "keeps dragging down on the screen
+     * making it refresh repeatedly"); a drag is only the last resort, for a list that doesn't say.
+     */
     private String scroll(boolean down) throws Exception {
         if (Screen.blockedApp(nowPackage())) throw new Exception("that app is off limits to Sprocket (money or passwords)");   // Codex 041
         int w = getResources().getDisplayMetrics().widthPixels, h = getResources().getDisplayMetrics().heightPixels;
-        boolean done = down ? gesture(w / 2, h * 7 / 10, w / 2, h * 3 / 10, 400) : gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
+        boolean done;
+        if (down) done = gesture(w / 2, h * 7 / 10, w / 2, h * 3 / 10, 400);
+        else {
+            AccessibilityNodeInfo root = root(), list = root == null ? null : biggestScrollable(root, null, 0);
+            switch (Screen.upMove(list != null, list != null && offers(list, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD))) {
+                case "none": return "Already at the top: nothing above.\n" + settleAndRead();
+                case "action":
+                    done = list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                            || gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
+                    break;
+                default: done = gesture(w / 2, h * 3 / 10, w / 2, h * 7 / 10, 400);
+            }
+            if (done) { Thread.sleep(400); return settleAndRead(); }
+        }
         if (!done) {
             AccessibilityNodeInfo root = root();
             AccessibilityNodeInfo best = root == null ? null : biggestScrollable(root, null, 0);
@@ -823,6 +843,17 @@ public class ScreenHands extends AccessibilityService {
         if (!done) throw new Exception("couldn't scroll");
         Thread.sleep(400);   // a fling keeps moving for a moment
         return settleAndRead();
+    }
+
+    private static boolean offers(AccessibilityNodeInfo n, int action) {
+        for (AccessibilityNodeInfo.AccessibilityAction a : n.getActionList()) if (a.getId() == action) return true;
+        return false;
+    }
+
+    /** At the top: the main list is there and says nothing is above it. A list that doesn't say isn't taken as the top. */
+    private boolean atTop() {
+        AccessibilityNodeInfo root = root(), list = root == null ? null : biggestScrollable(root, null, 0);
+        return Screen.upMove(list != null, list != null && offers(list, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)).equals("none");
     }
 
     private AccessibilityNodeInfo biggestScrollable(AccessibilityNodeInfo n, AccessibilityNodeInfo best, int depth) {

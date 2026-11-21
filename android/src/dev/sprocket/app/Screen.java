@@ -478,6 +478,16 @@ final class Screen {
                 + "instead: it reads every row, top to bottom, in one step.)";
     }
 
+    /**
+     * How to scroll up: "none" when the main list says nothing is above it (never drag then: at the top of a web page a
+     * drag down is pull-to-refresh, 11-20 a store's web app refreshed over and over); "action" (the list's own scroll
+     * back) when it says there's more above; "drag" only when there's no list that says either way.
+     */
+    static String upMove(boolean haveList, boolean listCanScrollUp) {
+        if (!haveList) return "drag";
+        return listCanScrollUp ? "action" : "none";
+    }
+
     /** True while some list on the screen says it has more below. */
     static boolean moreBelow(List<Item> items) {
         for (Item it : items) if ("more below".equals(it.value)) return true;
